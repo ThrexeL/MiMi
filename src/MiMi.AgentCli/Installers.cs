@@ -34,26 +34,63 @@ public static class Installers
     private static bool IsMiMiClaudeHook(string? command) =>
         command is not null
         && command.Contains("MiMi.AgentCli", StringComparison.OrdinalIgnoreCase)
-        && command.Contains("claude-permission", StringComparison.OrdinalIgnoreCase);
+        && (command.Contains("claude-permission", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("activity --provider claude-code", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsMiMiCodexHook(string? command) =>
         command is not null
         && command.Contains("MiMi.AgentCli", StringComparison.OrdinalIgnoreCase)
-        && command.Contains("codex-permission", StringComparison.OrdinalIgnoreCase);
+        && (command.Contains("codex-permission", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("activity --provider codex", StringComparison.OrdinalIgnoreCase));
+
+    // Lifecycle hooks installed alongside PermissionRequest (research-verified event
+    // names per provider). Activity hooks are fire-and-forget; no timeout pressure.
+    private static readonly string[] ClaudeActivityEvents =
+        { "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "SessionEnd", "SubagentStart", "SubagentStop" };
+
+    private static readonly string[] CodexActivityEvents =
+        { "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "Interrupt", "SessionEnd", "SubagentStart", "SubagentStop" };
+
+    public static string ClaudeActivityCommand() => $"{ExePath()} activity --provider claude-code";
+    public static string CodexActivityCommand() => $"{ExePath()} activity --provider codex";
 
     public static string InstallClaude(int timeoutSeconds, string? settingsPath = null)
-        => InstallJsonHook(settingsPath ?? ClaudeSettingsPath, "PermissionRequest",
-            ClaudeHookCommand(), timeoutSeconds, IsMiMiClaudeHook);
+    {
+        var path = settingsPath ?? ClaudeSettingsPath;
+        var result = InstallJsonHook(path, "PermissionRequest", ClaudeHookCommand(), timeoutSeconds, IsMiMiClaudeHook);
+        var details = new List<string> { result };
+        foreach (var eventName in ClaudeActivityEvents)
+            details.Add(InstallJsonHook(path, eventName, ClaudeActivityCommand(), 0, IsMiMiClaudeHook));
+        return string.Join(Environment.NewLine, details);
+    }
 
     public static string UninstallClaude(string? settingsPath = null)
-        => UninstallJsonHook(settingsPath ?? ClaudeSettingsPath, "PermissionRequest", IsMiMiClaudeHook);
+    {
+        var path = settingsPath ?? ClaudeSettingsPath;
+        var details = new List<string> { UninstallJsonHook(path, "PermissionRequest", IsMiMiClaudeHook) };
+        foreach (var eventName in ClaudeActivityEvents)
+            details.Add(UninstallJsonHook(path, eventName, IsMiMiClaudeHook));
+        return string.Join(Environment.NewLine, details);
+    }
 
     public static string InstallCodex(int timeoutSeconds, string? hooksPath = null)
-        => InstallJsonHook(hooksPath ?? CodexHooksPath, "PermissionRequest",
-            CodexHookCommand(), timeoutSeconds, IsMiMiCodexHook);
+    {
+        var path = hooksPath ?? CodexHooksPath;
+        var result = InstallJsonHook(path, "PermissionRequest", CodexHookCommand(), timeoutSeconds, IsMiMiCodexHook);
+        var details = new List<string> { result };
+        foreach (var eventName in CodexActivityEvents)
+            details.Add(InstallJsonHook(path, eventName, CodexActivityCommand(), 0, IsMiMiCodexHook));
+        return string.Join(Environment.NewLine, details);
+    }
 
     public static string UninstallCodex(string? hooksPath = null)
-        => UninstallJsonHook(hooksPath ?? CodexHooksPath, "PermissionRequest", IsMiMiCodexHook);
+    {
+        var path = hooksPath ?? CodexHooksPath;
+        var details = new List<string> { UninstallJsonHook(path, "PermissionRequest", IsMiMiCodexHook) };
+        foreach (var eventName in CodexActivityEvents)
+            details.Add(UninstallJsonHook(path, eventName, IsMiMiCodexHook));
+        return string.Join(Environment.NewLine, details);
+    }
 
     // ---- generic JSON hooks installer ---------------------------------------------
 
@@ -115,8 +152,10 @@ public static class Installers
         {
             ["type"] = "command",
             ["command"] = command,
-            ["timeout"] = timeoutSeconds,
         };
+        // timeout 0 = activity hooks use the provider default (they must never gate the
+        // agent on MiMi); the synchronous approval hook keeps its explicit timeout.
+        if (timeoutSeconds > 0) hookEntry["timeout"] = timeoutSeconds;
         // No matcher key = applies to ALL tools (documented behavior for both providers).
         entries.Add(new JsonObject { ["hooks"] = new JsonArray { hookEntry } });
 

@@ -50,12 +50,20 @@ public sealed class RestingView : IslandContent
 
 public sealed class MediaCompactView : IslandContent
 {
+    private int _agentBadgeCount;
+
     public MediaViewModel Media { get; }
     public MediaCompactView(MediaViewModel media) { Media = media; }
     public override double TargetWidth => 320;
     public override double TargetHeight => 44;
     public override double TargetCornerRadius => 22;
     public override bool Expandable => true;
+
+    /// <summary>Agent sessions active while music plays: a tiny count on the pill's
+    /// right edge keeps both worlds discoverable without displacing either.</summary>
+    public int AgentBadgeCount { get => _agentBadgeCount; set => Set(ref _agentBadgeCount, value); }
+    public bool HasAgentBadge => AgentBadgeCount > 0;
+    public string AgentBadgeLabel => AgentBadgeCount.ToString();
 }
 
 public sealed class MediaExpandedView : IslandContent
@@ -70,12 +78,68 @@ public sealed class MediaExpandedView : IslandContent
 
 public sealed class AgentCompactView : IslandContent
 {
-    public AgentCardViewModel Agent { get; }
-    public AgentCompactView(AgentCardViewModel agent) { Agent = agent; }
+    public AgentIndicatorViewModel Indicator { get; }
+    public AgentCompactView(AgentIndicatorViewModel indicator) { Indicator = indicator; }
     public override double TargetWidth => 330;
     public override double TargetHeight => 44;
     public override double TargetCornerRadius => 22;
     public override bool Expandable => true;
+}
+
+/// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>
+public sealed class AgentActivityPanelView : IslandContent
+{
+    public IReadOnlyList<AgentSessionRow> Rows { get; }
+    public AgentActivityPanelView(IReadOnlyList<AgentSessionRow> rows) { Rows = rows; }
+    public override double TargetWidth => 450;
+    public override double TargetHeight => 200;
+    public override double TargetCornerRadius => 24;
+    public override bool AutoHeight => true;
+}
+
+/// <summary>One session row in the activity panel. Snapshot data at build time.</summary>
+public sealed class AgentSessionRow
+{
+    public required string Provider { get; init; }
+    public required string Project { get; init; }
+    public required string StatusLabel { get; init; }
+    public required string LastAction { get; init; }
+    public required string AgeLabel { get; init; }
+    public required int PendingApprovals { get; init; }
+    public required Brush StateBrush { get; init; }
+}
+
+/// <summary>Shows a pending-approval marker only when the count is above zero.</summary>
+public sealed class PendingCountToVisibilityConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is int i && i > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Live compact indicator for agent activity: one line ("Codex · Working" or
+/// "3 agents active"). The presenter updates it in place — status changes never
+/// re-trigger island animations.
+/// </summary>
+public sealed class AgentIndicatorViewModel : ObservableObject
+{
+    private string _line = "";
+    private string _pendingLabel = "";
+    private MascotExpression _expression = MascotExpression.Focused;
+
+    public string Line { get => _line; private set => Set(ref _line, value); }
+    public string PendingLabel { get => _pendingLabel; private set => Set(ref _pendingLabel, value); }
+    public MascotExpression Expression { get => _expression; private set => Set(ref _expression, value); }
+
+    public void Update(string line, MascotExpression expression, int pendingApprovals)
+    {
+        Line = line;
+        Expression = expression;
+        PendingLabel = pendingApprovals > 0 ? $"{pendingApprovals} approval{(pendingApprovals == 1 ? "" : "s")} pending" : "";
+    }
 }
 
 public sealed class AgentExpandedView : IslandContent
@@ -245,8 +309,33 @@ public sealed class AgentCardViewModel : ObservableObject
     public string Elapsed { get => _elapsed; private set => Set(ref _elapsed, value); }
     public string TimeLeft { get => _timeLeft; private set => Set(ref _timeLeft, value); }
 
+    private int _approvalIndex;
+    private int _approvalTotal;
+
+    /// <summary>"1 of 3" when several approvals are pending simultaneously.</summary>
+    public string ApprovalPosition
+    {
+        get => _approvalTotal > 1 ? $"{_approvalIndex + 1} of {_approvalTotal}" : "";
+        private set { }
+    }
+
+    public bool HasMultipleApprovals => _approvalTotal > 1;
+
+    public ICommand NextApprovalCommand { get; }
+    public ICommand PrevApprovalCommand { get; }
+
     /// <summary>Facial expression the mascot shows for this card's state.</summary>
     public MascotExpression Expression { get; private set; } = MascotExpression.Calm;
+
+    public void SetApprovalPosition(int index, int total)
+    {
+        _approvalIndex = index;
+        _approvalTotal = total;
+        Set(ref _positionField, ApprovalPosition);
+        Set(ref _hasMultipleField, HasMultipleApprovals);
+    }
+    private string _positionField = "";
+    private bool _hasMultipleField;
 
     public required string ApprovalId { get; init; }
     public Action<ApprovalDecision>? Decide { get; init; }
@@ -256,11 +345,16 @@ public sealed class AgentCardViewModel : ObservableObject
     public ICommand DenyCommand { get; }
     public ICommand OpenCommand { get; }
 
-    public AgentCardViewModel()
+    public AgentCardViewModel(Action<int>? navigateApprovals = null)
     {
         ApproveCommand = new RelayCommand(() => Decide?.Invoke(ApprovalDecision.Approved));
         DenyCommand = new RelayCommand(() => Decide?.Invoke(ApprovalDecision.Denied));
         OpenCommand = new RelayCommand(() => OpenInAgent?.Invoke());
+        if (navigateApprovals is not null)
+        {
+            NextApprovalCommand = new RelayCommand(() => navigateApprovals(+1));
+            PrevApprovalCommand = new RelayCommand(() => navigateApprovals(-1));
+        }
     }
 
     public void Update(AgentEvent ev)

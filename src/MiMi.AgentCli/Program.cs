@@ -9,6 +9,7 @@ if (args.Length == 0)
     Console.Error.WriteLine("usage: MiMi.AgentCli <command> [options]");
     Console.Error.WriteLine("  claude-permission [--wait N] [--dry-run]   (stdin: PermissionRequest JSON; stdout: decision JSON)");
     Console.Error.WriteLine("  codex-permission  [--wait N] [--dry-run]   (stdin: Codex PermissionRequest JSON; stdout: decision JSON)");
+    Console.Error.WriteLine("  activity --provider <claude-code|codex>    (stdin: lifecycle hook JSON; fire-and-forget)");
     Console.Error.WriteLine("  codex-notify '<json>'                      (Codex notify adapter; turn-complete toasts)");
     Console.Error.WriteLine("  install-claude [--timeout N] | uninstall-claude   (~/.claude/settings.json)");
     Console.Error.WriteLine("  install-codex  [--timeout N] | uninstall-codex    (~/.codex/hooks.json)");
@@ -27,6 +28,8 @@ try
         case "claude-permission":
         case "codex-permission":
             return await PermissionHookAsync(args.Skip(1).ToArray(), args[0].ToLowerInvariant());
+        case "activity":
+            return await ActivityHookAsync(args.Skip(1).ToArray());
         case "codex-notify":
             return await CodexNotifyAsync(args.Length > 1 ? args[1] : "");
         case "install-claude":
@@ -145,6 +148,40 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
             $"MiMi is not reachable — permission denied (fail-closed). Start MiMi or remove its hook (MiMi.AgentCli {uninstallHint}).");
         return 0;
     }
+}
+
+/// <summary>
+/// Fire-and-forget lifecycle hook: parse → send over the bridge → exit promptly.
+/// Activity hooks must never block agent execution; a bridge outage is swallowed
+/// (exit 0) so ordinary agent work is unaffected.
+/// </summary>
+static async Task<int> ActivityHookAsync(string[] args)
+{
+    var provider = ParseOptionString(args, "--provider", "claude-code");
+    using var stdin = Console.OpenStandardInput();
+    using var reader = new StreamReader(stdin);
+    var input = await reader.ReadToEndAsync();
+    if (string.IsNullOrWhiteSpace(input)) return 0;
+
+    try
+    {
+        var ev = ActivityHook.Parse(input, provider);
+        if (ev is null) return 0; // unsupported event for this provider: silent no-op
+        await using var bridge = await BridgeClient.ConnectAsync(TimeSpan.FromSeconds(3), $"{provider}-activity");
+        await bridge.SendEventAsync(ev, TimeSpan.FromSeconds(3));
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"MiMi: activity skipped ({ex.Message})");
+        return 0; // never disturb the agent over telemetry
+    }
+}
+
+static string ParseOptionString(string[] args, string name, string fallback)
+{
+    var idx = Array.IndexOf(args, name);
+    return idx >= 0 && idx + 1 < args.Length && args[idx + 1].Length > 0 ? args[idx + 1] : fallback;
 }
 
 static async Task<int> CodexNotifyAsync(string json)

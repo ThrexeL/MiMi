@@ -85,7 +85,8 @@ public partial class App : Application
             approvalId => _approvals.Get(approvalId) is { } r && r.IsPending
                 ? r.TimeToLive - (DateTimeOffset.UtcNow - r.CreatedUtc)
                 : TimeSpan.Zero,
-            mediaVm);
+            mediaVm,
+            () => _presenter.BuildAgentPanel());
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>

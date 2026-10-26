@@ -59,12 +59,15 @@ public partial class IslandWindow : Window
     private bool _hotkeyHooked;
 
     private double _glowLevel = 0.55; // current island-bottom glow level (0..1)
+    private readonly Func<AgentActivityPanelView> _agentPanelProvider;
 
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
         Func<string, TimeSpan?> approvalTimeLeft,
-        MediaViewModel mediaVm)
+        MediaViewModel mediaVm,
+        Func<AgentActivityPanelView>? agentPanelProvider = null)
     {
+        _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -354,7 +357,7 @@ public partial class IslandWindow : Window
     {
         if (content is ApprovalView) return 0.9;
         if (content is MediaCompactView or MediaExpandedView) return 0.7;
-        if (content is AgentCompactView compact) return compact.Agent.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
+        if (content is AgentCompactView compact) return compact.Indicator.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
         if (content is AgentExpandedView expanded) return expanded.Agent.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
         return 0.55; // resting
     }
@@ -375,10 +378,11 @@ public partial class IslandWindow : Window
 
     // ---- content application ---------------------------------------------------
 
-    private static IslandContent? Expanded(IslandContent content) => content switch
+    private IslandContent? Expanded(IslandContent content) => content switch
     {
         MediaCompactView m => new MediaExpandedView(m.Media),
-        AgentCompactView a => new AgentExpandedView(a.Agent),
+        // Hovering the agent pill opens the full multi-session activity panel.
+        AgentCompactView => _agentPanelProvider(),
         _ => null,
     };
 

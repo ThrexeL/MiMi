@@ -7,6 +7,7 @@ namespace MiMi.Agents;
 /// <summary>Normalized agent lifecycle event types (spec §6).</summary>
 public static class AgentEventTypes
 {
+    // Phase 1/2 contract (unchanged)
     public const string Started = "agent.started";
     public const string Status = "agent.status";
     public const string ToolStarted = "agent.tool_started";
@@ -16,9 +17,21 @@ public static class AgentEventTypes
     public const string Failed = "agent.failed";
     public const string Cancelled = "agent.cancelled";
 
+    // Phase 3.6 lifecycle events (additive; existing consumers ignore unknown types)
+    public const string PromptSubmitted = "agent.prompt_submitted";
+    public const string ToolFinished = "agent.tool_finished";
+    public const string ToolFailed = "agent.tool_failed";
+    public const string TurnFinished = "agent.turn_finished";
+    public const string Interrupted = "agent.interrupted";
+    public const string SessionEnded = "agent.session_ended";
+    public const string SubagentStarted = "agent.subagent_started";
+    public const string SubagentStopped = "agent.subagent_stopped";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
         Started, Status, ToolStarted, ApprovalRequested, ApprovalResolved, Completed, Failed, Cancelled,
+        PromptSubmitted, ToolFinished, ToolFailed, TurnFinished, Interrupted, SessionEnded,
+        SubagentStarted, SubagentStopped,
     };
 }
 
@@ -127,6 +140,14 @@ public sealed record AgentEvent
         AgentEventTypes.Completed => "Agent completed",
         AgentEventTypes.Failed => "Agent failed",
         AgentEventTypes.Cancelled => "Agent cancelled",
+        AgentEventTypes.PromptSubmitted => "New task",
+        AgentEventTypes.ToolFinished => "Tool finished",
+        AgentEventTypes.ToolFailed => "Tool failed",
+        AgentEventTypes.TurnFinished => "Turn finished",
+        AgentEventTypes.Interrupted => "Interrupted",
+        AgentEventTypes.SessionEnded => "Session ended",
+        AgentEventTypes.SubagentStarted => "Subagent started",
+        AgentEventTypes.SubagentStopped => "Subagent stopped",
         _ => "Agent event",
     };
 
@@ -168,12 +189,14 @@ public sealed record AgentEvent
 
     public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
 
-    /// <summary>Maps an agent priority onto island display priority.</summary>
+    /// <summary>Maps an agent priority onto island display priority. Lifecycle events
+    /// (Phase 3.6) are silent by default — they update the session indicator only.</summary>
     public IslandPriority ToIslandPriority() => Type switch
     {
         AgentEventTypes.ApprovalRequested => IslandPriority.Approval,
-        AgentEventTypes.Failed => IslandPriority.AgentFailure,
-        AgentEventTypes.Completed or AgentEventTypes.Cancelled => IslandPriority.AgentCompletion,
+        AgentEventTypes.Failed or AgentEventTypes.ToolFailed => IslandPriority.AgentFailure,
+        AgentEventTypes.Completed or AgentEventTypes.Cancelled or AgentEventTypes.TurnFinished
+            or AgentEventTypes.SessionEnded => IslandPriority.AgentCompletion,
         _ => Priority == AgentPriority.Critical ? IslandPriority.CriticalSystem : IslandPriority.AgentCompletion,
     };
 }

@@ -32,6 +32,7 @@
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <ui:StringToVisibilityConverter x:Key="StringToVis"/>
+        <ui:PendingCountToVisibilityConverter x:Key="PendingToVis"/>
 
         <Style x:Key="IslandFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
@@ -227,6 +228,14 @@
                         <Rectangle.RenderTransform><ScaleTransform ScaleY="1"/></Rectangle.RenderTransform>
                     </Rectangle>
                 </StackPanel>
+                <!-- Tiny agent-count badge: both worlds stay discoverable while music plays. -->
+                <Border Background="#22FFB454" CornerRadius="9" Padding="6,2" Margin="4,0,2,0"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding HasAgentBadge, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10" FontWeight="SemiBold"
+                               Foreground="{StaticResource AccentAmber}"
+                               Text="{Binding AgentBadgeLabel, Mode=OneWay}"/>
+                </Border>
             </StackPanel>
         </DataTemplate>
 
@@ -279,14 +288,15 @@
         <DataTemplate DataType="{x:Type ui:AgentCompactView}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <mascot:MiMiMascotControl Width="18" Height="12" Margin="2,0,0,0"
-                                          Expression="{Binding Agent.Expression}"
+                                          Expression="{Binding Indicator.Expression}"
                                           VerticalAlignment="Center"/>
-                <StackPanel Margin="9,0,0,0" VerticalAlignment="Center" Width="248">
+                <StackPanel Margin="9,0,0,0" VerticalAlignment="Center" Width="240">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="12" FontWeight="SemiBold"
-                               Text="{Binding Agent.Provider}" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
-                               Foreground="{StaticResource TextSecondary}"
-                               Text="{Binding Agent.Title}" TextTrimming="CharacterEllipsis"/>
+                               Text="{Binding Indicator.Line}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                               Foreground="{StaticResource AccentAmber}"
+                               Text="{Binding Indicator.PendingLabel}"
+                               Visibility="{Binding Indicator.PendingLabel, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
@@ -333,6 +343,16 @@
                                Foreground="{StaticResource TextTertiary}" Margin="8,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.TimeLeft}"
                                Visibility="{Binding Agent.TimeLeft, Converter={StaticResource StringToVis}}"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                               Foreground="{StaticResource AccentAmber}" Margin="8,0,0,0"
+                               VerticalAlignment="Center" Text="{Binding Agent.ApprovalPosition}"/>
+                    <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
+                                Visibility="{Binding Agent.HasMultipleApprovals, Converter={StaticResource BoolToVis}}">
+                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                                Command="{Binding Agent.PrevApprovalCommand}" Content="&#xE76B;"/>
+                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                                Command="{Binding Agent.NextApprovalCommand}" Content="&#xE76C;"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,9,0,0"
@@ -363,6 +383,50 @@
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:AgentActivityPanelView}">
+            <StackPanel Margin="20,14,20,12">
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="13" FontWeight="SemiBold"
+                           Text="Agent activity"/>
+                <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
+                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <Ellipse.Fill>
+                                        <SolidColorBrush Color="{Binding StateBrush.Color}"/>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <StackPanel Width="118" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" FontWeight="SemiBold"
+                                               Text="{Binding Provider}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                               Foreground="{StaticResource TextTertiary}"
+                                               Text="{Binding Project}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="150">
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
+                                               Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                               Foreground="{StaticResource TextSecondary}"
+                                               Text="{Binding LastAction}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                               Foreground="{StaticResource TextTertiary}"
+                                               Text="{Binding AgeLabel}" HorizontalAlignment="Right"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                               Foreground="{StaticResource AccentAmber}"
+                                               Text="{Binding PendingApprovals, StringFormat='{}{0} pending'}"
+                                               HorizontalAlignment="Right"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
     </Window.Resources>
 
     <!-- Pill anchored top-center; the window is a large transparent canvas whose only
