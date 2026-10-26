@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MiMi.Core\MiMi.Core.csproj" />
+    <ProjectReference Include="..\MiMi.Agents\MiMi.Agents.csproj" />
+  </ItemGroup>
+</Project>
