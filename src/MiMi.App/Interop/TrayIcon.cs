@@ -14,11 +14,12 @@ namespace MiMi.App.Interop;
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
-    private const int MenuSettings = 100;
-    private const int MenuSimulate = 101;
-    private const int MenuAutoStart = 102;
-    private const int MenuRestart = 103;
-    private const int MenuExit = 104;
+    private const int MenuToggleVisibility = 100;
+    private const int MenuSettings = 101;
+    private const int MenuSimulate = 102;
+    private const int MenuAutoStart = 103;
+    private const int MenuRestart = 104;
+    private const int MenuExit = 105;
 
     private static readonly Dictionary<IntPtr, TrayIcon> Instances = new();
     private static readonly NativeMethods.WndProc WndProcDelegate = WndProcStatic;
@@ -27,8 +28,16 @@ public sealed class TrayIcon : IDisposable
     private IntPtr _icon;
     private bool _added;
     private bool _autoStartChecked;
+    private bool _islandVisible = true;
+    private uint _taskbarCreatedMsg;
 
     public event Action<TrayIcon, TrayMenuCommand>? CommandSelected;
+
+    /// <summary>Reflects the island's manual visibility preference in the menu label.</summary>
+    public void SetVisibilityIndicator(bool islandVisible)
+    {
+        _islandVisible = islandVisible;
+    }
 
     public void Initialize()
     {
@@ -48,6 +57,10 @@ public sealed class TrayIcon : IDisposable
         _icon = CreateMascotIcon();
         AddOrUpdate(NativeMethods.NIM_ADD);
         _added = true;
+
+        // Explorer restarts rebuild the taskbar and drop tray icons; Windows broadcasts
+        // this registered message — re-add ours so the tray entry survives.
+        _taskbarCreatedMsg = NativeMethods.RegisterWindowMessageW("TaskbarCreated");
     }
 
     /// <summary>Original MiMi identity: dark rounded square with two eyes, drawn in code.</summary>
@@ -104,12 +117,15 @@ public sealed class TrayIcon : IDisposable
     private void ShowMenu()
     {
         var menu = NativeMethods.CreatePopupMenu();
+        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuToggleVisibility,
+            _islandVisible ? "Hide MiMi	Ctrl+Alt+M" : "Show MiMi	Ctrl+Alt+M");
+        NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSettings, "Settings…");
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSimulate, "Simulate agent event");
         NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, _autoStartChecked ? 8u : 0u, (IntPtr)MenuAutoStart, "Start with Windows"); // MF_CHECKED
-        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuRestart, "Restart");
-        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuExit, "Exit");
+        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuRestart, "Restart MiMi");
+        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuExit, "Exit MiMi");
 
         NativeMethods.GetCursorPos(out var pt);
         NativeMethods.SetForegroundWindow(_hwnd);
@@ -120,6 +136,7 @@ public sealed class TrayIcon : IDisposable
 
         var command = cmd switch
         {
+            MenuToggleVisibility => TrayMenuCommand.ToggleVisibility,
             MenuSettings => TrayMenuCommand.Settings,
             MenuSimulate => TrayMenuCommand.Simulate,
             MenuAutoStart => TrayMenuCommand.ToggleAutoStart,
@@ -149,6 +166,15 @@ public sealed class TrayIcon : IDisposable
 
     private static IntPtr WndProcStatic(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
+        if (Instances.TryGetValue(hWnd, out var owner))
+        {
+            if (owner._taskbarCreatedMsg != 0 && msg == owner._taskbarCreatedMsg)
+            {
+                if (owner._added) owner.AddOrUpdate(NativeMethods.NIM_ADD); // re-add after Explorer restart
+                return IntPtr.Zero;
+            }
+        }
+
         if (msg == NativeMethods.WM_APP_TRAY)
         {
             var mouseMsg = (uint)(lParam.ToInt64() & 0xFFFF);
@@ -165,4 +191,4 @@ public sealed class TrayIcon : IDisposable
     }
 }
 
-public enum TrayMenuCommand { Settings, Simulate, ToggleAutoStart, Restart, Exit }
+public enum TrayMenuCommand { ToggleVisibility, Settings, Simulate, ToggleAutoStart, Restart, Exit }

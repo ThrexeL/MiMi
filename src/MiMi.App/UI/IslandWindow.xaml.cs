@@ -42,8 +42,21 @@ public partial class IslandWindow : Window
 
     private const long WsExNoActivate = 0x08000000;
     private const long WsExToolWindow = 0x00000080;
+    private const int HotkeyId = 0xB00B; // Ctrl+Alt+M
 
     public IntPtr PillHandle { get; private set; }
+
+    /// <summary>Single authority for whether the island is on screen (P3).</summary>
+    public VisibilityCoordinator Coordinator { get; } = new();
+
+    /// <summary>Raised when the user's manual preference changes (tray menu reflects it).</summary>
+    public event Action<VisibilityPreference>? VisibilityPreferenceChanged;
+
+    /// <summary>True when Ctrl+Alt+M was registered successfully; false if another
+    /// application already owns the combination.</summary>
+    public bool HotkeyRegistered { get; private set; }
+
+    private bool _hotkeyHooked;
 
     private double _glowLevel = 0.55; // current island-bottom glow level (0..1)
 
@@ -66,7 +79,12 @@ public partial class IslandWindow : Window
             Interop.NativeMethods.SetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE,
                 (IntPtr)(Interop.NativeMethods.GetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE).ToInt64()
                     | WsExNoActivate | WsExToolWindow));
+            RegisterGlobalHotkey();
         };
+
+        Closed += (_, _) => UnregisterGlobalHotkey();
+
+        Coordinator.Changed += RecomputeVisibility;
 
         PositionWindow();
         ApplySettings();
@@ -108,6 +126,118 @@ public partial class IslandWindow : Window
     }
 
 
+    // ---- global hotkey (Ctrl+Alt+M) --------------------------------------------
+
+    private void RegisterGlobalHotkey()
+    {
+        if (_hotkeyHooked || PillHandle == IntPtr.Zero) return;
+        _hotkeyHooked = true; // register once per window lifetime, never twice
+
+        HotkeyRegistered = Interop.NativeMethods.RegisterHotKey(PillHandle, HotkeyId,
+            Interop.NativeMethods.MOD_CONTROL | Interop.NativeMethods.MOD_ALT | Interop.NativeMethods.MOD_NOREPEAT,
+            (uint)'M');
+        if (HotkeyRegistered)
+        {
+            Logger.Info("Hotkey: Ctrl+Alt+M registered.");
+        }
+        else
+        {
+            Logger.Warn("Hotkey: Ctrl+Alt+M could not be registered (claimed by another application).");
+            HotkeyRegistered = false;
+        }
+
+        var source = System.Windows.Interop.HwndSource.FromHwnd(PillHandle);
+        source?.AddHook(WndProcHook);
+    }
+
+    private void UnregisterGlobalHotkey()
+    {
+        if (PillHandle == IntPtr.Zero || !HotkeyRegistered) return;
+        Interop.NativeMethods.UnregisterHotKey(PillHandle, HotkeyId);
+        HotkeyRegistered = false;
+        Logger.Info("Hotkey: Ctrl+Alt+M unregistered.");
+    }
+
+    private IntPtr WndProcHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // Ctrl+Alt+M toggles the user's manual visibility preference.
+        if (msg == Interop.NativeMethods.WM_HOTKEY && wParam.ToInt32() == HotkeyId)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                Coordinator.TogglePreference();
+                VisibilityPreferenceChanged?.Invoke(Coordinator.Preference);
+            });
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        // Show Desktop must never minimize MiMi (belt: toolwindows are normally exempt).
+        if (msg == Interop.NativeMethods.WM_SYSCOMMAND && wParam == Interop.NativeMethods.SC_MINIMIZE)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
+        return IntPtr.Zero;
+    }
+
+    // ---- visibility (single coordinator) ------------------------------------------
+
+    /// <summary>Manual hide via hotkey/tray. Media, the bridge, and approval expiry
+    /// continue; nothing reopens the island until the user toggles it back.</summary>
+    public void SetHiddenByUser(bool hidden) =>
+        Coordinator.SetPreference(hidden ? VisibilityPreference.HiddenByUser : VisibilityPreference.Visible);
+
+    /// <summary>Fullscreen policy hook (desktop persistence handled by the watcher).</summary>
+    public void SetFullscreenSuppressed(bool suppressed) => Coordinator.SetFullscreenSuppressed(suppressed);
+
+    /// <summary>Applies the coordinator's verdict to the actual window. Hide is instant;
+    /// restore uses a quick 160 ms fade — polished, not distracting.</summary>
+    private void RecomputeVisibility()
+    {
+        var visible = Coordinator.EffectiveVisible;
+        if (visible)
+        {
+            if (!IsVisible)
+            {
+                Show(); // ShowActivated=False + WS_EX_NOACTIVATE: never steals focus
+                Opacity = 0;
+                BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(160))
+                {
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut },
+                });
+            }
+            ReassertTopmost();
+        }
+        else if (IsVisible)
+        {
+            Hide(); // stops all island rendering; media/bridge keep running
+        }
+        Logger.Info($"Visibility: effective={(visible ? "visible" : "hidden")} " +
+                    $"(preference={Coordinator.Preference}, fullscreen={Coordinator.FullscreenSuppressed}).");
+    }
+
+    /// <summary>Shell reshuffles (Win+D, taskbar restarts) can demote topmost. Re-assert
+    /// only when actually needed — event-driven, no timers, no flicker.</summary>
+    public void ReassertTopmost()
+    {
+        if (!IsVisible || PillHandle == IntPtr.Zero) return;
+
+        var exStyle = Interop.NativeMethods.GetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE).ToInt64();
+        if ((exStyle & Interop.NativeMethods.WS_EX_TOPMOST) == 0)
+        {
+            Interop.NativeMethods.SetWindowPos(PillHandle, Interop.NativeMethods.HwndTopmost, 0, 0, 0, 0,
+                Interop.NativeMethods.SWP_NOMOVE | Interop.NativeMethods.SWP_NOSIZE
+                | Interop.NativeMethods.SWP_NOACTIVATE | Interop.NativeMethods.SWP_NOOWNERZORDER);
+            Logger.Info("Visibility: re-asserted topmost after shell z-order change.");
+        }
+        else if (Interop.NativeMethods.IsIconic(PillHandle))
+        {
+            Interop.NativeMethods.ShowWindow(PillHandle, 4 /* SW_SHOWNOACTIVATE */);
+            Logger.Info("Visibility: restored minimized window without activation.");
+        }
+    }
+
     // ---- public surface ------------------------------------------------------
 
     public void ShowPinned(IslandContent content)
@@ -117,19 +247,12 @@ public partial class IslandWindow : Window
         ApplyContent(_hoverExpanded ? Expanded(content) ?? content : content);
     }
 
+    /// <summary>Legacy entry point kept for the watcher: fullscreen now flows through
+    /// the visibility coordinator instead of pill-opacity surgery.</summary>
     public void SetSuppressed(bool suppressed)
     {
-        var fade = new DoubleAnimation(suppressed ? 0.0 : 1.0, TimeSpan.FromMilliseconds(220))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-        };
-        Pill.BeginAnimation(OpacityProperty, fade);
-        // The glow hides together with the island (fullscreen suppression).
-        GlowRoot.BeginAnimation(OpacityProperty, new DoubleAnimation(suppressed ? 0.0 : _glowLevel, fade.Duration)
-        {
-            EasingFunction = fade.EasingFunction,
-        });
         if (suppressed && _hoverExpanded) CollapseHover();
+        Coordinator.SetFullscreenSuppressed(suppressed);
     }
 
     // ---- island-bottom glow -----------------------------------------------------

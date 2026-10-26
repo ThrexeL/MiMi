@@ -8,10 +8,26 @@ namespace MiMi.App.Interop;
 /// <summary>
 /// Detects foreground fullscreen windows via EVENT_SYSTEM_FOREGROUND WinEvent hooks
 /// (event-driven — no polling). Used to step the island aside during fullscreen media/games.
+///
+/// The Windows desktop (Progman/WorkerW), the taskbar, and other shell windows cover
+/// the monitor exactly like a borderless game, so they are explicitly excluded: Win+D
+/// and the taskbar's Show Desktop button make Progman the foreground window, and the
+/// island must stay visible on the ordinary desktop. The exclusion is bypassed when the
+/// user disables "Keep MiMi visible on desktop".
 /// </summary>
 public sealed class FullscreenWatcher : IDisposable
 {
+    private static readonly HashSet<string> ShellWindowClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Progman",                 // desktop
+        "WorkerW",                 // desktop wallpaper layer
+        "Shell_TrayWnd",           // taskbar
+        "Shell_SecondaryTrayWnd",  // secondary taskbars
+        "XamlExplorerHostIslandWindow", // Win11 taskbar/shell host
+    };
+
     private readonly Action<bool> _onChanged;
+    private readonly Func<bool> _desktopPersistEnabled;
     private readonly IntPtr _hook;
     private readonly NativeMethods.WinEventProc _proc;
     private IntPtr _selfHwnd;
@@ -20,9 +36,14 @@ public sealed class FullscreenWatcher : IDisposable
 
     public bool IsFullscreen => _isFullscreen;
 
-    public FullscreenWatcher(Action<bool> onChanged)
+    /// <summary>Raised (coalesced, on the dispatcher) whenever the foreground window
+    /// changes — used by the island to re-assert topmost after shell z-order reshuffles.</summary>
+    public event Action? ForegroundChanged;
+
+    public FullscreenWatcher(Action<bool> onChanged, Func<bool>? desktopPersistEnabled = null)
     {
         _onChanged = onChanged;
+        _desktopPersistEnabled = desktopPersistEnabled ?? (() => true);
         _proc = OnWinEvent;
         _hook = NativeMethods.SetWinEventHook(
             NativeMethods.EVENT_SYSTEM_FOREGROUND, NativeMethods.EVENT_SYSTEM_FOREGROUND,
@@ -44,6 +65,7 @@ public sealed class FullscreenWatcher : IDisposable
         Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             _scheduled = false;
+            ForegroundChanged?.Invoke();
             Evaluate();
         });
     }
@@ -61,6 +83,16 @@ public sealed class FullscreenWatcher : IDisposable
     {
         var hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero || hwnd == _selfHwnd) return false;
+
+        // The desktop and shell chrome are not fullscreen applications. MiMi stays
+        // visible on the ordinary desktop; maximized (captioned) apps never match the
+        // monitor bounds in the first place, so they are unaffected.
+        if (_desktopPersistEnabled())
+        {
+            var className = GetWindowClass(hwnd);
+            if (className is not null && ShellWindowClasses.Contains(className)) return false;
+        }
+
         if (!NativeMethods.GetWindowRect(hwnd, out var rect)) return false;
 
         var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
@@ -71,6 +103,13 @@ public sealed class FullscreenWatcher : IDisposable
         // A window covering exactly the monitor bounds is fullscreen (taskbar-hidden).
         return rect.Left <= info.rcMonitor.Left && rect.Top <= info.rcMonitor.Top
             && rect.Right >= info.rcMonitor.Right && rect.Bottom >= info.rcMonitor.Bottom;
+    }
+
+    private static string? GetWindowClass(IntPtr hwnd)
+    {
+        var buffer = new System.Text.StringBuilder(256);
+        var length = NativeMethods.GetClassNameW(hwnd, buffer, buffer.Capacity);
+        return length > 0 ? buffer.ToString(0, length) : null;
     }
 
     public void Dispose()

@@ -37,6 +37,10 @@ public sealed class AppSettings
     // Startup
     [JsonPropertyName("startWithWindows")] public bool StartWithWindows { get; set; } = false;
 
+    // Desktop behavior
+    [JsonPropertyName("desktopPersistVisible")] public bool DesktopPersistVisible { get; set; } = true;
+    [JsonPropertyName("fullscreenSuppress")] public bool FullscreenSuppress { get; set; } = true;
+
     public static AppSettings Load(string path)
     {
         try

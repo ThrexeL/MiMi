@@ -95,9 +95,20 @@ public partial class App : Application
         };
         _presenter.RefreshPinned();
 
-        // Fullscreen step-aside, event-driven via WinEvent hook.
-        _fullscreen = new FullscreenWatcher(suppressed => Dispatcher.BeginInvoke(() => _island.SetSuppressed(suppressed)));
+        // Fullscreen step-aside, event-driven via WinEvent hook. Desktop persistence and
+        // the fullscreen policy are user settings read live on every foreground change.
+        _fullscreen = new FullscreenWatcher(
+            suppressed => Dispatcher.BeginInvoke(() =>
+            {
+                var policy = _config.Current.FullscreenSuppress;
+                _island.SetSuppressed(suppressed && policy);
+            }),
+            desktopPersistEnabled: () => _config.Current.DesktopPersistVisible);
         _fullscreen.SetSelfWindow(_island.PillHandle);
+        _fullscreen.ForegroundChanged += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_config.Current.DesktopPersistVisible) _island.ReassertTopmost();
+        });
 
         // Media: event-driven via GSMTC.
         if (_config.Current.MediaModuleEnabled)
@@ -131,7 +142,10 @@ public partial class App : Application
         // Tray icon.
         _tray = new TrayIcon();
         _tray.SetAutoStartIndicator(AutoStart.IsEnabled());
+        _tray.SetVisibilityIndicator(true);
         _tray.CommandSelected += OnTrayCommand;
+        _island.VisibilityPreferenceChanged += preference =>
+            Dispatcher.BeginInvoke(() => _tray.SetVisibilityIndicator(preference == VisibilityPreference.Visible));
         try { _tray.Initialize(); }
         catch (Exception ex) { Logger.Error("Tray icon failed to initialize", ex); }
 
@@ -159,6 +173,9 @@ public partial class App : Application
         {
             switch (command)
             {
+                case TrayMenuCommand.ToggleVisibility:
+                    _island.SetHiddenByUser(_island.Coordinator.Preference == VisibilityPreference.Visible);
+                    break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;
                 case TrayMenuCommand.ToggleAutoStart:
@@ -183,7 +200,8 @@ public partial class App : Application
             _settingsWindow.Activate();
             return;
         }
-        _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable));
+        _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable),
+            () => _island.HotkeyRegistered);
         _settingsWindow.Show();
     }
 

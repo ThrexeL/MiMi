@@ -13,10 +13,13 @@ public partial class SettingsWindow : Window
     private readonly Action<bool> _autoStartChanged;
     private bool _loading;
 
-    public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged)
+    private readonly Func<bool> _hotkeyStatus;
+
+    public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
+        _hotkeyStatus = hotkeyStatus ?? (() => true);
         InitializeComponent();
         Load();
     }
@@ -37,6 +40,11 @@ public partial class SettingsWindow : Window
         FaceAnimSlider.Value = s.AnimationIntensity;
         BridgeToggle.IsChecked = s.BridgeEnabled;
         AutoStartToggle.IsChecked = AutoStart.IsEnabled();
+        DesktopPersistToggle.IsChecked = s.DesktopPersistVisible;
+        FullscreenToggle.IsChecked = s.FullscreenSuppress;
+        HotkeyStatusText.Text = _hotkeyStatus()
+            ? "Global toggle shortcut: Ctrl + Alt + M  (registered)"
+            : "Global toggle shortcut: Ctrl + Alt + M  (unavailable — another program owns it)";
         RefreshLabels();
         _loading = false;
     }
@@ -66,6 +74,8 @@ public partial class SettingsWindow : Window
             s.GlowIntensity = GlowSlider.Value;
             s.AnimationIntensity = FaceAnimSlider.Value;
             s.BridgeEnabled = BridgeToggle.IsChecked == true;
+            s.DesktopPersistVisible = DesktopPersistToggle.IsChecked == true;
+            s.FullscreenSuppress = FullscreenToggle.IsChecked == true;
         });
         RefreshLabels();
     }
@@ -83,6 +93,8 @@ public partial class SettingsWindow : Window
         _autoStartChanged(enable);
         _config.Update(s => s.StartWithWindows = enable, persist: true);
     }
+
+    private void Checkbox_Changed2(object sender, RoutedEventArgs e) => CaptureToSettings();
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e)
     {

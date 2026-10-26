@@ -141,6 +141,15 @@
         <CheckBox x:Name="AutoStartToggle" Style="{StaticResource Check}" Content="Start with Windows"
                   Checked="AutoStart_Changed" Unchecked="AutoStart_Changed"/>
 
+        <TextBlock Style="{StaticResource Sub}" Margin="0,12,0,4" Text="Desktop behavior"/>
+        <CheckBox x:Name="DesktopPersistToggle" Style="{StaticResource Check}" Content="Keep MiMi visible on the desktop (Win + D)"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="FullscreenToggle" Style="{StaticResource Check}" Content="Hide for fullscreen applications"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <TextBlock Style="{StaticResource Sub}" x:Name="HotkeyStatusText" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        <TextBlock Style="{StaticResource Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
+                   Text="While hidden, media monitoring and the agent bridge keep running. Approval requests still arrive and expire on schedule — they are never approved automatically. Press Ctrl + Alt + M to bring MiMi back."/>
+
         <StackPanel Orientation="Horizontal" Margin="0,16,0,0" HorizontalAlignment="Right">
             <Button Style="{StaticResource Btn}" x:Name="OpenLogsButton" Content="Open log folder" Click="OpenLogs_Click"/>
             <Button Style="{StaticResource Btn}" x:Name="CloseButton" Content="Close" Margin="8,0,0,0" Click="Close_Click"/>
