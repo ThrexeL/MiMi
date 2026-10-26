@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -29,6 +30,8 @@ public abstract class IslandContent : ObservableObject
     public abstract double TargetHeight { get; }
     public abstract double TargetCornerRadius { get; }
     public virtual bool Expandable => false;
+    /// <summary>When true the pill hugs the measured content height instead of the design height.</summary>
+    public virtual bool AutoHeight => false;
 }
 
 /// <summary>Class (not record) so the live clock can update without swapping content objects.</summary>
@@ -61,6 +64,7 @@ public sealed class MediaExpandedView : IslandContent
     public override double TargetWidth => 430;
     public override double TargetHeight => 190;
     public override double TargetCornerRadius => 24;
+    public override bool AutoHeight => true;
 }
 
 public sealed class AgentCompactView : IslandContent
@@ -80,6 +84,7 @@ public sealed class AgentExpandedView : IslandContent
     public override double TargetWidth => 420;
     public override double TargetHeight => 130;
     public override double TargetCornerRadius => 24;
+    public override bool AutoHeight => true;
 }
 
 public sealed class ApprovalView : IslandContent
@@ -89,6 +94,7 @@ public sealed class ApprovalView : IslandContent
     public override double TargetWidth => 440;
     public override double TargetHeight => 210;
     public override double TargetCornerRadius => 24;
+    public override bool AutoHeight => true;
 }
 
 public sealed class MediaViewModel : ObservableObject
@@ -297,6 +303,16 @@ public sealed class AgentCardViewModel : ObservableObject
         "" => "",
         var k => $"Action:  {k}",
     };
+}
+
+/// <summary>Collapses a row when its bound string is null/empty.</summary>
+public sealed class StringToVisibilityConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
 }
 
 public abstract class ObservableObject : INotifyPropertyChanged

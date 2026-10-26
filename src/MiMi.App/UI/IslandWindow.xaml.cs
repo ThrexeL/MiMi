@@ -158,7 +158,14 @@ public partial class IslandWindow : Window
         };
         Host.BeginAnimation(OpacityProperty, fadeOut);
 
-        AnimatePillSize(content.TargetWidth, content.TargetHeight, duration);
+        // Cards hug their real content height so no design-height dead space shows.
+        var targetHeight = content.TargetHeight;
+        if (content.AutoHeight)
+        {
+            Host.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
+            targetHeight = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
+        }
+        AnimatePillSize(content.TargetWidth, targetHeight, duration);
     }
 
     private void AnimatePillSize(double width, double height, TimeSpan duration)

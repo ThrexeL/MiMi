@@ -32,8 +32,10 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
 
-    // Connected clients that may receive approval responses (client label → stream).
-    private readonly Dictionary<string, Stream> _responseTargets = new();
+    // Connected clients that may receive approval responses, keyed by stream so two
+    // connections claiming the same client label (e.g. concurrent hook invocations)
+    // each get their own responses routed back.
+    private readonly Dictionary<Stream, string> _responseTargets = new();
     private readonly object _targetGate = new();
 
     public bool IsRunning { get; private set; }
@@ -124,7 +126,7 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
                 }
                 clientLabel = string.IsNullOrWhiteSpace(hello.Client) ? "client" : hello.Client!.Trim();
                 Logger.Info($"Bridge: client '{clientLabel}' connected.");
-                lock (_targetGate) _responseTargets[clientLabel] = server;
+                lock (_targetGate) _responseTargets[server] = clientLabel;
                 try
                 {
                     await BridgeProtocol.WriteFrameAsync(server, new BridgeProtocol { Kind = "ack", Ok = true }, ct);
@@ -169,7 +171,7 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
                 }
                 finally
                 {
-                    lock (_targetGate) _responseTargets.Remove(clientLabel);
+                    lock (_targetGate) _responseTargets.Remove(server);
                     Logger.Info($"Bridge: client '{clientLabel}' disconnected.");
                 }
             }
@@ -206,15 +208,15 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
             By = string.IsNullOrEmpty(request.ResolvedBy) ? "system" : request.ResolvedBy,
             At = request.ResolvedUtc ?? DateTimeOffset.UtcNow,
         };
-        Stream[] targets;
-        lock (_targetGate) targets = _responseTargets.Values.ToArray();
-        foreach (var target in targets)
+        KeyValuePair<Stream, string>[] targets;
+        lock (_targetGate) targets = _responseTargets.ToArray();
+        foreach (var (target, label) in targets)
         {
             // Fire-and-forget push; a dead client's pipe just fails its next read.
             _ = Task.Run(async () =>
             {
                 try { await BridgeProtocol.WriteFrameAsync(target, frame, CancellationToken.None); }
-                catch (Exception ex) { Logger.Warn($"Bridge: response push failed ({ex.Message})"); }
+                catch (Exception ex) { Logger.Warn($"Bridge: response push to '{label}' failed ({ex.Message})"); }
             });
         }
         Logger.Info($"Bridge: approval '{request.ApprovalRequestId}' resolved ({request.Decision}); response frame queued.");

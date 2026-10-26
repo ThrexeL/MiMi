@@ -30,6 +30,7 @@
                           Opacity="0.5" Color="#CC000000"/>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <ui:StringToVisibilityConverter x:Key="StringToVis"/>
 
         <Style x:Key="IslandFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
@@ -218,7 +219,8 @@
                                Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
                                Foreground="{StaticResource TextSecondary}"
-                               Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"/>
+                               Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
                 <StackPanel x:Name="Eq" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,6,0">
                     <Rectangle Width="2.5" Height="6" RadiusX="1" RadiusY="1" Fill="{StaticResource EqBar}"
@@ -248,7 +250,8 @@
                                    Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="12"
                                    Foreground="{StaticResource TextSecondary}"
-                                   Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"/>
+                                   Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
                                    Foreground="{StaticResource TextTertiary}" Margin="0,3,0,0"
                                    Text="{Binding Media.Source}" TextTrimming="CharacterEllipsis"/>
@@ -304,17 +307,20 @@
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="11"
                                Foreground="{StaticResource TextTertiary}" Margin="10,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.ProjectLabel}"
-                               TextTrimming="CharacterEllipsis"/>
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding Agent.ProjectLabel, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="12.5" Margin="0,10,0,0"
                            VerticalAlignment="Top"
                            Text="{Binding Agent.Title}" TextTrimming="CharacterEllipsis"/>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="0,4,0,0"
                            Foreground="{StaticResource TextSecondary}" Text="{Binding Agent.Message}"
-                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding Agent.Message, Converter={StaticResource StringToVis}}"/>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5" Margin="0,6,0,0"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Agent.SessionLabel}"
-                           TextTrimming="CharacterEllipsis"/>
+                           TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding Agent.SessionLabel, Converter={StaticResource StringToVis}}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -332,17 +338,24 @@
                                VerticalAlignment="Center" Text="{Binding Agent.Provider}"/>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
                                Foreground="{StaticResource TextTertiary}" Margin="8,0,0,0"
-                               VerticalAlignment="Center" Text="{Binding Agent.TimeLeft}"/>
+                               VerticalAlignment="Center" Text="{Binding Agent.TimeLeft}"
+                               Visibility="{Binding Agent.TimeLeft, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
 
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11" Margin="1,10,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,9,0,0"
+                           Text="{Binding Agent.Message}" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding Agent.Message, Converter={StaticResource StringToVis}}"/>
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="11" Margin="1,0,0,0"
                            Foreground="{StaticResource TextSecondary}"
-                           Text="{Binding Agent.ProjectLabel}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,3,0,0"
-                           Text="{Binding Agent.ActionLabel}" TextTrimming="CharacterEllipsis"/>
+                           Text="{Binding Agent.ProjectLabel}"
+                           Visibility="{Binding Agent.ProjectLabel, Converter={StaticResource StringToVis}}"/>
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,0,0,0"
+                           Text="{Binding Agent.ActionLabel}" TextTrimming="CharacterEllipsis"
+                           Visibility="{Binding Agent.ActionLabel, Converter={StaticResource StringToVis}}"/>
 
                 <Border Background="#1AFFFFFF" CornerRadius="7" Padding="10,6" Margin="1,8,0,0"
-                        HorizontalAlignment="Left" MaxWidth="380">
+                        HorizontalAlignment="Left" MaxWidth="380"
+                        Visibility="{Binding Agent.Command, Converter={StaticResource StringToVis}}">
                     <TextBlock Style="{StaticResource MonoFont}" Text="{Binding Agent.Command}"
                                TextTrimming="CharacterEllipsis"/>
                 </Border>
