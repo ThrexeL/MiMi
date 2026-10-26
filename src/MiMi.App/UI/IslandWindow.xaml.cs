@@ -193,28 +193,119 @@ public partial class IslandWindow : Window
 
     /// <summary>Applies the coordinator's verdict to the actual window. Hide is instant;
     /// restore uses a quick 160 ms fade — polished, not distracting.</summary>
+    private readonly FadeSequencer _fadeSequencer = new();
+    private bool _windowShown = true; // tracks actual window visibility across fades
+    private bool _fadeInFlight;
+
     private void RecomputeVisibility()
     {
         var visible = Coordinator.EffectiveVisible;
-        if (visible)
-        {
-            if (!IsVisible)
-            {
-                Show(); // ShowActivated=False + WS_EX_NOACTIVATE: never steals focus
-                Opacity = 0;
-                BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(160))
-                {
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut },
-                });
-            }
-            ReassertTopmost();
-        }
-        else if (IsVisible)
-        {
-            Hide(); // stops all island rendering; media/bridge keep running
-        }
+        // Only user-initiated hides fade out; fullscreen/session restrictions stay instant.
+        var userInitiatedHide = !visible && Coordinator.Preference == VisibilityPreference.HiddenByUser;
+        var plan = VisibilityTransitionPlanner.Plan(_windowShown && IsVisible, Opacity, visible,
+            userInitiatedHide, reducedMotion: false, _fadeInFlight);
+        ExecuteFadePlan(plan);
+        if (visible) ReassertTopmost();
         Logger.Info($"Visibility: effective={(visible ? "visible" : "hidden")} " +
-                    $"(preference={Coordinator.Preference}, fullscreen={Coordinator.FullscreenSuppressed}).");
+                    $"(preference={Coordinator.Preference}, fullscreen={Coordinator.FullscreenSuppressed}, " +
+                    $"transition={plan.Action}).");
+    }
+
+    /// <summary>Executes a transition plan. Every plan begins a new fade generation, so
+    /// completion handlers from superseded transitions become no-ops — rapid Ctrl+Alt+M
+    /// toggles reverse smoothly from the current rendered opacity with no stale Hide().</summary>
+    private void ExecuteFadePlan(FadePlan plan)
+    {
+        var generation = _fadeSequencer.Begin();
+        _fadeInFlight = plan.Action is FadeAction.ShowFadeIn or FadeAction.HideFadeOut;
+
+        switch (plan.Action)
+        {
+            case FadeAction.None:
+                return;
+
+            case FadeAction.ShowFadeIn:
+            {
+                SetClickThrough(false);
+                Opacity = plan.FromOpacity; // continue from the rendered value, no jumps
+                if (!_windowShown)
+                {
+                    Show(); // ShowActivated=False + WS_EX_NOACTIVATE: never steals focus
+                    _windowShown = true;
+                }
+                var fadeIn = new DoubleAnimation(1, FadeDuration(baseMs: 220))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                };
+                fadeIn.Completed += (_, _) =>
+                {
+                    if (!_fadeSequencer.IsCurrent(generation)) return; // superseded: do nothing
+                    BeginAnimation(OpacityProperty, null);
+                    Opacity = 1; // finish exactly at 1.0
+                    _fadeInFlight = false;
+                };
+                BeginAnimation(OpacityProperty, fadeIn);
+                break;
+            }
+
+            case FadeAction.HideFadeOut:
+            {
+                // Fade-out must not intercept new mouse input; clicks pass through.
+                SetClickThrough(true);
+                Opacity = plan.FromOpacity;
+                var fadeOut = new DoubleAnimation(0, FadeDuration(baseMs: 200))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+                };
+                fadeOut.Completed += (_, _) =>
+                {
+                    if (!_fadeSequencer.IsCurrent(generation)) return; // a newer Show() won: skip Hide()
+                    HideNow();
+                };
+                // HideNow clears the flag too; superseded fades keep it for the replacement.
+                BeginAnimation(OpacityProperty, fadeOut);
+                break;
+            }
+
+            case FadeAction.ShowImmediate:
+                SetClickThrough(false);
+                Opacity = 0;
+                Show();
+                _windowShown = true;
+                _fadeInFlight = false;
+                Opacity = 1;
+                break;
+
+            case FadeAction.HideImmediate:
+                HideNow();
+                break;
+        }
+    }
+
+    private void HideNow()
+    {
+        BeginAnimation(OpacityProperty, null);
+        Hide(); // stops all island rendering; media/bridge keep running
+        _windowShown = false;
+        _fadeInFlight = false;
+        Opacity = 1; // clean base for the next fade-in
+    }
+
+    /// <summary>Fade durations respect the island-wide animation speed setting
+    /// (clamped to a responsive 80–400 ms).</summary>
+    private TimeSpan FadeDuration(double baseMs) =>
+        TimeSpan.FromMilliseconds(Math.Clamp(baseMs / _config.Current.AnimationSpeed, 80, 400));
+
+    /// <summary>Clicks pass through the island while it fades out and while hidden.</summary>
+    private void SetClickThrough(bool enabled)
+    {
+        if (PillHandle == IntPtr.Zero) return;
+        var exStyle = Interop.NativeMethods.GetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE).ToInt64();
+        var updated = enabled
+            ? exStyle | Interop.NativeMethods.WS_EX_TRANSPARENT
+            : exStyle & ~Interop.NativeMethods.WS_EX_TRANSPARENT;
+        if (updated != exStyle)
+            Interop.NativeMethods.SetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE, (IntPtr)updated);
     }
 
     /// <summary>Shell reshuffles (Win+D, taskbar restarts) can demote topmost. Re-assert

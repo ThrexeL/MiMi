@@ -170,6 +170,7 @@ internal static class NativeMethods
     public const uint WM_SYSCOMMAND = 0x0112;
     public const IntPtr SC_MINIMIZE = (IntPtr)0xF020;
     public const long WS_EX_TOPMOST = 0x00000008;
+    public const long WS_EX_TRANSPARENT = 0x00000020;
     public static readonly IntPtr HwndTopmost = new(-1);
     public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010,
         SWP_NOOWNERZORDER = 0x0200;
