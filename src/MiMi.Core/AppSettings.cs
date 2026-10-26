@@ -26,6 +26,9 @@ public sealed class AppSettings
     [JsonPropertyName("agentsModuleEnabled")] public bool AgentsModuleEnabled { get; set; } = true;
     [JsonPropertyName("clockEnabled")] public bool ClockEnabled { get; set; } = true;
     [JsonPropertyName("mascotEnabled")] public bool MascotEnabled { get; set; } = true;
+    [JsonPropertyName("glowEnabled")] public bool GlowEnabled { get; set; } = true;
+    [JsonPropertyName("glowIntensity")] public double GlowIntensity { get; set; } = 0.6;
+    [JsonPropertyName("animationIntensity")] public double AnimationIntensity { get; set; } = 1.0;
 
     // Bridge (Phase 2 foundation, shipped enabled but inert until a client connects)
     [JsonPropertyName("bridgeEnabled")] public bool BridgeEnabled { get; set; } = true;
@@ -66,6 +69,10 @@ public sealed class AppSettings
     {
         Scale = Math.Clamp(Scale, 0.75, 1.5);
         AnimationSpeed = Math.Clamp(AnimationSpeed, 0.5, 2.5);
+        GlowIntensity = Math.Clamp(GlowIntensity, 0, 1);
+        AnimationIntensity = Math.Clamp(AnimationIntensity, 0.5, 2);
+        if (double.IsNaN(GlowIntensity) || double.IsInfinity(GlowIntensity)) GlowIntensity = 0.6;
+        if (double.IsNaN(AnimationIntensity) || double.IsInfinity(AnimationIntensity)) AnimationIntensity = 1.0;
         TopMarginDip = Math.Clamp(TopMarginDip, 0, 200);
         HorizontalOffsetDip = Math.Clamp(HorizontalOffsetDip, -800, 800);
         CollapseDelayMs = Math.Clamp(CollapseDelayMs, 200, 5000);

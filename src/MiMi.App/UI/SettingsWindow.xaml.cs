@@ -32,6 +32,9 @@ public partial class SettingsWindow : Window
         AgentsToggle.IsChecked = s.AgentsModuleEnabled;
         ClockToggle.IsChecked = s.ClockEnabled;
         MascotToggle.IsChecked = s.MascotEnabled;
+        GlowToggle.IsChecked = s.GlowEnabled;
+        GlowSlider.Value = s.GlowIntensity;
+        FaceAnimSlider.Value = s.AnimationIntensity;
         BridgeToggle.IsChecked = s.BridgeEnabled;
         AutoStartToggle.IsChecked = AutoStart.IsEnabled();
         RefreshLabels();
@@ -43,6 +46,8 @@ public partial class SettingsWindow : Window
         ScaleLabel.Text = ScaleSlider.Value.ToString("0.00×");
         SpeedLabel.Text = SpeedSlider.Value.ToString("0.0×");
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
+        GlowLabel.Text = $"{GlowSlider.Value:0}%";
+        FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0×}";
     }
 
     private void CaptureToSettings()
@@ -57,6 +62,9 @@ public partial class SettingsWindow : Window
             s.AgentsModuleEnabled = AgentsToggle.IsChecked == true;
             s.ClockEnabled = ClockToggle.IsChecked == true;
             s.MascotEnabled = MascotToggle.IsChecked == true;
+            s.GlowEnabled = GlowToggle.IsChecked == true;
+            s.GlowIntensity = GlowSlider.Value;
+            s.AnimationIntensity = FaceAnimSlider.Value;
             s.BridgeEnabled = BridgeToggle.IsChecked == true;
         });
         RefreshLabels();

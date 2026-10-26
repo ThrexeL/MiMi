@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MiMi.Agents;
+using MiMi.App.UI.Mascot;
 using MiMi.Media;
 
 namespace MiMi.App.UI;
@@ -243,6 +244,9 @@ public sealed class AgentCardViewModel : ObservableObject
     public string Accent { get => _accent; private set => Set(ref _accent, value); }
     public string Elapsed { get => _elapsed; private set => Set(ref _elapsed, value); }
     public string TimeLeft { get => _timeLeft; private set => Set(ref _timeLeft, value); }
+
+    /// <summary>Facial expression the mascot shows for this card's state.</summary>
+    public MascotExpression Expression { get; private set; } = MascotExpression.Calm;
 
     public required string ApprovalId { get; init; }
     public Action<ApprovalDecision>? Decide { get; init; }

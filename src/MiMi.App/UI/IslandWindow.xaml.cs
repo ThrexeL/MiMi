@@ -31,7 +31,6 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer _stateTimer;   // shared: enter-delay / leave-grace
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _progressTimer;
-    private readonly DispatcherTimer _blinkTimer;
     private readonly Random _random = new();
 
     private Storyboard? _sizeStoryboard;
@@ -101,15 +100,9 @@ public partial class IslandWindow : Window
         };
         _progressTimer.Start();
 
-        // Mascot blink at a natural, random cadence.
-        _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-        _blinkTimer.Tick += (_, _) =>
-        {
-            if (_renderedContent is RestingView) BlinkEyes();
-            _blinkTimer.Interval = TimeSpan.FromSeconds(3 + _random.NextDouble() * 5);
-        };
-        _blinkTimer.Start();
+        // Mascot life signs (blink, dart, glow breathing) live inside MiMiMascotControl.
     }
+
 
     // ---- public surface ------------------------------------------------------
 
@@ -254,9 +247,6 @@ public partial class IslandWindow : Window
                 UpdatePlayGlyph(media.Media.IsPlaying);
                 break;
 
-            case RestingView:
-                if (_random.NextDouble() < 0.8) BlinkEyes();
-                break;
         }
     }
 
@@ -312,25 +302,6 @@ public partial class IslandWindow : Window
     {
         if (_eqStoryboard is not null && _eqHost is not null) _eqStoryboard.Remove(_eqHost);
         _eqStoryboard = null;
-    }
-
-    private void BlinkEyes()
-    {
-        var duration = TimeSpan.FromMilliseconds(140);
-        foreach (var name in new[] { "EyeL", "EyeR" })
-        {
-            if (FindDescendant(Pill, name) is FrameworkElement eye)
-            {
-                // Template-declared transforms arrive frozen; replace with a live one.
-                if (eye.RenderTransform is not ScaleTransform st || st.IsFrozen)
-                    eye.RenderTransform = st = new ScaleTransform(1, 1);
-                st.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, 0.06, duration)
-                {
-                    AutoReverse = true,
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut },
-                });
-            }
-        }
     }
 
     // ---- hover expansion ------------------------------------------------------

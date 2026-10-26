@@ -103,8 +103,36 @@
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <CheckBox x:Name="ClockToggle" Style="{StaticResource Check}" Content="Clock in resting state"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
-        <CheckBox x:Name="MascotToggle" Style="{StaticResource Check}" Content="Mascot eyes"
+        <CheckBox x:Name="MascotToggle" Style="{StaticResource Check}" Content="Mascot face"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
+        <CheckBox x:Name="GlowToggle" Style="{StaticResource Check}" Content="Gold glow"
+                  Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
+
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="52"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource Label}" Text="Glow intensity"/>
+            <Slider x:Name="GlowSlider" Grid.Column="1" Minimum="0" Maximum="1" Value="0.6"
+                    VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="0.05"
+                    Thumb.DragCompleted="Slider_DragCompleted"/>
+            <TextBlock x:Name="GlowLabel" Grid.Column="2" Style="{StaticResource Sub}" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="52"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource Label}" Text="Face animation"/>
+            <Slider x:Name="FaceAnimSlider" Grid.Column="1" Minimum="0.5" Maximum="2" Value="1.0"
+                    VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="0.1"
+                    Thumb.DragCompleted="Slider_DragCompleted"/>
+            <TextBlock x:Name="FaceAnimLabel" Grid.Column="2" Style="{StaticResource Sub}" HorizontalAlignment="Right"/>
+        </Grid>
         <CheckBox x:Name="BridgeToggle" Style="{StaticResource Check}" Content="Agent bridge (named pipe listener; change needs restart)"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
 

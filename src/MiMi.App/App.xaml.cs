@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using MiMi.Agents;
 using MiMi.App.Interop;
 using MiMi.App.UI;
+using MiMi.App.UI.Mascot;
 using MiMi.Bridge;
 using MiMi.Core;
 using MiMi.Media;
@@ -64,6 +65,8 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _config = new ConfigStore();
+        MascotOptions.Apply(_config.Current);
+        _config.Changed += settings => MascotOptions.Apply(settings);
         _approvals = new ApprovalStore(TimeSpan.FromMinutes(_config.Current.ApprovalTtlMinutes));
         _bus = new AgentEventBus();
         _stateManager = new IslandStateManager();
