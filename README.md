@@ -39,15 +39,19 @@ Development is phased. What is implemented today:
   - Event simulator script (`tools/Invoke-MiMiEvent.ps1`) and a tray
     "Simulate agent event" demo sequence.
 
-- **Phase 3 — real agent adapters (NOT implemented yet).** The Codex CLI / Claude Code hook
-  adapters do not exist yet. Phase 2's bridge is the integration surface they will use.
-  "Open in Agent" currently copies session/approval details to the clipboard; genuine agent
-  focus arrives with Phase 3.
+- **Phase 3 — real agent integrations (implemented).** Claude Code and Codex both have real,
+  two-way approval integrations through their official PermissionRequest hooks, implemented
+  by `MiMi.AgentCli` (see "Agent integrations (Phase 3)" below). Codex additionally has
+  optional one-way turn-complete toasts via its `notify` config. Codex app-server
+  full-embedding (MiMi driving a Codex session) remains future work (Phase 5 candidate).
+  "Open in Agent" still copies approval details to the clipboard; direct session focus is
+  not implemented.
 
 - **Phase 4 — extra modules (not started).** Lyrics, Pomodoro, file shelf, to-do, system
   indicators.
 
-- **Phase 5 — personal harness adapter (not started).**
+- **Phase 5 — personal harness adapter; Codex app-server full embedding (candidate; not
+  started).**
 
 ## Build and run
 
@@ -207,6 +211,126 @@ Exit code 0 means accepted (including duplicates), 1 means rejected or transport
 Run with `-Verbose` to see handshake details. The same protocol works from C# or any other
 language — the framing is four bytes plus JSON.
 
+## Agent integrations (Phase 3)
+
+### How it works
+
+A provider hook fires → `MiMi.AgentCli` reads the hook's stdin JSON → it sends an approval
+event over the secure named-pipe bridge (above) → the island shows a sticky Approve/Deny
+card → the decision flows back over the same pipe → the CLI prints the provider-native
+decision JSON on stdout. Every failure path — timeout, MiMi offline, expired request, parse
+error, crash — DENIES: the integration is fail-closed, and MiMi never auto-approves.
+
+### Claude Code
+
+```powershell
+MiMi.AgentCli.exe install-claude [--timeout 260]
+MiMi.AgentCli.exe uninstall-claude
+```
+
+`install-claude` adds a `PermissionRequest` hook (no matcher — all tools) to
+`~/.claude/settings.json`. Existing hooks and settings are preserved, a timestamped
+`.mimi-backup-*` copy is written before every modification, and the install is idempotent.
+No trust step is needed — Claude Code picks the hook up automatically.
+
+### Codex
+
+```powershell
+MiMi.AgentCli.exe install-codex [--timeout 260]
+MiMi.AgentCli.exe uninstall-codex
+```
+
+`install-codex` adds the hook to `~/.codex/hooks.json` (same preservation, backup, and
+idempotency rules). **Codex requires a one-time trust review: run `/hooks` in the Codex TUI
+and approve the MiMi hook** — Codex blocks hooks it has not reviewed.
+
+### Optional Codex turn-complete toasts
+
+```powershell
+MiMi.AgentCli.exe install-codex-notify
+MiMi.AgentCli.exe uninstall-codex-notify
+```
+
+Adds `notify = ["<MiMi.AgentCli.exe>", "codex-notify"]` to `~/.codex/config.toml`. This is
+one-way only: `agent-turn-complete` payloads become activity cards on the island; no
+approvals flow through `notify`. If the config already sets `notify` for another program,
+the install is skipped and the existing entry left untouched.
+
+### Manual hook configuration
+
+The exact command line the installers write (use your own absolute path to the built exe;
+by default `src\MiMi.AgentCli\bin\Release\net10.0-windows\MiMi.AgentCli.exe`):
+
+```
+<path to MiMi.AgentCli.exe> claude-permission    # Claude Code hook
+<path to MiMi.AgentCli.exe> codex-permission     # Codex hook
+```
+
+To add it by hand, use this shape in `~/.claude/settings.json` (Claude Code) or
+`~/.codex/hooks.json` (Codex, with `codex-permission`):
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          { "type": "command", "command": "<path to MiMi.AgentCli.exe> claude-permission", "timeout": 260 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The hook command also accepts `--wait N` (default 240 seconds): how long the CLI waits for
+the island decision before denying on its own. The installer's default provider-side
+`timeout` (260 s) is deliberately longer than the CLI wait so the CLI, not the provider's
+hook timeout, makes the final call.
+
+### Behavior on failure
+
+| Situation | Outcome |
+|---|---|
+| CLI wait elapses with no island decision (`--wait`, default 240 s) | **deny** — the message explains the timeout |
+| MiMi not running / bridge disabled | **deny** — message says to start MiMi or remove the hook |
+| Approval expired in MiMi (TTL passed unanswered) | **deny** |
+| Empty stdin or unparseable hook JSON | **deny** |
+| Unexpected CLI crash | **deny** (top-level fail-closed handler) |
+| Provider-level hook timeout (config `timeout` < CLI wait) | no decision emitted; the provider falls back to its normal interactive prompt — never auto-approve |
+
+### Security model
+
+- Decisions are correlated by `approval_request_id`, generated per request. Concurrent
+  agent sessions are supported: responses are routed per-connection and filtered by id, so
+  two simultaneous hooks never receive each other's decisions.
+- MiMi never executes payload content; the command shown on the approval card is
+  display-only.
+- A decision is reported back only after the user clicks Approve/Deny (or the approval TTL
+  expires). MiMi never auto-approves.
+
+### What is NOT supported
+
+- **Codex app-server embedding.** MiMi does not drive the Codex session; hook decisions
+  only fire for approval prompts Codex itself would raise. Full embedding (MiMi as the
+  app-server client) remains future work — see `docs/codex-integrations.md`.
+- **Claude Code `permission_suggestions` / `updatedInput`.** These stdin fields are
+  ignored: MiMi always returns the original tool input unchanged. The emitted decision JSON
+  contains only `behavior` (`allow`/`deny`) and `message` — never `updatedInput`,
+  `updatedPermissions`, or `interrupt`.
+
+### Testing it
+
+- **Claude Code:** run Claude Code and ask it to do something requiring permission (e.g.
+  "run npm run build" under default permissions). The island shows the approval card;
+  Approve lets Claude continue, Deny blocks the tool call with the message.
+- **Codex:** same in the Codex TUI, after approving the MiMi hook via `/hooks`.
+- **No-op parse check:** `MiMi.AgentCli claude-permission --dry-run < input.json` prints
+  the event it would send (to stderr) and denies, without touching the bridge.
+  `codex-permission` supports `--dry-run` the same way.
+- **Simulator:** `tools\Invoke-MiMiEvent.ps1` exercises the same bridge/approval pipeline
+  without a provider (examples above).
+
 ## Settings reference
 
 Persisted to `%LOCALAPPDATA%\MiMi\settings.json`. Invalid or corrupt files fall back to
@@ -253,8 +377,10 @@ defaults; values are clamped to the ranges below on every save.
 | `MiMi.Media` | GSMTC media service and media models |
 | `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus |
 | `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security |
+| `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest, Codex notify) and their installers |
 | `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest |
-| `MiMi.Tests` | xUnit tests for config, dedup, events, approvals, state, and bridge |
+| `MiMi.Tests` | xUnit tests for config, dedup, events, approvals, state, bridge, and hook adapters |
+| `docs/` | Research references: Claude Code hooks (`claude-code-hooks.md`), Codex integrations (`codex-integrations.md`) |
 
 Data flow: providers/bridge → `AgentEventBus` → `IslandPresenter` → `IslandStateManager`
 → `IslandWindow`. The bridge normalizes and validates events, the bus decouples producers
@@ -263,7 +389,7 @@ wins, transients expire back to the pinned state), and the window renders it.
 
 ## Testing checklist
 
-Covered by automated tests (`dotnet test MiMi.slnx -c Debug`) and `MiMi.exe --selftest`:
+Covered by 52 automated tests (`dotnet test MiMi.slnx -c Debug`) and `MiMi.exe --selftest`:
 
 - Settings round-trip and corrupt-file fallback to defaults; value clamping.
 - Dedup store: duplicate ids rejected, capacity eviction, empty id accepted.
@@ -276,6 +402,13 @@ Covered by automated tests (`dotnet test MiMi.slnx -c Debug`) and `MiMi.exe --se
 - Bridge: pipe frame round-trip, oversized frame rejection, invalid token rejection,
   malformed event rejection with error ack, hello/event/ack handshake end-to-end,
   approval decision push-back to the originating client (also exercised by `--selftest`).
+- Hook adapters: Claude Code / Codex PermissionRequest stdin parsing (tool mapping, unknown
+  input fields tolerated, wrong event rejected) and the decision-JSON shape — allow/deny
+  with a message only, never `updatedInput`; Codex notify payload parsing (turn-complete
+  mapping, long messages truncated, unknown types to status).
+- Installers: hook entry created, install idempotent, existing user hooks preserved
+  untouched, non-object `hooks` keys skipped without writing, uninstall removes only
+  MiMi's entries.
 - GSMTC availability check (`--selftest` reports the active session count).
 
 Requires manual verification (not automated, not claimed done):
