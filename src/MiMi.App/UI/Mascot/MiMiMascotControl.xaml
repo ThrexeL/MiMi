@@ -6,81 +6,52 @@
              Focusable="False">
 
     <UserControl.Resources>
-        <!-- Soft white with a faint vertical falloff so eyes read as lit, not painted. -->
+        <!-- Soft warm white with a faint vertical falloff so eyes read as lit, not painted. -->
         <LinearGradientBrush x:Key="MascotEyeBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FFFFFFFF" Offset="0"/>
-            <GradientStop Color="#E8FFFFFF" Offset="1"/>
+            <GradientStop Color="#FFF8F0" Offset="0"/>
+            <GradientStop Color="#F0F2E9DF" Offset="1"/>
         </LinearGradientBrush>
     </UserControl.Resources>
 
     <!-- Design space is 48x30; a Viewbox keeps the face proportional at any usage size.
-         The face: two soft capsule eyes with warm gold light pooling beneath them —
-         MiMi's signature. Gradients only (no bitmap effects) so it stays GPU-cheap. -->
+         The face: two perfectly round, evenly spaced eyes and (in relaxed states) a
+         whisper of a smile. No glow lives here — MiMi's gold light belongs to the
+         island's bottom edge, not to the face. -->
     <Viewbox Stretch="Uniform">
         <Grid Width="48" Height="30" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
                 <ScaleTransform x:Name="WakeScale" ScaleX="1" ScaleY="1"/>
             </Grid.RenderTransform>
+            <!-- Eyes: circles (1:1). They flatten only mid-blink and always return to
+                 perfect circles. Centers at x=16/32, y=11 → balanced 16u spacing. -->
+            <Canvas Width="48" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Ellipse x:Name="EyeL" Width="7" Height="7" Fill="{StaticResource MascotEyeBrush}"
+                         Canvas.Left="12.5" Canvas.Top="7.5" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <TransformGroup>
+                            <TranslateTransform x:Name="EyeLMove"/>
+                            <RotateTransform x:Name="EyeLTilt"/>
+                            <ScaleTransform x:Name="EyeLBlink"/>
+                        </TransformGroup>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse x:Name="EyeR" Width="7" Height="7" Fill="{StaticResource MascotEyeBrush}"
+                         Canvas.Left="28.5" Canvas.Top="7.5" RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <TransformGroup>
+                            <TranslateTransform x:Name="EyeRMove"/>
+                            <RotateTransform x:Name="EyeRTilt"/>
+                            <ScaleTransform x:Name="EyeRBlink"/>
+                        </TransformGroup>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+            </Canvas>
 
-            <!-- Gold light: wide soft pool + tight warm core beneath the eye line. -->
-            <Ellipse x:Name="GlowWide" Width="40" Height="20"
-                     VerticalAlignment="Center" Margin="0,7,0,0">
-                <Ellipse.Fill>
-                    <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
-                        <GradientStop x:Name="GlowWideOuter" Color="#00E8A33D" Offset="1"/>
-                        <GradientStop x:Name="GlowWideInner" Color="#40E8A33D" Offset="0"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-            <Ellipse x:Name="GlowCore" Width="22" Height="11"
-                     VerticalAlignment="Center" Margin="0,8,0,0">
-                <Ellipse.Fill>
-                    <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
-                        <GradientStop x:Name="GlowCoreOuter" Color="#00FFC46B" Offset="1"/>
-                        <GradientStop x:Name="GlowCoreInner" Color="#66FFC46B" Offset="0"/>
-                    </RadialGradientBrush>
-                </Ellipse.Fill>
-            </Ellipse>
-
-            <!-- Eyes: soft white capsules, individually transformable for blinks and darts. -->
-            <Grid VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="12"/>
-                    <ColumnDefinition Width="10"/>
-                </Grid.ColumnDefinitions>
-                <Canvas Grid.Column="0" Width="5" Height="9">
-                    <Rectangle x:Name="EyeL" Width="5" Height="9" RadiusX="2.5" RadiusY="2.5"
-                               Fill="{StaticResource MascotEyeBrush}" Canvas.Left="0" Canvas.Top="0"
-                               RenderTransformOrigin="0.5,0.5">
-                        <Rectangle.RenderTransform>
-                            <TransformGroup>
-                                <TranslateTransform x:Name="EyeLMove"/>
-                                <RotateTransform x:Name="EyeLTilt"/>
-                                <ScaleTransform x:Name="EyeLBlink"/>
-                            </TransformGroup>
-                        </Rectangle.RenderTransform>
-                    </Rectangle>
-                </Canvas>
-                <Canvas Grid.Column="2" Width="5" Height="9">
-                    <Rectangle x:Name="EyeR" Width="5" Height="9" RadiusX="2.5" RadiusY="2.5"
-                               Fill="{StaticResource MascotEyeBrush}" Canvas.Left="0" Canvas.Top="0"
-                               RenderTransformOrigin="0.5,0.5">
-                        <Rectangle.RenderTransform>
-                            <TransformGroup>
-                                <TranslateTransform x:Name="EyeRMove"/>
-                                <RotateTransform x:Name="EyeRTilt"/>
-                                <ScaleTransform x:Name="EyeRBlink"/>
-                            </TransformGroup>
-                        </Rectangle.RenderTransform>
-                    </Rectangle>
-                </Canvas>
-            </Grid>
-
-            <!-- Mouth: a whisper of a line; hidden in Alert/Focused/Concerned states. -->
-            <Rectangle x:Name="Mouth" Width="7" Height="2" RadiusX="1" RadiusY="1"
-                       Fill="#52FFFFFF" VerticalAlignment="Center" Margin="0,13,0,0"
-                       HorizontalAlignment="Center"/>
+            <!-- Tiny curved smile: a shallow arc, only visible in relaxed states. -->
+            <Path x:Name="Mouth" Width="7" Height="3" Stroke="#8AF5EDE2" StrokeThickness="1.4"
+                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,11,0,0"
+                  Data="M 0,0 Q 3.5,2.4 7,0"/>
         </Grid>
     </Viewbox>
 </UserControl>

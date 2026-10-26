@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using MiMi.App.UI.Mascot;
 using MiMi.Core;
 
 namespace MiMi.App.UI;
@@ -44,6 +45,8 @@ public partial class IslandWindow : Window
 
     public IntPtr PillHandle { get; private set; }
 
+    private double _glowLevel = 0.55; // current island-bottom glow level (0..1)
+
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
         Func<string, TimeSpan?> approvalTimeLeft,
@@ -56,6 +59,7 @@ public partial class IslandWindow : Window
         _mediaVm.PropertyChanged += MediaVmChanged;
 
         InitializeComponent();
+        MascotOptions.Changed += RefreshGlow;
         SourceInitialized += (_, _) =>
         {
             PillHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -120,7 +124,39 @@ public partial class IslandWindow : Window
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
         };
         Pill.BeginAnimation(OpacityProperty, fade);
+        // The glow hides together with the island (fullscreen suppression).
+        GlowRoot.BeginAnimation(OpacityProperty, new DoubleAnimation(suppressed ? 0.0 : _glowLevel, fade.Duration)
+        {
+            EasingFunction = fade.EasingFunction,
+        });
         if (suppressed && _hoverExpanded) CollapseHover();
+    }
+
+    // ---- island-bottom glow -----------------------------------------------------
+    // A separate visual system from the face: warm light leaking from beneath the
+    // floating island, bound live to the pill's animated bounds in XAML.
+
+    private static double GlowLevelFor(IslandContent content)
+    {
+        if (content is ApprovalView) return 0.9;
+        if (content is MediaCompactView or MediaExpandedView) return 0.7;
+        if (content is AgentCompactView compact) return compact.Agent.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
+        if (content is AgentExpandedView expanded) return expanded.Agent.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
+        return 0.55; // resting
+    }
+
+    private void UpdateGlow(IslandContent content)
+    {
+        _glowLevel = MascotOptions.GlowEnabled ? GlowLevelFor(content) * Math.Clamp(MascotOptions.GlowIntensity * 2, 0, 1.4) : 0;
+        GlowRoot.BeginAnimation(OpacityProperty, new DoubleAnimation(Math.Min(_glowLevel, 1), TimeSpan.FromMilliseconds(300))
+        {
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        });
+    }
+
+    private void RefreshGlow()
+    {
+        if (_renderedContent is not null) UpdateGlow(_renderedContent);
     }
 
     // ---- content application ---------------------------------------------------
@@ -142,6 +178,8 @@ public partial class IslandWindow : Window
         var swapAt = TimeSpan.FromMilliseconds(70 / speed);
 
         var fadeOut = new DoubleAnimation(1, 0, swapAt);
+        UpdateGlow(content);
+
         fadeOut.Completed += (_, _) =>
         {
             Host.Content = content;

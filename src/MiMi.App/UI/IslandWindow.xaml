@@ -368,6 +368,38 @@
     <!-- Pill anchored top-center; the window is a large transparent canvas whose only
          hit-testable region is the pill itself (Background={x:Null} above). -->
     <Grid>
+        <!-- MiMi's signature: warm gold ambient light leaking from beneath the island.
+             This is an ISLAND-level layer, not part of the face: it renders behind the
+             pill (outside its rounded clip), and its width/height are bound to the
+             pill's live animated dimensions so the glow follows every state change.
+             The pool's center sits just above the pill's bottom edge — its upper half
+             hides behind the island while the lower arc fades out below. -->
+        <Grid x:Name="GlowRoot" IsHitTestVisible="False" Focusable="False"
+              HorizontalAlignment="Center" VerticalAlignment="Top"
+              Width="{Binding ElementName=Pill, Path=Width}"
+              Height="{Binding ElementName=Pill, Path=Height}">
+            <Ellipse x:Name="GlowPool" Stretch="Fill" VerticalAlignment="Bottom" Height="46" Margin="0,0,0,-20"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform><ScaleTransform ScaleX="1.12"/></Ellipse.RenderTransform>
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#4DF5B84B" Offset="0"/>
+                        <GradientStop Color="#21EAA63A" Offset="0.55"/>
+                        <GradientStop Color="#00D99B35" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse x:Name="GlowCore" Stretch="Fill" VerticalAlignment="Bottom" Height="26" Margin="0,0,0,-11"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform><ScaleTransform ScaleX="0.72"/></Ellipse.RenderTransform>
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#40F5B84B" Offset="0"/>
+                        <GradientStop Color="#00D99B35" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Grid>
         <Border x:Name="Pill" Width="150" Height="36" CornerRadius="18"
                 Background="{StaticResource Surface}"
                 BorderBrush="{StaticResource Stroke}" BorderThickness="0.5"
