@@ -8,18 +8,19 @@ using System.Windows.Threading;
 namespace MiMi.App.UI.Mascot;
 
 /// <summary>
-/// MiMi's face: two perfectly round warm-white eyes, balanced spacing, and a whisper
-/// of a curved smile in relaxed states. The face self-manages its life signs (blink,
-/// occasional glance) and runs them only while visible and loaded — a hidden mascot
-/// costs nothing. The gold ambient glow is NOT part of this control; it belongs to the
-/// island's bottom edge (see IslandWindow's glow layer).
+/// MiMi's face: two tall, softly gold-glowing eyes (Nusa-inspired), balanced spacing,
+/// and a whisper of a curved smile in relaxed states. The face self-manages its life
+/// signs (blink, occasional glance) and runs them only while visible and loaded — a
+/// hidden mascot costs nothing. The wider gold aurora is NOT part of this control; it
+/// lives inside the island pill (see IslandWindow's internal glow layer).
 ///
 /// Expression grammar (subtle deltas, never cartoonish):
-///   Calm      round eyes, slow blink, faint smile
+///   Calm      tall glowing eyes, slow blink, faint smile
 ///   Lively    eyes slightly eased, gentle float, smile a touch brighter
-///   Alert     eyes enlarge, smile hidden — attention without motion
+///   Alert     eyes enlarge, bloom brightens, smile hidden — attention without motion
 ///   Focused   eyes slightly narrowed, smile hidden
-///   Concerned  eyes tilt faintly inward, smile hidden
+///   Concerned  eyes tilt faintly inward, bloom dims, smile hidden
+///   Sleepy    eyes half-lidded, bloom dims to an ember
 /// </summary>
 public partial class MiMiMascotControl : UserControl
 {
@@ -33,36 +34,66 @@ public partial class MiMiMascotControl : UserControl
         set => SetValue(ExpressionProperty, value);
     }
 
-    // Per-eye pose per expression (scaleX, scaleY, tilt degrees). Circles stay circles:
-    // asymmetry only mid-blink, and always restored.
+    // Per-eye pose per expression (scaleX, scaleY, tilt degrees). The base shape is a
+    // tall oval; asymmetry only happens mid-blink and is always restored.
     private static (double Sx, double Sy, double Tilt) Pose(MascotExpression e) => e switch
     {
         MascotExpression.Calm => (1.0, 1.0, 0),
-        MascotExpression.Lively => (0.94, 0.94, 0),
-        MascotExpression.Alert => (1.2, 1.2, 0),
-        MascotExpression.Focused => (0.85, 0.9, 0),
+        MascotExpression.Lively => (0.96, 0.96, 0),
+        MascotExpression.Alert => (1.16, 1.14, 0),
+        MascotExpression.Focused => (0.88, 0.88, 0),
         MascotExpression.Concerned => (1.0, 0.92, -4),
-        MascotExpression.Curious => (1.1, 1.1, 0),
+        MascotExpression.Curious => (1.08, 1.08, 0),
         // Happy: a brief squint, never a crescent-shaped cartoon eye.
-        MascotExpression.Happy => (1.0, 0.6, 0),
-        // Sleepy: softly half-lidded, still round in width.
-        MascotExpression.Sleepy => (1.0, 0.52, 0),
+        MascotExpression.Happy => (1.0, 0.5, 0),
+        // Sleepy: softly half-lidded, still wide enough to read as eyes.
+        MascotExpression.Sleepy => (1.0, 0.34, 0),
         _ => (1, 1, 0),
+    };
+
+    /// <summary>Blush strength per expression. It is the softest cue MiMi has, so it
+    /// retreats whenever the face turns serious and lingers faintly while dozing.</summary>
+    private static double BlushOpacity(MascotExpression e) => e switch
+    {
+        MascotExpression.Happy => 0.7,
+        MascotExpression.Lively => 0.52,
+        MascotExpression.Curious => 0.46,
+        MascotExpression.Sleepy => 0.38,
+        MascotExpression.Calm => 0.34,
+        MascotExpression.Focused => 0.18,
+        MascotExpression.Concerned => 0.14,
+        MascotExpression.Alert => 0.12,
+        _ => 0.34,
+    };
+
+    /// <summary>Gold bloom strength per expression. Calm keeps a warm halo; urgency
+    /// brightens it; sleep reduces it to an ember so dozing feels dim, not dead.</summary>
+    private static double GlowOpacity(MascotExpression e) => e switch
+    {
+        MascotExpression.Alert => 0.95,
+        MascotExpression.Curious => 0.9,
+        MascotExpression.Happy => 1.0,
+        MascotExpression.Lively => 0.8,
+        MascotExpression.Focused => 0.62,
+        MascotExpression.Concerned => 0.42,
+        MascotExpression.Sleepy => 0.3,
+        _ => 0.7,
     };
 
     private static double SmileOpacity(MascotExpression e) => e switch
     {
-        MascotExpression.Lively => 0.62,
-        MascotExpression.Happy => 0.78,
-        MascotExpression.Calm => 0.5,
-        MascotExpression.Curious => 0.45,
-        MascotExpression.Sleepy => 0.3,
+        MascotExpression.Lively => 0.75,
+        MascotExpression.Happy => 0.9,
+        MascotExpression.Calm => 0.62,
+        MascotExpression.Curious => 0.55,
+        MascotExpression.Sleepy => 0.34,
         _ => 0.0,
     };
 
     private readonly DispatcherTimer _blinkTimer;
     private readonly DispatcherTimer _dartTimer;
     private Storyboard? _bobStoryboard;
+    private Storyboard? _sleepZStoryboard;
     private readonly Random _random = new();
     private bool _templateReady;
     private MascotExpression _lastExpression = MascotExpression.Calm;
@@ -123,10 +154,23 @@ public partial class MiMiMascotControl : UserControl
         AnimateAngle(EyeLTilt, tilt, poseDuration, ease, animated);
         AnimateAngle(EyeRTilt, -tilt, poseDuration, ease, animated);
 
+        // Bloom follows the expression: bright when alert, an ember when dozing.
+        var glow = GlowOpacity(expression);
+        AnimateOpacity(EyeLGlow, glow, poseDuration, ease, animated);
+        AnimateOpacity(EyeRGlow, glow, poseDuration, ease, animated);
+
+        // Blush: warm in soft moods, nearly gone when MiMi is serious or asleep.
+        var blush = BlushOpacity(expression);
+        AnimateOpacity(BlushL, blush, poseDuration, ease, animated);
+        AnimateOpacity(BlushR, blush, poseDuration, ease, animated);
+
         // Smile: fade rather than pop. Minor expressions keep it hidden.
         var smileOpacity = SmileOpacity(expression);
         if (!animated) { Mouth.BeginAnimation(OpacityProperty, null); Mouth.Opacity = smileOpacity; }
         else Mouth.BeginAnimation(OpacityProperty, new DoubleAnimation(smileOpacity, poseDuration) { EasingFunction = ease });
+
+        // Dozing gets its own punctuation: two small z's drifting where the clock was.
+        UpdateSleepZs(expression);
 
         // Lively: a barely-there float, like nodding along to the music.
         StopBob();
@@ -189,12 +233,22 @@ public partial class MiMiMascotControl : UserControl
         t.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(degrees, d) { EasingFunction = ease });
     }
 
+    private static void AnimateOpacity(UIElement element, double opacity, TimeSpan d, IEasingFunction ease, bool animate)
+    {
+        if (!animate) { element.BeginAnimation(UIElement.OpacityProperty, null); element.Opacity = opacity; return; }
+        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(opacity, d) { EasingFunction = ease });
+    }
+
     // ---- life signs ------------------------------------------------------------
 
     private void StartLife()
     {
-        if (!MascotOptions.FaceEnabled || !MascotOptions.AnimationsEnabled || MascotOptions.ReducedMotion) return;
-        if (!IsVisible || !_templateReady || Expression == MascotExpression.Sleepy) return;
+        if (!MascotOptions.FaceEnabled) return;
+        if (!IsVisible || !_templateReady) return;
+        // Sleepy has no blink/dart, but it does keep its drifting z's.
+        if (Expression == MascotExpression.Sleepy) { UpdateSleepZs(Expression); return; }
+        if (MascotOptions.ReducedMotion) return;
+        if (!MascotOptions.AnimationsEnabled) return;
         if (!_blinkTimer.IsEnabled)
         {
             _blinkTimer.Interval = NextBlinkDelay();
@@ -215,6 +269,67 @@ public partial class MiMiMascotControl : UserControl
         _blinkTimer.Stop();
         _dartTimer.Stop();
         StopBob();
+        StopSleepZs();
+    }
+
+    /// <summary>Two small z's that rise and fade above the dozing face. With motion off
+    /// they stay as quiet static marks, so the sleepy state never loses its cue.</summary>
+    private void UpdateSleepZs(MascotExpression expression)
+    {
+        if (expression != MascotExpression.Sleepy) { StopSleepZs(); return; }
+        if (!MascotOptions.AnimationsEnabled || MascotOptions.ReducedMotion)
+        {
+            StopSleepZs(reveal: true);
+            return;
+        }
+        if (_sleepZStoryboard is not null) return;
+        _sleepZStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
+        AddZ(_sleepZStoryboard, SleepZ1, SleepZ1Move, delay: 0, peak: 0.55, seconds: 2.8);
+        AddZ(_sleepZStoryboard, SleepZ2, SleepZ2Move, delay: 0.9, peak: 0.4, seconds: 3.1);
+        _sleepZStoryboard.Begin(this, isControllable: false);
+    }
+
+    private static void AddZ(Storyboard board, TextBlock z, TranslateTransform move,
+        double delay, double peak, double seconds)
+    {
+        var fade = new DoubleAnimationUsingKeyFrames
+        {
+            BeginTime = TimeSpan.FromSeconds(delay),
+            Duration = TimeSpan.FromSeconds(seconds),
+        };
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(peak, KeyTime.FromPercent(0.3)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(peak, KeyTime.FromPercent(0.6)));
+        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+        Storyboard.SetTarget(fade, z);
+        Storyboard.SetTargetProperty(fade, new PropertyPath(UIElement.OpacityProperty));
+        board.Children.Add(fade);
+
+        var rise = new DoubleAnimation(1.4, -3.2, TimeSpan.FromSeconds(seconds))
+        {
+            BeginTime = TimeSpan.FromSeconds(delay),
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(rise, move);
+        Storyboard.SetTargetProperty(rise, new PropertyPath(TranslateTransform.YProperty));
+        board.Children.Add(rise);
+    }
+
+    private void StopSleepZs(bool reveal = false)
+    {
+        if (_sleepZStoryboard is not null)
+        {
+            _sleepZStoryboard.Remove(this);
+            _sleepZStoryboard = null;
+        }
+        SleepZ1.BeginAnimation(OpacityProperty, null);
+        SleepZ2.BeginAnimation(OpacityProperty, null);
+        SleepZ1Move.BeginAnimation(TranslateTransform.YProperty, null);
+        SleepZ2Move.BeginAnimation(TranslateTransform.YProperty, null);
+        SleepZ1.Opacity = reveal ? 0.5 : 0;
+        SleepZ2.Opacity = reveal ? 0.32 : 0;
+        SleepZ1Move.Y = 0;
+        SleepZ2Move.Y = 0;
     }
 
     private TimeSpan NextBlinkDelay() =>

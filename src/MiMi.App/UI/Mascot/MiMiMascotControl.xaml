@@ -6,52 +6,109 @@
              Focusable="False">
 
     <UserControl.Resources>
-        <!-- Soft warm white with a faint vertical falloff so eyes read as lit, not painted. -->
-        <LinearGradientBrush x:Key="MascotEyeBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#FFF8F0" Offset="0"/>
-            <GradientStop Color="#F0F2E9DF" Offset="1"/>
-        </LinearGradientBrush>
+        <!-- Warm white core with a champagne rim, so the eyes read as gold-lit rather
+             than painted. The reference for the resting face is Nusa's pair of eyes,
+             translated into MiMi's gold palette. -->
+        <RadialGradientBrush x:Key="MascotEyeBrush" GradientOrigin="0.5,0.38"
+                             Center="0.5,0.38" RadiusX="0.72" RadiusY="0.8">
+            <GradientStop Color="#FFFFFFFF" Offset="0"/>
+            <GradientStop Color="#FFFFF6DE" Offset="0.55"/>
+            <GradientStop Color="#FFFFE2A4" Offset="1"/>
+        </RadialGradientBrush>
+        <!-- Soft gold bloom behind each eye. Alpha lives in the brush; code modulates
+             opacity per expression so a sleepy face stays dim. -->
+        <RadialGradientBrush x:Key="MascotEyeGlowBrush">
+            <GradientStop Color="#D8FFC65C" Offset="0"/>
+            <GradientStop Color="#80FFB43A" Offset="0.42"/>
+            <GradientStop Color="#00FFB43A" Offset="0.88"/>
+        </RadialGradientBrush>
+        <!-- Soft rose-gold blush: MiMi's warmest, most human cue. Opacity is per
+             expression so urgent states stay serious. -->
+        <RadialGradientBrush x:Key="MascotBlushBrush">
+            <GradientStop Color="#99FF8FB1" Offset="0"/>
+            <GradientStop Color="#00FF8FB1" Offset="1"/>
+        </RadialGradientBrush>
     </UserControl.Resources>
 
     <!-- Design space is 48x30; a Viewbox keeps the face proportional at any usage size.
-         The face: two perfectly round, evenly spaced eyes and (in relaxed states) a
-         whisper of a smile. No glow lives here — MiMi's gold light belongs to the
-         island's bottom edge, not to the face. -->
+         The face: two tall, softly glowing eyes (Nusa-inspired) and, in relaxed states,
+         a whisper of a smile. The bloom is local to the eyes; the island's wider gold
+         aurora lives inside the pill. -->
     <Viewbox Stretch="Uniform">
         <Grid Width="48" Height="30" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
                 <ScaleTransform x:Name="WakeScale" ScaleX="1" ScaleY="1"/>
             </Grid.RenderTransform>
-            <!-- Eyes: circles (1:1). They flatten only mid-blink and always return to
-                 perfect circles. Centers at x=16/32, y=11 → balanced 16u spacing. -->
+            <!-- Each eye is a group so the glow, core, blink, tilt, and glance all move
+                 together. Centers at x=16/32, y=11 - balanced 16u spacing. -->
             <Canvas Width="48" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Ellipse x:Name="EyeL" Width="7" Height="7" Fill="{StaticResource MascotEyeBrush}"
-                         Canvas.Left="12.5" Canvas.Top="7.5" RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.RenderTransform>
+                <Grid x:Name="EyeLGroup" Canvas.Left="4" Canvas.Top="-2" Width="24" Height="26"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
                         <TransformGroup>
                             <TranslateTransform x:Name="EyeLMove"/>
                             <RotateTransform x:Name="EyeLTilt"/>
                             <ScaleTransform x:Name="EyeLBlink"/>
                         </TransformGroup>
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-                <Ellipse x:Name="EyeR" Width="7" Height="7" Fill="{StaticResource MascotEyeBrush}"
-                         Canvas.Left="28.5" Canvas.Top="7.5" RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.RenderTransform>
+                    </Grid.RenderTransform>
+                    <Ellipse x:Name="EyeLGlow" Width="22" Height="28"
+                             Fill="{StaticResource MascotEyeGlowBrush}"/>
+                    <Ellipse x:Name="EyeL" Width="8.2" Height="11.6"
+                             Fill="{StaticResource MascotEyeBrush}"/>
+                    <!-- Catchlight: a tiny gloss that makes the eye feel alive. -->
+                    <Ellipse Width="2.3" Height="3.1" Fill="#FFFFFFFF" Opacity="0.9"
+                             HorizontalAlignment="Left" VerticalAlignment="Top"
+                             Margin="9.1,8.3,0,0"/>
+                </Grid>
+                <Grid x:Name="EyeRGroup" Canvas.Left="20" Canvas.Top="-2" Width="24" Height="26"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
                         <TransformGroup>
                             <TranslateTransform x:Name="EyeRMove"/>
                             <RotateTransform x:Name="EyeRTilt"/>
                             <ScaleTransform x:Name="EyeRBlink"/>
                         </TransformGroup>
-                    </Ellipse.RenderTransform>
-                </Ellipse>
+                    </Grid.RenderTransform>
+                    <Ellipse x:Name="EyeRGlow" Width="22" Height="28"
+                             Fill="{StaticResource MascotEyeGlowBrush}"/>
+                    <Ellipse x:Name="EyeR" Width="8.2" Height="11.6"
+                             Fill="{StaticResource MascotEyeBrush}"/>
+                    <Ellipse Width="2.3" Height="3.1" Fill="#FFFFFFFF" Opacity="0.9"
+                             HorizontalAlignment="Left" VerticalAlignment="Top"
+                             Margin="9.1,8.3,0,0"/>
+                </Grid>
+
+                <!-- Blush sits just under the outer half of each eye. -->
+                <Ellipse x:Name="BlushL" Width="8.6" Height="3.8" Canvas.Left="6.2" Canvas.Top="17.2"
+                         Fill="{StaticResource MascotBlushBrush}" Opacity="0.3"/>
+                <Ellipse x:Name="BlushR" Width="8.6" Height="3.8" Canvas.Left="33.2" Canvas.Top="17.2"
+                         Fill="{StaticResource MascotBlushBrush}" Opacity="0.3"/>
             </Canvas>
 
             <!-- Tiny curved smile: a shallow arc, only visible in relaxed states. -->
-            <Path x:Name="Mouth" Width="7" Height="3" Stroke="#8AF5EDE2" StrokeThickness="1.4"
+            <Path x:Name="Mouth" Width="9" Height="3.6" Stroke="#F2FFE7B8" StrokeThickness="1.6"
                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,11,0,0"
-                  Data="M 0,0 Q 3.5,2.4 7,0"/>
+                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,13.2,0,0"
+                  Data="M 0,0 Q 4.5,2.9 9,0"/>
+
+            <!-- Dozing: two small z's drift up beside the face. The clock is gone in this
+                 state, so the quiet space becomes part of the expression. -->
+            <TextBlock x:Name="SleepZ1" Text="z" FontFamily="Segoe UI" FontSize="8.5"
+                       FontWeight="Bold" Foreground="#E6F7C264" Opacity="0"
+                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,7,2.5,0"
+                       RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="SleepZ1Move"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock x:Name="SleepZ2" Text="z" FontFamily="Segoe UI" FontSize="5.5"
+                       FontWeight="Bold" Foreground="#B8F7C264" Opacity="0"
+                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1.5,0,0"
+                       RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="SleepZ2Move"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
         </Grid>
     </Viewbox>
 </UserControl>

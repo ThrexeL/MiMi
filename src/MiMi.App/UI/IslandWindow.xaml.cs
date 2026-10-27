@@ -59,7 +59,7 @@ public partial class IslandWindow : Window
 
     private bool _hotkeyHooked;
 
-    private double _glowLevel = 0.55; // current island-bottom glow level (0..1)
+    private double _glowLevel = 0.55; // current in-pill aurora level (0..1)
     private readonly Func<AgentActivityPanelView> _agentPanelProvider;
 
     public IslandWindow(ConfigStore config,
@@ -350,9 +350,9 @@ public partial class IslandWindow : Window
         Coordinator.SetFullscreenSuppressed(suppressed);
     }
 
-    // ---- island-bottom glow -----------------------------------------------------
-    // A separate visual system from the face: warm light leaking from beneath the
-    // floating island, bound live to the pill's animated bounds in XAML.
+    // ---- island aurora (inside the pill) ---------------------------------------
+    // A separate visual system from the face: warm gold light pooling inside the
+    // island, kept off the edges so nothing leaks outside the rounded pill.
 
     private static double GlowLevelFor(IslandContent content) => content switch
     {

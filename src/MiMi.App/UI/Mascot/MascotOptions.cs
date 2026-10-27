@@ -20,7 +20,7 @@ public static class MascotOptions
     public static bool AnimationsEnabled { get; private set; } = true;
     /// <summary>Brief start/completion reactions. Off keeps only persistent expressions.</summary>
     public static bool ReactionsEnabled { get; private set; } = true;
-    /// <summary>After ten minutes of genuine user inactivity MiMi may doze.</summary>
+    /// <summary>After two quiet minutes with nothing to reflect, MiMi may doze.</summary>
     public static bool SleepyEnabled { get; private set; } = true;
 
     /// <summary>Windows animation preference plus MiMi's own setting. When true, expressions
