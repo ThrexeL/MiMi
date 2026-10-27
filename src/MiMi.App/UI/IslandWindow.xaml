@@ -499,35 +499,36 @@
                 HorizontalAlignment="Center" VerticalAlignment="Top"
                 Cursor="Arrow">
             <Grid>
-                <!-- MiMi's signature warmth now lives INSIDE the island, like Nusa's
-                     aurora: warm gold pooling under the face rather than leaking out
-                     beneath the pill. The opacity is driven by expression in code. -->
                 <Grid x:Name="GlowRoot" IsHitTestVisible="False" Panel.ZIndex="0">
-                    <!-- Ellipses, not a rounded rectangle: the light should fade like an
-                         aurora with no visible inner edge. Inset so it never touches the
-                         pill's border. -->
-                    <Ellipse x:Name="GlowPool" Stretch="Fill" Margin="7,2,7,2">
+                    <!-- Signature warmth per the approved reference: a soft, concentrated
+                         gold light that lives at the INSIDE BOTTOM EDGE of the island —
+                         strongest at the lower center boundary, fading upward; the upper
+                         interior stays nearly black. Geometry is anchored to the bottom
+                         edge with relative gradient centers, so it scales with any panel
+                         size without ever becoming a giant center oval. Opacity is a
+                         separate, state-driven value (code-behind UpdateGlow). -->
+                    <Ellipse x:Name="GlowPool" Stretch="Fill">
                         <Ellipse.Fill>
-                            <RadialGradientBrush Center="0.5,0.62" GradientOrigin="0.5,0.62"
-                                                 RadiusX="0.58" RadiusY="0.72">
-                                <GradientStop Color="#59F5B84B" Offset="0"/>
-                                <GradientStop Color="#2BEAA63A" Offset="0.55"/>
+                            <RadialGradientBrush Center="0.5,1.0" GradientOrigin="0.5,1.02"
+                                                 RadiusX="0.58" RadiusY="0.62">
+                                <GradientStop Color="#5BF5B84B" Offset="0"/>
+                                <GradientStop Color="#24EAA63A" Offset="0.45"/>
                                 <GradientStop Color="#00D99B35" Offset="1"/>
                             </RadialGradientBrush>
                         </Ellipse.Fill>
                     </Ellipse>
-                    <!-- A brighter core glows behind the face without reaching the edge. -->
-                    <Ellipse x:Name="GlowCore" Stretch="Fill" Margin="26,5,26,5"
-                             RenderTransformOrigin="0.5,0.5">
+                    <!-- Tight warm core hugging the very bottom edge, for the 'light
+                         source just beneath the surface' read. -->
+                    <Ellipse x:Name="GlowCore" Stretch="Fill">
                         <Ellipse.Fill>
-                            <RadialGradientBrush Center="0.5,0.52" GradientOrigin="0.5,0.52"
-                                                 RadiusX="0.5" RadiusY="0.5">
+                            <RadialGradientBrush Center="0.5,1.0" GradientOrigin="0.5,1.0"
+                                                 RadiusX="0.34" RadiusY="0.34">
                                 <GradientStop Color="#59F7C264" Offset="0"/>
                                 <GradientStop Color="#00D99B35" Offset="1"/>
                             </RadialGradientBrush>
                         </Ellipse.Fill>
                     </Ellipse>
-                </Grid>
+</Grid>
                 <!-- Ambient top sheen: the premium dark-surface cue. Clipped to the pill. -->
                 <Border IsHitTestVisible="False" Panel.ZIndex="0" VerticalAlignment="Top" Height="24"
                         CornerRadius="17,17,0,0">
