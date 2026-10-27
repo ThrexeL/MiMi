@@ -54,6 +54,13 @@ public sealed class AppSettings
     [JsonPropertyName("lyricsEnabled")] public bool LyricsEnabled { get; set; } = true;
     [JsonPropertyName("lyricsOffsetMs")] public int LyricsOffsetMs { get; set; } = 0;
 
+    // System HUDs (Milestone 6)
+    [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
+    [JsonPropertyName("batteryHudEnabled")] public bool BatteryHudEnabled { get; set; } = true;
+    [JsonPropertyName("networkHudEnabled")] public bool NetworkHudEnabled { get; set; } = true;
+    [JsonPropertyName("capsLockHudEnabled")] public bool CapsLockHudEnabled { get; set; } = true;
+    [JsonPropertyName("headphoneHudEnabled")] public bool HeadphoneHudEnabled { get; set; } = true;
+
     // Desktop behavior
     [JsonPropertyName("desktopPersistVisible")] public bool DesktopPersistVisible { get; set; } = true;
     [JsonPropertyName("fullscreenSuppress")] public bool FullscreenSuppress { get; set; } = true;

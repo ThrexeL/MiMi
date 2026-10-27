@@ -309,6 +309,30 @@ public sealed class ShelfView : IslandContent
     public override bool AutoHeight => true;
 }
 
+// ---- system HUDs (Phase 4 / Milestone 6) ----------------------------------------
+
+/// <summary>Brief system status overlay: icon + title + sub + optional progress.
+/// Rendered for ~2 s via the island's transient alert path.</summary>
+public sealed class HudView : IslandContent
+{
+    public string IconGlyph { get; }
+    public string Title { get; }
+    public string SubLabel { get; }
+    public double? Progress { get; }
+
+    public HudView(string iconGlyph, string title, string subLabel, double? progress)
+    {
+        IconGlyph = iconGlyph;
+        Title = title;
+        SubLabel = subLabel;
+        Progress = progress;
+    }
+
+    public override double TargetWidth => 360;
+    public override double TargetHeight => 68;
+    public override double TargetCornerRadius => 20;
+}
+
 /// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>
 public sealed class AgentActivityPanelView : IslandContent
 {

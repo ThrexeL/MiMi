@@ -56,6 +56,12 @@ public partial class IslandWindow : Window
     /// has been away long enough to re-doze (false).</summary>
     public event Action<bool>? OnProximityWake;
 
+    /// <summary>1 Hz heartbeat while visible: Caps Lock / input-language checks.</summary>
+    public event Action? KeyboardTick;
+
+    /// <summary>WM_POWERBROADCAST power-status change (plug/unplug, battery level).</summary>
+    public event Action? PowerStatusChanged;
+
     /// <summary>True when Ctrl+Alt+M was registered successfully; false if another
     /// application already owns the combination.</summary>
     public bool HotkeyRegistered { get; private set; }
@@ -146,6 +152,7 @@ public partial class IslandWindow : Window
         _progressTimer.Tick += (_, _) =>
         {
             _secondTick?.Invoke(); // productivity heartbeat (timer, reminders)
+            if (IsVisible && !Coordinator.FullscreenSuppressed) KeyboardTick?.Invoke();
 
             if (_renderedContent is MediaExpandedView { Media: { } media } && media.IsPlaying)
                 media.RefreshTimeline();
@@ -209,6 +216,13 @@ public partial class IslandWindow : Window
         {
             handled = true;
             return IntPtr.Zero;
+        }
+
+        // Charger plug/unplug and battery level changes (event-driven, no polling).
+        if (msg == Interop.NativeMethods.WM_POWERBROADCAST
+            && (uint)wParam == Interop.NativeMethods.PBT_APMPOWERSTATUSCHANGE)
+        {
+            PowerStatusChanged?.Invoke();
         }
         return IntPtr.Zero;
     }

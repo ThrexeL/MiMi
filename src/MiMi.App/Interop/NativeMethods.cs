@@ -173,6 +173,9 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpInfo);
 
+    public const uint WM_POWERBROADCAST = 0x0218;
+    public const uint PBT_APMPOWERSTATUSCHANGE = 0x0010;
+
     // ---- hotkey + shell recovery + topmost ------------------------------------------------
 
     public const uint WM_HOTKEY = 0x0312;

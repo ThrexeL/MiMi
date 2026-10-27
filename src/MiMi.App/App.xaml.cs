@@ -28,6 +28,7 @@ public partial class App : Application
     private IslandPresenter _presenter = null!;
     private IslandWindow _island = null!;
     private FullscreenWatcher _fullscreen = null!;
+    private SystemHudController _hudController = null!;
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
     private ProviderIntegrationInspector _providerInspector = null!;
@@ -185,7 +186,10 @@ public partial class App : Application
             _tray.SetShelfIndicator(_presenter.Shelf.Count > 0,
                 _presenter.UtilityPins.Contains("shelf"));
         });
+        _hudController = new SystemHudController(_config, _presenter, Dispatcher);
         _tray.CommandSelected += OnTrayCommand;
+        _island.KeyboardTick += () => _hudController.OnKeyboardTick();
+        _island.PowerStatusChanged += () => _hudController.OnPowerStatusChanged();
         _island.OnProximityWake += wake => Dispatcher.BeginInvoke(() =>
         {
             Logger.Info($"Proximity: {(wake ? "wake" : "re-doze")}");
@@ -304,6 +308,7 @@ public partial class App : Application
         Logger.Info("MiMi exiting.");
         try { _tray?.Dispose(); } catch { }
         try { _fullscreen?.Dispose(); } catch { }
+        try { _hudController?.Dispose(); } catch { }
         try { _stateManager?.Dispose(); } catch { }
         try { _approvals?.Dispose(); } catch { }
         try { _bridge?.DisposeAsync().AsTask().Wait(2000); } catch { }

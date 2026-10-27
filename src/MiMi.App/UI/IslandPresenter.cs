@@ -201,6 +201,22 @@ public sealed class IslandPresenter
         }
     }
 
+    /// <summary>System HUD: same-title HUDs replace the running alert (rapid volume
+    /// keypresses update one toast instead of stacking), auto-expiring shortly after.</summary>
+    public void PushHud(string iconGlyph, string title, string subLabel, double? progress = null,
+        TimeSpan? duration = null)
+    {
+        var id = "hud:" + title;
+        _state.Clear(id);
+        _state.Push(new IslandAlert
+        {
+            Id = id,
+            Priority = IslandPriority.AgentCompletion,
+            Content = new HudView(iconGlyph, title, subLabel, progress),
+            Duration = duration ?? TimeSpan.FromSeconds(2),
+        });
+    }
+
     private void PushUtilityNotice(string title, string message)
     {
         var card = new AgentCardViewModel { ApprovalId = "", Decide = _ => { }, OpenInAgent = () => { } };
