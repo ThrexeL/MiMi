@@ -115,6 +115,21 @@ public sealed class IslandPresenter
 
     public AgentSessionManager Sessions => _sessions;
     public IReadOnlyCollection<string> UtilityPins => _utilityPins;
+
+    private bool _proximityAwake;
+
+    /// <summary>True while the cursor is near a sleepy MiMi (window proximity sampler).
+    /// Waking shows the awake face; leaving re-dozes after the policy's cooldown.</summary>
+    public void SetProximityAwake(bool awake)
+    {
+        if (_proximityAwake == awake) return;
+        _proximityAwake = awake;
+        RefreshPinned();
+    }
+
+    /// <summary>Whether the current resting face is the sleepy expression (the window
+    /// runs its proximity sampler only in that state).</summary>
+    public bool IsMascotSleepy => _mascotExpression == MascotExpression.Sleepy;
     public FileShelfStore Shelf => _shelf;
 
     /// <summary>Files dropped onto the open shelf panel.</summary>
@@ -299,9 +314,14 @@ public sealed class IslandPresenter
             _reaction = null; // an urgent state arrived; never let a stale one-shot win
             _reactionTimer.Stop();
         }
+        // Mouse-proximity wake: a sleepy MiMi shows its awake face while the cursor
+        // is near (Phase 4). ComputePersistentMood stays authoritative; proximity only
+        // overrides the Sleepy result, and only when the doze feature is enabled.
+        if (_persistentMood == MascotMood.Sleepy && _proximityAwake && _config.Current.MascotSleepyEnabled)
+            _persistentMood = MascotMood.Calm;
+
         _mascotExpression = ToExpression(_reaction ?? _persistentMood);
         _resting.Expression = _mascotExpression;
-        // Resting state is just the eyes (Nusa-inspired); waking brings the clock back.
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.

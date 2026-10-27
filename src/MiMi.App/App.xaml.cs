@@ -186,6 +186,11 @@ public partial class App : Application
                 _presenter.UtilityPins.Contains("shelf"));
         });
         _tray.CommandSelected += OnTrayCommand;
+        _island.OnProximityWake += wake => Dispatcher.BeginInvoke(() =>
+        {
+            Logger.Info($"Proximity: {(wake ? "wake" : "re-doze")}");
+            _presenter.SetProximityAwake(wake);
+        });
         _island.VisibilityPreferenceChanged += preference =>
             Dispatcher.BeginInvoke(() =>
             {

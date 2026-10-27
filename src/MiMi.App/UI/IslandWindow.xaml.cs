@@ -52,6 +52,10 @@ public partial class IslandWindow : Window
     /// <summary>Raised when the user's manual preference changes (tray menu reflects it).</summary>
     public event Action<VisibilityPreference>? VisibilityPreferenceChanged;
 
+    /// <summary>Raised when mouse proximity wakes a sleepy MiMi (true) or the cursor
+    /// has been away long enough to re-doze (false).</summary>
+    public event Action<bool>? OnProximityWake;
+
     /// <summary>True when Ctrl+Alt+M was registered successfully; false if another
     /// application already owns the combination.</summary>
     public bool HotkeyRegistered { get; private set; }
@@ -63,6 +67,9 @@ public partial class IslandWindow : Window
     private readonly Action? _secondTick;
     private readonly Action<string[]>? _shelfDrop;
     private readonly Action<string>? _shelfRemove;
+    private readonly Core.ProximityWakePolicy _proximityPolicy = new();
+    private readonly DispatcherTimer _proximityTimer;
+    private bool _proximityAwake;
 
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
@@ -97,6 +104,11 @@ public partial class IslandWindow : Window
         Closed += (_, _) => UnregisterGlobalHotkey();
 
         Coordinator.Changed += RecomputeVisibility;
+
+        // Mouse-proximity wake (Phase 4): throttled cursor sampling runs ONLY while the
+        // mascot is sleepy — never while awake, hidden, or suppressed. No hooks.
+        _proximityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _proximityTimer.Tick += (_, _) => SampleProximity();
 
         PositionWindow();
         ApplySettings();
@@ -511,6 +523,47 @@ public partial class IslandWindow : Window
         _sizeStoryboard.Begin(Pill, isControllable: false);
     }
 
+    /// <summary>Throttled cursor sampling while sleepy. The wake decision comes from
+    /// the hysteresis policy; waking goes through the presenter's mood pipeline, so the
+    /// face change is the normal expression path (no direct element mutation).</summary>
+    private void SampleProximity()
+    {
+        if (!IsVisible || Coordinator.FullscreenSuppressed
+            || _pinnedContent is not RestingView { Expression: MascotExpression.Sleepy })
+        {
+            _proximityTimer.Stop();
+            return;
+        }
+
+        if (!Interop.NativeMethods.GetCursorPos(out var cursorPx)) return;
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var cursorDipX = cursorPx.X / dpi;
+        var cursorDipY = cursorPx.Y / dpi;
+
+        var rect = GetPillScreenRectDip(dpi);
+        var dx = Math.Max(rect.Left - cursorDipX, 0) + Math.Max(cursorDipX - rect.Right, 0);
+        var dy = Math.Max(rect.Top - cursorDipY, 0) + Math.Max(cursorDipY - rect.Bottom, 0);
+        var distance = Math.Sqrt(dx * dx + dy * dy);
+
+        var decision = _proximityPolicy.Evaluate(distance, DateTimeOffset.UtcNow);
+        if (decision is { } wake)
+        {
+            _proximityAwake = wake;
+            OnProximityWake?.Invoke(wake);
+        }
+    }
+
+    /// <summary>Pill bounds in screen DIPs (the window is a fixed canvas; the pill is
+    /// centered horizontally at the top).</summary>
+    private Rect GetPillScreenRectDip(double dpi)
+    {
+        // Window Left/Top/Width are screen DIPs already; the pill is horizontally
+        // centered in the canvas at the top. The +14 extends wake coverage just below.
+        _ = dpi;
+        var pillLeft = Left + (Width - Pill.ActualWidth) / 2;
+        return new Rect(pillLeft, Top, Pill.ActualWidth, Pill.ActualHeight + 14);
+    }
+
     private void UpdateClip()
     {
         if (Pill.ActualWidth <= 0 || Pill.ActualHeight <= 0) return;
@@ -525,6 +578,20 @@ public partial class IslandWindow : Window
     {
         // Explorer drops land only on an open shelf panel.
         Host.AllowDrop = content is ShelfView;
+
+        // Proximity wake is active only while the sleepy face is on screen.
+        var sleepy = content is RestingView { Expression: MascotExpression.Sleepy }
+                     && MascotOptions.SleepyEnabled && MascotOptions.FaceEnabled;
+        if (sleepy && !_proximityTimer.IsEnabled) _proximityTimer.Start();
+        else if (!sleepy && _proximityTimer.IsEnabled)
+        {
+            _proximityTimer.Stop();
+            if (_proximityAwake)
+            {
+                _proximityAwake = false;
+                _proximityPolicy.Reset();
+            }
+        }
 
         StopEq();
         _eqHost = null;

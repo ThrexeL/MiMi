@@ -1,4 +1,5 @@
 using MiMi.Core;
+using MiMi.App.UI;
 using Xunit;
 
 namespace MiMi.Tests;
@@ -201,5 +202,87 @@ public class FadeSequencerTests
         var gens = Enumerable.Range(0, 10).Select(_ => seq.Begin()).ToList();
         Assert.All(gens.Take(9), g => Assert.False(seq.IsCurrent(g)));
         Assert.True(seq.IsCurrent(gens[^1]));
+    }
+}
+
+public class ProximityWakePolicyTests
+{
+    private static DateTimeOffset T(int ms) => DateTimeOffset.UtcNow.AddMilliseconds(ms);
+
+    [Fact]
+    public void Wakes_WithinThreshold()
+    {
+        var policy = new ProximityWakePolicy();
+        Assert.Null(policy.Evaluate(200, T(0)));   // far: nothing
+        Assert.True(policy.Evaluate(30, T(100)));  // near: wake
+        Assert.True(policy.Awake);
+    }
+
+    [Fact]
+    public void StaysAwake_WhileCursorNear()
+    {
+        var policy = new ProximityWakePolicy();
+        policy.Evaluate(30, T(0));
+        Assert.Null(policy.Evaluate(10, T(500)));
+        Assert.Null(policy.Evaluate(60, T(1000))); // within re-sleep distance: no flicker
+        Assert.True(policy.Awake);
+    }
+
+    [Fact]
+    public void ReSleeps_AfterCursorLeaves_ForTheDelay()
+    {
+        var policy = new ProximityWakePolicy();
+        policy.Evaluate(30, T(0));                                  // wake
+        Assert.Null(policy.Evaluate(200, T(100)));                  // left: far timer starts
+        Assert.Null(policy.Evaluate(200, T(1500)));                  // delay not elapsed
+        Assert.False(policy.Evaluate(200, T(2600)));                 // 2.5 s away + 2 s awake: sleep
+        Assert.False(policy.Awake);
+        Assert.True(policy.Evaluate(30, T(3000)));                   // can wake again
+    }
+
+    [Fact]
+    public void MinimumAwakeTime_PreventsInstantReSleep()
+    {
+        var policy = new ProximityWakePolicy { MinAwakeTime = TimeSpan.FromSeconds(2) };
+        policy.Evaluate(30, T(0));
+        Assert.Null(policy.Evaluate(200, T(2600)));  // far past the delay, but awake < 2 s
+        Assert.True(policy.Awake);
+        Assert.False(policy.Evaluate(200, T(5300))); // now past min awake: sleep
+    }
+
+    [Fact]
+    public void Reset_ReturnsToSleeping()
+    {
+        var policy = new ProximityWakePolicy();
+        policy.Evaluate(30, T(0));
+        policy.Reset();
+        Assert.False(policy.Awake);
+    }
+}
+
+public class GlowLayoutTests
+{
+    [Fact]
+    public void IdleBand_IsThin()
+    {
+        // 38-tall idle pill: bottom 10-20% -> clamped to at most 8 DIP.
+        Assert.InRange(GlowLayout.BandHeight(isIdle: true, pillHeight: 38), 7.5, 7.7);
+        Assert.Equal(8.0, GlowLayout.BandHeight(isIdle: true, pillHeight: 60));
+    }
+
+    [Fact]
+    public void ExpandedBand_IsFixedDips_NotProportional()
+    {
+        // The brown-oval regression: band height must NOT scale with panel height.
+        Assert.Equal(GlowLayout.PanelBandHeight, GlowLayout.BandHeight(isIdle: false, pillHeight: 190));
+        Assert.Equal(GlowLayout.PanelBandHeight, GlowLayout.BandHeight(isIdle: false, pillHeight: 60));
+    }
+
+    [Fact]
+    public void Band_IsClampedToTheLowerRegion()
+    {
+        Assert.Equal(3, GlowLayout.ClampToBottomRegion(2, 38));        // never thinner than 3
+        Assert.Equal(8, GlowLayout.ClampToBottomRegion(8, 38));
+        Assert.Equal(17.1, GlowLayout.ClampToBottomRegion(50, 38));    // never above 45% height
     }
 }
