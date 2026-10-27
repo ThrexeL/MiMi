@@ -2,61 +2,72 @@
 
 A lightweight Dynamic Island-style overlay for Windows 11. MiMi lives at the top center of
 the primary monitor, is always on top, and never steals keyboard focus. It shows your
-current media, agent activity, and approvals in a compact pill that expands on hover.
+current media (with synchronized lyrics), agent activity, approvals, system HUDs, and
+utility panels in a compact pill that expands on hover.
 
 MiMi is inspired by [Nusa](https://rama2555.github.io/nusa/) but is an original
 implementation. The stack is C# / .NET 10 / WPF with CsWinRT Windows SDK projections —
 no Electron, no WebView, no third-party UI packages. Even the tray icon is a hand-rolled
 `Shell_NotifyIconW` P/Invoke.
 
+## MiMi 4.0 — what's new
+
+- **Face-only idle.** The resting state is a slim pill with the mascot face only — the
+  clock (and its setting) are gone.
+- **Round white mascot eyes with an expression system.** Eight expressions derived from
+  what the island is doing: Calm, Lively (music), Alert (approval required), Focused
+  (agent working), Concerned (failure), Happy (turn completed), Curious (agent started),
+  and Sleepy.
+- **Gold glow as a bottom-edge band.** Fixed-DIP geometry (8 DIP on idle pills, 20 DIP on
+  expanded panels), clipped to the island's bottom edge; opacity is state-driven and
+  decoupled from geometry — no more proportional "brown oval".
+- **Mouse-proximity wake.** With the opt-in sleepy mode enabled, MiMi dozes after
+  sustained inactivity and wakes when the cursor comes near (hysteresis so it cannot
+  flicker).
+- **Ctrl+Alt+M** global toggle with smooth, reversible fades — rapid toggles are safe
+  (superseded transitions become no-ops).
+- **Utility panels via the tray:** focus timer (Pomodoro), water tracker, to-do list, and
+  the file shelf.
+- **File shelf with real Explorer drag-in/out.** Drop files from Explorer onto the open
+  shelf panel; hold a row to drag it back out (references only — originals are never
+  copied or deleted).
+- **System HUDs:** volume/mute, charging and low battery, network, audio device changes,
+  Caps Lock, and input language — all real system state, event-driven where the OS
+  allows.
+- **Synchronized lyrics via LRCLIB**, displayed as a 3-line window on the expanded media
+  panel.
+- **Multi-agent tracking with multi-approval navigation**: per-session lifecycle states,
+  a hover activity panel, and `‹ ›` navigation across pending approval cards.
+
 ## Status
 
-Development is phased. What is implemented today:
+Development is phased. State as of the 4.0 release candidate:
 
-- **Phase 1 — island and media (implemented)**
-  - Always-on-top island window at the top center of the primary monitor: hover expand,
-    auto-collapse, fullscreen step-aside via a WinEvent hook, PerMonitorV2 DPI awareness.
-  - Resting state (clock + mascot eyes) and compact media state (album art, title, animated
-    equalizer while playing).
-  - Expanded media panel: transport controls (previous / play-pause / next), seekable
-    progress slider, elapsed/remaining time.
-  - Real media integration via Windows GSMTC (`GlobalSystemMediaTransportControls`):
-    Spotify, browsers, and media players that register Windows media sessions work as-is.
-  - System tray icon: Settings, Simulate agent event, Start with Windows, Restart, Exit.
-  - Settings window persisted to `%LOCALAPPDATA%\MiMi\settings.json` (scale, animation
-    speed, collapse delay, module toggles, bridge toggle, approval TTL, autostart).
+| Phase | Scope | Status |
+|---|---|---|
+| 1 — island and media | Island window, resting state, GSMTC media pill/panel, tray, settings | implemented |
+| 2 — agent foundation | Named-pipe bridge, `AgentEvent` model, approvals, island priorities | implemented |
+| 3 — agent integrations | Claude Code / Codex approval hooks via `MiMi.AgentCli`, Codex notify | implemented |
+| 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
+| 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
+| 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language | **implemented in 4.0** |
+| 5 — personal harness adapter; Codex app-server full embedding | | candidate; not started |
+| 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
+| 8 — mascot polish | Expressions live (mood policy); final screenshot pass pending | in progress |
+| 9 — release prep | This document, portable build script | in progress |
 
-- **Phase 2 — agent foundation (implemented)**
-  - Normalized, provider-independent `AgentEvent` model.
-  - Secure local named-pipe bridge (pipe `mimi-agent-bridge-<username>`, ACL restricted to
-    the current user + SYSTEM, shared token at `%LOCALAPPDATA%\MiMi\bridge-token`,
-    64 KiB frame limit, control-character stripping, field length clamps).
-  - Deduplication by `event_id`; approval store with TTL (expired approvals cannot be
-    approved or denied).
-  - Island priority system: approval > critical > agent failure > completion > media > idle.
-  - Sticky approval cards that survive song changes.
-  - Duplex protocol: MiMi pushes `approval_resolved` back over the originating client's pipe.
-  - Event simulator script (`tools/Invoke-MiMiEvent.ps1`) and a tray
-    "Simulate agent event" demo sequence.
+Notes on the intentionally-unsupported features:
 
-- **Phase 3 — real agent integrations (implemented).** Claude Code and Codex both have real,
-  two-way approval integrations through their official PermissionRequest hooks, implemented
-  by `MiMi.AgentCli` (see "Agent integrations (Phase 3)" below). Codex additionally has
-  optional one-way turn-complete toasts via its `notify` config. Codex app-server
-  full-embedding (MiMi driving a Codex session) remains future work (Phase 5 candidate).
-  "Open in Agent" still copies approval details to the clipboard; direct session focus is
-  not implemented.
-
-- **Phase 3.6 — agent activity & multi-agent UI (implemented; see "Phase 3.6" below).**
-  Provider lifecycle hooks feed per-session state (working / executing tool / awaiting
-  approval / turn finished), a compact indicator (or badge on the media pill), a hover
-  activity panel for multiple concurrent sessions, and navigable multi-approval cards.
-
-- **Phase 4 — extra modules (not started).** Lyrics, Pomodoro, file shelf, to-do, system
-  indicators.
-
-- **Phase 5 — personal harness adapter; Codex app-server full embedding (candidate; not
-  started).**
+- **Windows notification listener (Phase 7).** Reading other apps' notifications requires
+  MSIX packaging with the `userNotificationListener` capability plus explicit user consent
+  via `RequestAccessAsync` (revocable in Windows Settings). The portable unpackaged build
+  cannot access it. This is documented — including an honest disclosure in Settings —
+  rather than simulated. A packaged companion app is the supported path if the feature is
+  wanted later.
+- **Brightness.** Deferred. WMI (`WmiMonitorBrightnessMethods`) works only on laptop
+  backlights, requires the `System.Management` package, and most desktop monitors have no
+  supported control surface — MiMi renders an honest unsupported state instead of a
+  fake slider.
 
 ## Build and run
 
@@ -79,21 +90,88 @@ dotnet test MiMi.slnx -c Debug
 ```
 
 Note: the solution file is `MiMi.slnx` — the new .NET 10 XML solution format, not the
-classic `.sln`.
+classic `.sln`. For a distributable build, see "Portable release" below.
 
 ## Testing real media integration
 
 Media metadata and playback state come exclusively from Windows GSMTC. If an app does not
 appear in MiMi, it does not expose a media session to Windows.
 
-1. Start MiMi. It shows the resting state (clock + mascot eyes).
+1. Start MiMi. It shows the resting state (face-only mascot, no clock).
 2. Play a song in Spotify, Edge (YouTube), or Windows Media Player. The island switches
-   from the clock to a compact media pill with artwork.
+   from the face to a compact media pill with artwork.
 3. Hover over the pill to expand the media panel: transport controls, seekable progress
-   slider, elapsed/remaining time.
+   slider, elapsed/remaining time — and the lyrics window when synced lyrics are found.
 4. Exercise pause, seek, next, and previous.
 5. Play in two apps at once (e.g. Spotify + YouTube) to exercise active-session selection.
-6. Stop all playback. The island returns to the resting state.
+6. Stop all playback. The island returns to the resting face.
+
+## Utility panels
+
+All four panels are toggled from the tray menu (**Focus timer / Water tracker / To-do
+list / File shelf**, checkmarked when pinned). A panel you open yourself pins at
+*UserPanel* priority — only approvals and agent failures displace it — while a merely
+running timer pins at *Utility* so agent status keeps priority. The island's existing
+1 Hz heartbeat drives all of them; there are no extra timer loops.
+
+- **Focus timer (Pomodoro).** Presets 25 / 5 / 15 minutes (focus / short break / long
+  break); a long break follows every 4 completed focus sessions. Timing is deadline-based
+  (stopwatch + target), so the countdown stays accurate across hide/collapse/sleep.
+  Play-pause, stop, and skip are supported.
+- **Water tracker.** Daily goal (default 1800 ml) with quick-add buttons and a bounded
+  history. Reminders repeat at a configurable interval (0 disables them) and fire only
+  between 08:00 and 22:00 local time; a reminder can be snoozed. Daily totals reset at
+  midnight. Persisted to `water.json`.
+- **To-do list.** Add, complete, reopen, and delete items; due reminders fire once.
+  Persisted to `todos.json` with corruption recovery.
+- **File shelf.** Holds up to 12 references (oldest evicted), duplicate-safe. References
+  only: MiMi never copies, moves, or deletes originals. Drag-in is accepted only while
+  the shelf panel is open (the idle face never intercepts Explorer drops); drag-out is a
+  real OLE `FileDrop` drag via `DoDragDrop`, so rows can be dropped into Explorer or any
+  accepting app. Files whose original has disappeared render grayed with a "missing"
+  hint. Persisted to `shelf.json`.
+
+## System HUDs
+
+All HUD information is real system state; unsupported hardware renders nothing rather
+than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
+`batteryHudEnabled`, `networkHudEnabled`, `capsLockHudEnabled`, `headphoneHudEnabled`).
+
+- **Volume / mute.** Core Audio `IAudioEndpointVolumeCallback` — event-driven, no
+  polling. Hardware volume keys produce a HUD with the percentage and a gold progress
+  bar; rapid key presses coalesce into one toast. Mute has its own state.
+- **Battery / charging.** `GetSystemPowerStatus` + `WM_POWERBROADCAST` through the island
+  wndproc. Notices fire only on real transitions (charger connected / disconnected,
+  low-battery crossing below 20%, re-armed on recovery). Desktops without a battery
+  render nothing.
+- **Network.** `NetworkChange.NetworkAvailabilityChanged` / interface-changed events.
+  Truthful Wi-Fi / Ethernet labels from the interface type; local connectivity only —
+  MiMi never claims internet access and never pings.
+- **Audio device changes.** `IMMNotificationClient` on the default render device — e.g.
+  headphones/Bluetooth/speakers switching, shown with the friendly name.
+- **Caps Lock and input language.** `GetKeyState` / `GetKeyboardLayout` sampled on the
+  existing 1 Hz island tick — no keyboard hooks are installed and no keystroke content is
+  ever read.
+- **Brightness.** Deferred (see Status): WMI-only, laptop backlights, needs the
+  `System.Management` package — an honest unsupported state elsewhere.
+
+## Synchronized lyrics
+
+- **Source:** LRCLIB (`https://lrclib.net`). The exact-match `/api/get` endpoint is tried
+  first, then `/api/search` with a 15-second duration window — a different recording with
+  the same title is rejected.
+- **Parsing:** LRC parser supporting multi-timestamp lines, metadata tags, and the
+  `[offset:]` tag. Line lookup is stateless and seek-proof.
+- **Display:** the expanded media panel shows a 3-line window — previous line dim,
+  current line gold, next line dim — replacing the title block when synced lyrics are
+  available. Instrumental gaps render as a gentle `♪` instead of an empty block.
+- **Toggle:** a lyrics glyph on the expanded player turns lyrics on/off per session.
+- **Settings:** `lyricsEnabled` (default on) and `lyricsOffsetMs` (clamped
+  -10000…10000) for fine sync adjustment.
+- **Robustness:** bounded cache (negative results cached too), per-track deduplication,
+  1 fetch/second pacing, obsolete-fetch cancellation, and HTTP 429 `Retry-After`
+  cooldown. All failures degrade to an `Unavailable` state; confirmed-instrumental
+  tracks show an `Instrumental` state.
 
 ## Agent bridge API contract
 
@@ -231,6 +309,10 @@ card → the decision flows back over the same pipe → the CLI prints the provi
 decision JSON on stdout. Every failure path — timeout, MiMi offline, expired request, parse
 error, crash — DENIES: the integration is fail-closed, and MiMi never auto-approves.
 
+Both installers write the **PermissionRequest hook and the Phase 3.6 lifecycle activity
+hooks together** — one install gets you approvals and activity tracking. Codex
+additionally requires the one-time `/hooks` trust review (below).
+
 ### Claude Code
 
 ```powershell
@@ -238,10 +320,13 @@ MiMi.AgentCli.exe install-claude [--timeout 260]
 MiMi.AgentCli.exe uninstall-claude
 ```
 
-`install-claude` adds a `PermissionRequest` hook (no matcher — all tools) to
+`install-claude` adds a `PermissionRequest` hook (no matcher — all tools) plus the
+lifecycle activity hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+`PostToolUseFailure`, `Stop`, `SessionEnd`, `SubagentStart`, `SubagentStop`) to
 `~/.claude/settings.json`. Existing hooks and settings are preserved, a timestamped
 `.mimi-backup-*` copy is written before every modification, and the install is idempotent.
-No trust step is needed — Claude Code picks the hook up automatically.
+No trust step is needed — Claude Code picks the hooks up automatically (start a new
+session if a running one does not reload settings).
 
 ### Codex
 
@@ -250,9 +335,12 @@ MiMi.AgentCli.exe install-codex [--timeout 260]
 MiMi.AgentCli.exe uninstall-codex
 ```
 
-`install-codex` adds the hook to `~/.codex/hooks.json` (same preservation, backup, and
-idempotency rules). **Codex requires a one-time trust review: run `/hooks` in the Codex TUI
-and approve the MiMi hook** — Codex blocks hooks it has not reviewed.
+`install-codex` adds the `PermissionRequest` hook plus the lifecycle activity hooks
+(`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `Interrupt`,
+`SessionEnd`, `SubagentStart`, `SubagentStop`) to `~/.codex/hooks.json` (same
+preservation, backup, and idempotency rules). **Codex requires a one-time trust review:
+run `/hooks` in the Codex TUI and approve the MiMi hook** — Codex blocks hooks it has not
+reviewed. Then start a new Codex session.
 
 ### Optional Codex turn-complete toasts
 
@@ -328,6 +416,8 @@ hook timeout, makes the final call.
   ignored: MiMi always returns the original tool input unchanged. The emitted decision JSON
   contains only `behavior` (`allow`/`deny`) and `message` — never `updatedInput`,
   `updatedPermissions`, or `interrupt`.
+- **Windows notification listener.** Researched and intentionally unavailable in the
+  portable build — see "Status" above.
 
 ### Testing it
 
@@ -341,7 +431,7 @@ hook timeout, makes the final call.
 - **Simulator:** `tools\Invoke-MiMiEvent.ps1` exercises the same bridge/approval pipeline
   without a provider (examples above).
 
-## Phase 3.6 — agent activity and multi-agent UI
+## Agent activity and multi-agent UI (Phase 3.6)
 
 ### How activity events reach MiMi
 
@@ -412,31 +502,22 @@ itself still denies, fail-closed).
 
 ### Installing the lifecycle hooks
 
-Users who installed MiMi before Phase 3.6 must re-run the installers to add the activity
-hooks (existing hooks are preserved; the operation is idempotent):
+Both `install-claude` and `install-codex` write the lifecycle hooks alongside the
+PermissionRequest hook in a single idempotent pass, so a fresh install needs exactly one
+run of each installer. Users who installed MiMi before Phase 3.6 should re-run them
+(existing hooks are preserved):
 
 ```powershell
 MiMi.AgentCli.exe install-claude
 MiMi.AgentCli.exe install-codex
 ```
 
-- **Claude Code** (`~/.claude/settings.json`): adds `SessionStart`, `UserPromptSubmit`,
-  `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `SessionEnd`, `SubagentStart`,
-  and `SubagentStop` command hooks. No trust step is needed. Start a new Claude Code session
-  (or restart it) if an already-running session does not pick up newly written settings.
-- **Codex** (`~/.codex/hooks.json`): adds `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
-  `PostToolUse`, `Stop`, `Interrupt`, `SessionEnd`, `SubagentStart`, and `SubagentStop`, in
-  addition to `PermissionRequest`. Run `/hooks` in the Codex TUI to trust the updated hook,
-  then start a new Codex session.
-
 Activity hooks carry no timeout override, so they can never gate or delay the provider.
 `uninstall-claude` / `uninstall-codex` remove only MiMi-signed commands.
 
-### Verification performed for Phase 3.6
+### Verification performed
 
-- 100/100 automated tests (session lifecycle, multi-provider/multi-session, staleness,
-  out-of-order events, bounded history, activity parsing, installers, bridge ordering and
-  disconnect dismissal, approval correlation).
+- 211/211 automated tests (see "Testing checklist").
 - Bridge integration test: approval is registered before subscribers see it, and a pending
   approval is dismissed when its requesting connection drops.
 - Live bridge + UI verification using provider-shaped hook JSON through the real
@@ -470,16 +551,39 @@ defaults; values are clamped to the ranges below on every save.
 | `horizontalOffsetDip` | double | `0` | Horizontal offset from top-center, in DIP (clamped -800…800) |
 | `topMarginDip` | double | `6` | Distance from the top edge of the work area, in DIP (clamped 0…200) |
 | `scale` | double | `1.0` | Island size multiplier (clamped 0.75…1.5) |
+| `textSize` | string | `"default"` | Island typography: `"small"`, `"default"`, `"large"` |
 | `animationSpeed` | double | `1.0` | Animation speed multiplier (clamped 0.5…2.5) |
 | `collapseDelayMs` | int | `900` | Delay before auto-collapse after the pointer leaves (clamped 200…5000) |
 | `expandOnHover` | bool | `true` | Expand the island when the pointer hovers over it |
 | `mediaModuleEnabled` | bool | `true` | GSMTC media pill and media panel |
 | `agentsModuleEnabled` | bool | `true` | Agent event cards and approvals |
-| `clockEnabled` | bool | `true` | Clock in the resting state |
-| `mascotEnabled` | bool | `true` | Mascot eyes in the resting state |
+| `mascotEnabled` | bool | `true` | Mascot face in the resting state |
+| `mascotAnimationsEnabled` | bool | `true` | Mascot idle animations (blinking, breathing) |
+| `mascotReactionsEnabled` | bool | `true` | Brief mascot reactions to agent events |
+| `mascotSleepyEnabled` | bool | `false` | Opt-in sleepy mode: doze after inactivity, wake on mouse proximity |
+| `glowEnabled` | bool | `true` | Gold bottom-edge glow band |
+| `glowIntensity` | double | `0.6` | Glow intensity (clamped 0…1) |
+| `animationIntensity` | double | `1.0` | Animation amplitude (clamped 0.5…2) |
+| `lyricsEnabled` | bool | `true` | Synchronized lyrics on the expanded media panel |
+| `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
+| `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
+| `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
+| `networkHudEnabled` | bool | `true` | Network HUD |
+| `capsLockHudEnabled` | bool | `true` | Caps Lock / input language HUD |
+| `headphoneHudEnabled` | bool | `true` | Audio device change HUD |
+| `agentNotificationsEnabled` | bool | `true` | Agent notification toasts (Phase 3.7) |
+| `completionNotificationsEnabled` | bool | `true` | Turn-completion notifications |
+| `approvalNotificationsEnabled` | bool | `true` | Approval-arrival notifications |
+| `windowsNotificationsWhenHidden` | bool | `false` | Windows toast notifications while the island is hidden (opt-in) |
+| `notificationDurationMs` | int | `3000` | Notification display time (clamped 1500…10000) |
+| `notificationSoundEnabled` | bool | `false` | Notification sound (opt-in) |
 | `bridgeEnabled` | bool | `true` | Named-pipe agent bridge (inert until a client connects) |
 | `approvalTtlMinutes` | int | `5` | Approval card time-to-live (clamped 1…60) |
 | `startWithWindows` | bool | `false` | Register MiMi to start with Windows (also via tray) |
+| `desktopPersistVisible` | bool | `true` | Stay visible on the desktop |
+| `fullscreenSuppress` | bool | `true` | Step aside for fullscreen apps |
+
+The clock has no setting in 4.0: the idle state is face-only by design.
 
 ## Troubleshooting
 
@@ -502,30 +606,42 @@ defaults; values are clamped to the ranges below on every save.
 - **An approval card stays on screen after the agent gave up.** It should be dismissed
   automatically when the requesting hook disconnects. If it persists, check the log for
   `dismissed: requesting client ... disconnected`; otherwise the TTL will clear it.
+- **Ctrl+Alt+M does nothing.** Another application may own the hotkey; the Settings window
+  states when registration failed.
+- **The mascot never dozes.** Sleepy mode is opt-in (`mascotSleepyEnabled`), and media
+  playback blocks doze by design — quiet is required.
+- **Lyrics never appear.** The track needs a synced entry on LRCLIB; instrumental and
+  not-found tracks show their own states instead. Check `lyricsEnabled` and network access.
+- **No battery HUD.** Desktop machines without a battery correctly render nothing.
 - **Logs:** `%LOCALAPPDATA%\MiMi\logs\mimi.log`. Bridge connections, rejections, approval
   cards/decisions, dismissals, and visibility transitions are logged there.
 
 ## Architecture
 
-| Project | Responsibility |
+| Project / component | Responsibility |
 |---|---|
-| `MiMi.Core` | Settings/config store, island state manager (priorities, alerts, pinned state), dedup store, logger |
+| `MiMi.Core` | Settings/config store, island state manager (priorities, alerts, pinned state), dedup store, logger, visibility coordination (`VisibilityCoordinator`, `VisibilityTransitionPlanner` with `FadePlan`/`FadeSequencer`), `ProximityWakePolicy`, `PomodoroTimer`, `WaterTracker`, `TodoStore`, `FileShelfStore` |
 | `MiMi.Media` | GSMTC media service and media models |
-| `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus, `AgentSessionManager` (per-session lifecycle, staleness, bounded history) |
+| `MiMi.Lyrics` | `LrcParser`, `LyricsMatchPicker`, `LrcLibClient` (LRCLIB), bounded lyrics cache, `LyricsService` |
+| `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus, `AgentSessionManager`, `MascotMood` policy, `ProviderHookCatalog`/`ProviderIntegrationInspector`, `AgentNotificationCoordinator` |
 | `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security, per-connection approval correlation |
 | `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest and `activity` lifecycle hooks, Codex notify) and their installers |
-| `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest |
-| `MiMi.Tests` | xUnit tests for config, dedup, events, approvals, state, bridge, and hook adapters |
+| `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest; mascot (`UI/Mascot`: `MiMiMascotControl`, `MascotExpression`), `GlowLayout`, `SystemHudController` with the Core Audio / power / network / keyboard interop monitors |
+| `MiMi.Tests` | xUnit tests — 211 tests covering all of the above |
 | `docs/` | Research references: Claude Code hooks (`claude-code-hooks.md`), Codex integrations (`codex-integrations.md`) |
 
 Data flow: providers/bridge → `AgentEventBus` → `IslandPresenter` → `IslandStateManager`
 → `IslandWindow`. The bridge normalizes and validates events, the bus decouples producers
 from the UI, the state manager decides what the island currently shows (highest priority
-wins, transients expire back to the pinned state), and the window renders it.
+wins, transients expire back to the pinned state), and the window renders it. Visibility
+(hover expand, hotkey toggle, fades) is planned by `VisibilityCoordinator` +
+`VisibilityTransitionPlanner`; the mascot mood pipeline maps island state to
+`MascotExpression`; `SystemHudController` pushes monitor snapshots as HUD toasts.
 
 ## Testing checklist
 
-Covered by 100 automated tests (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Debug`) and `MiMi.exe --selftest`:
+Covered by **211/211 automated tests** (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c
+Debug`) and `MiMi.exe --selftest`:
 
 - Settings round-trip and corrupt-file fallback to defaults; value clamping.
 - Dedup store: duplicate ids rejected, capacity eviction, empty id accepted.
@@ -552,15 +668,48 @@ Covered by 100 automated tests (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c
   input fields tolerated, wrong event rejected) and the decision-JSON shape — allow/deny
   with a message only, never `updatedInput`; Codex notify payload parsing (turn-complete
   mapping, long messages truncated, unknown types to status).
-- Installers: hook entry created, install idempotent, existing user hooks preserved
-  untouched, non-object `hooks` keys skipped without writing, uninstall removes only
-  MiMi's entries.
+- **Lyrics** (new in 4.0): LRC parser (multi-timestamp, metadata, `[offset:]`), line
+  indexing, exact-vs-search matching with the 15 s duration window, cache behavior,
+  instrumental/unavailable degradation.
+- **Agent sessions & notifications** (new in 4.0): timeline tests, notification
+  coordinator policy, provider hook catalog/inspector.
+- **File shelf** (new in 4.0): add/validate/duplicates, capacity eviction, persistence and
+  corruption recovery, missing-original detection.
+- **Productivity** (new in 4.0): Pomodoro phase flow and deadline math, water tracker
+  (midnight rollover, quiet hours, snooze, goal), to-do store (due reminders, persistence).
+- **System HUD policies** (new in 4.0): battery transition/low-battery policy, network
+  labels, volume coalescing, keyboard HUD sampling.
+- **Mascot mood & proximity wake** (new in 4.0): mood→expression mapping;
+  `ProximityWakePolicy` hysteresis (wake/re-doze/min-awake).
+- **Visibility & glow** (new in 4.0): `VisibilityCoordinator` preferences, `FadePlan`
+  transitions, `FadeSequencer` superseded-generation handling, `GlowLayout` band geometry.
 - GSMTC availability check (`--selftest` reports the active session count).
 
 Requires manual verification (not automated, not claimed done):
 
-- Actual Spotify/browser playback showing artwork, transport, and seek.
+- Actual Spotify/browser playback showing artwork, transport, seek, and live lyrics sync.
+- Real Explorer drag-in/drag-out against the file shelf (cannot be scripted).
+- Tray panel interaction and panel screenshots (user's visual pass).
+- Sleepy mode + cursor wake over a sustained quiet period (media blocks doze by design).
 - Hover expand/collapse feel and collapse delay.
 - DPI scaling across 100–200%, multi-monitor placement.
 - Fullscreen step-aside against real fullscreen apps (games, video players).
 - Startup/shutdown memory behavior over longer sessions.
+
+## Portable release
+
+`build-release.ps1` produces a portable build in `dist/`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1
+```
+
+- **Output:** `dist\MiMi.exe` (single file, win-x64), `dist\MiMi.AgentCli.exe` next to it
+  (hook installers + adapters resolve this path), plus `README.md` and `PROJECT_STATE.md`.
+- **Framework-dependent by default:** the target machine needs the
+  [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download). Pass `-SelfContained`
+  to embed the runtime (~180 MB) so it runs with nothing installed.
+- **No installer, no admin:** launch `dist\MiMi.exe` directly.
+- **Settings and data live in `%LOCALAPPDATA%\MiMi`** (settings.json, shelf.json,
+  todos.json, water.json, bridge-token, logs) and survive upgrades — replacing the exe
+  does not touch user data.
