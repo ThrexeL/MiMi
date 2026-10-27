@@ -140,6 +140,7 @@ public partial class App : Application
             });
             _lyrics.Changed += () => Dispatcher.BeginInvoke(() =>
             {
+                Logger.Info($"Lyrics: state={_lyrics.State} track='{_lyrics.Current?.TrackName ?? "(none)"}' synced={_lyrics.Current?.HasSynced}");
                 mediaVm.UpdateLyrics(_lyrics.State, _lyrics.Current, _config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled);
             });
             _ = StartMediaAsync();
