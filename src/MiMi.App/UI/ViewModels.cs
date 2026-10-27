@@ -38,20 +38,15 @@ public abstract class IslandContent : ObservableObject
 /// <summary>Class (not record) so the live clock can update without swapping content objects.</summary>
 public sealed class RestingView : IslandContent
 {
-    private string _clock;
     private MascotExpression _expression = MascotExpression.Calm;
-    private bool _showClock = true;
-    public RestingView(string clock) { _clock = clock; }
-    public string Clock { get => _clock; set => Set(ref _clock, value); }
+    public RestingView() { }
     /// <summary>Persistent mood (plus any brief reaction) for the resting face.</summary>
     public MascotExpression Expression { get => _expression; set => Set(ref _expression, value); }
-    /// <summary>Nusa-style rest: the clock steps aside while MiMi dozes, leaving the
-    /// glowing eyes alone in the pill. Waking restores it.</summary>
-    public bool ShowClock { get => _showClock; set => Set(ref _showClock, value); }
     public bool ShowMascot { get; init; } = true;
-    public override double TargetWidth => 150;
-    public override double TargetHeight => 36;
-    public override double TargetCornerRadius => 18;
+    // Face-only idle: a slim pill whose width hugs the face with breathing room.
+    public override double TargetWidth => 118;
+    public override double TargetHeight => 38;
+    public override double TargetCornerRadius => 19;
 }
 
 public sealed class MediaCompactView : IslandContent

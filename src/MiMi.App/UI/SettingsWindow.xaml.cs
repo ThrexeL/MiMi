@@ -43,7 +43,6 @@ public partial class SettingsWindow : Window
         DelaySlider.Value = s.CollapseDelayMs;
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         AgentsToggle.IsChecked = s.AgentsModuleEnabled;
-        ClockToggle.IsChecked = s.ClockEnabled;
         MascotToggle.IsChecked = s.MascotEnabled;
         MascotAnimationsToggle.IsChecked = s.MascotAnimationsEnabled;
         MascotReactionsToggle.IsChecked = s.MascotReactionsEnabled;
@@ -95,7 +94,6 @@ public partial class SettingsWindow : Window
             s.CollapseDelayMs = (int)DelaySlider.Value;
             s.MediaModuleEnabled = MediaToggle.IsChecked == true;
             s.AgentsModuleEnabled = AgentsToggle.IsChecked == true;
-            s.ClockEnabled = ClockToggle.IsChecked == true;
             s.MascotEnabled = MascotToggle.IsChecked == true;
             s.MascotAnimationsEnabled = MascotAnimationsToggle.IsChecked == true;
             s.MascotReactionsEnabled = MascotReactionsToggle.IsChecked == true;

@@ -201,14 +201,11 @@
 
         <!-- ============================ templates ============================ -->
         <DataTemplate DataType="{x:Type ui:RestingView}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <!-- MiMi's face: the resting pill's primary visual. -->
-                <mascot:MiMiMascotControl Width="48" Height="30" Expression="{Binding Expression}" Margin="2,0,0,0"
-                                          Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
-                           Text="{Binding Clock}" Margin="10,0,2,0"
-                           Visibility="{Binding ShowClock, Converter={StaticResource BoolToVis}}"/>
-            </StackPanel>
+            <!-- Face-only idle per the approved reference: the mascot is the entire
+                 content — no clock, no status text, nothing else. -->
+            <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:MediaCompactView}">

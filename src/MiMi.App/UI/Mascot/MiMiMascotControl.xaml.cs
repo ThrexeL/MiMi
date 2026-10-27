@@ -34,6 +34,15 @@ public partial class MiMiMascotControl : UserControl
         set => SetValue(ExpressionProperty, value);
     }
 
+    private readonly DispatcherTimer _blinkTimer;
+    private readonly DispatcherTimer _dartTimer;
+    private Storyboard? _bobStoryboard;
+    private Storyboard? _sleepStoryboard;
+    private Storyboard? _sleepZStoryboard;
+    private readonly Random _random = new();
+    private MascotExpression _lastExpression = MascotExpression.Calm;
+    private bool _templateReady;
+
     // Per-eye pose per expression (scaleX, scaleY, tilt degrees). The base shape is a
     // tall oval; asymmetry only happens mid-blink and is always restored.
     private static (double Sx, double Sy, double Tilt) Pose(MascotExpression e) => e switch
@@ -51,56 +60,15 @@ public partial class MiMiMascotControl : UserControl
         _ => (1, 1, 0),
     };
 
-    /// <summary>Blush strength per expression. It is the softest cue MiMi has, so it
-    /// retreats whenever the face turns serious and lingers faintly while dozing.</summary>
-    private static double BlushOpacity(MascotExpression e) => e switch
-    {
-        MascotExpression.Happy => 0.7,
-        MascotExpression.Lively => 0.52,
-        MascotExpression.Curious => 0.46,
-        MascotExpression.Sleepy => 0.38,
-        MascotExpression.Calm => 0.34,
-        MascotExpression.Focused => 0.18,
-        MascotExpression.Concerned => 0.14,
-        MascotExpression.Alert => 0.12,
-        _ => 0.34,
-    };
-
-    /// <summary>Gold bloom strength per expression. Calm keeps a warm halo; urgency
-    /// brightens it; sleep reduces it to an ember so dozing feels dim, not dead.</summary>
-    private static double GlowOpacity(MascotExpression e) => e switch
-    {
-        MascotExpression.Alert => 0.95,
-        MascotExpression.Curious => 0.9,
-        MascotExpression.Happy => 1.0,
-        MascotExpression.Lively => 0.8,
-        MascotExpression.Focused => 0.62,
-        MascotExpression.Concerned => 0.42,
-        MascotExpression.Sleepy => 0.3,
-        _ => 0.7,
-    };
-
-    private static double SmileOpacity(MascotExpression e) => e switch
-    {
-        MascotExpression.Lively => 0.75,
-        MascotExpression.Happy => 0.9,
-        MascotExpression.Calm => 0.62,
-        MascotExpression.Curious => 0.55,
-        MascotExpression.Sleepy => 0.34,
-        _ => 0.0,
-    };
-
-    private readonly DispatcherTimer _blinkTimer;
-    private readonly DispatcherTimer _dartTimer;
-    private Storyboard? _bobStoryboard;
-    private Storyboard? _sleepZStoryboard;
-    private readonly Random _random = new();
-    private bool _templateReady;
-    private MascotExpression _lastExpression = MascotExpression.Calm;
-
     public MiMiMascotControl()
     {
         InitializeComponent();
+
+        _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        _blinkTimer.Tick += (_, _) => Blink();
+        _dartTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9) };
+        _dartTimer.Tick += (_, _) => Dart();
+
         Loaded += (_, _) =>
         {
             _templateReady = true;
@@ -113,12 +81,6 @@ public partial class MiMiMascotControl : UserControl
         {
             if ((bool)e.NewValue) StartLife(); else StopLife();
         };
-
-        _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
-        _blinkTimer.Tick += (_, _) => Blink();
-
-        _dartTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(9) };
-        _dartTimer.Tick += (_, _) => Dart();
 
         MascotOptions.Changed += OnOptionsChanged;
         Unloaded += (_, _) => MascotOptions.Changed -= OnOptionsChanged;
@@ -153,21 +115,6 @@ public partial class MiMiMascotControl : UserControl
         // Concerned: tilt the eyes toward each other, faintly.
         AnimateAngle(EyeLTilt, tilt, poseDuration, ease, animated);
         AnimateAngle(EyeRTilt, -tilt, poseDuration, ease, animated);
-
-        // Bloom follows the expression: bright when alert, an ember when dozing.
-        var glow = GlowOpacity(expression);
-        AnimateOpacity(EyeLGlow, glow, poseDuration, ease, animated);
-        AnimateOpacity(EyeRGlow, glow, poseDuration, ease, animated);
-
-        // Blush: warm in soft moods, nearly gone when MiMi is serious or asleep.
-        var blush = BlushOpacity(expression);
-        AnimateOpacity(BlushL, blush, poseDuration, ease, animated);
-        AnimateOpacity(BlushR, blush, poseDuration, ease, animated);
-
-        // Smile: fade rather than pop. Minor expressions keep it hidden.
-        var smileOpacity = SmileOpacity(expression);
-        if (!animated) { Mouth.BeginAnimation(OpacityProperty, null); Mouth.Opacity = smileOpacity; }
-        else Mouth.BeginAnimation(OpacityProperty, new DoubleAnimation(smileOpacity, poseDuration) { EasingFunction = ease });
 
         // Dozing gets its own punctuation: two small z's drifting where the clock was.
         UpdateSleepZs(expression);

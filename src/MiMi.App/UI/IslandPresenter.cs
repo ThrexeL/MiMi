@@ -103,9 +103,8 @@ public sealed class IslandPresenter
 
     public AgentNotificationCoordinator Notifications => _notifications;
 
-    private RestingView MakeResting() => new(DateTime.Now.ToString("HH:mm"))
+    private RestingView MakeResting() => new()
     {
-        ShowClock = _config.Current.ClockEnabled,
         ShowMascot = _config.Current.MascotEnabled,
     };
 
@@ -152,7 +151,6 @@ public sealed class IslandPresenter
         _mascotExpression = ToExpression(_reaction ?? _persistentMood);
         _resting.Expression = _mascotExpression;
         // Resting state is just the eyes (Nusa-inspired); waking brings the clock back.
-        _resting.ShowClock = _config.Current.ClockEnabled && _mascotExpression != MascotExpression.Sleepy;
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.

@@ -30,7 +30,6 @@ public partial class IslandWindow : Window
     private bool _pointerOver;
 
     private readonly DispatcherTimer _stateTimer;   // shared: enter-delay / leave-grace
-    private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _progressTimer;
     private readonly Random _random = new();
 
@@ -107,13 +106,6 @@ public partial class IslandWindow : Window
 
         Pill.SizeChanged += (_, _) => UpdateClip();
 
-        // Clock (resting pill only) — 30 s cadence is plenty for a minute display.
-        _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _clockTimer.Tick += (_, _) =>
-        {
-            if (_pinnedContent is RestingView resting) resting.Clock = DateTime.Now.ToString("HH:mm");
-        };
-        _clockTimer.Start();
 
         // 1 Hz ticker: extrapolated media position + approval countdowns.
         _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };

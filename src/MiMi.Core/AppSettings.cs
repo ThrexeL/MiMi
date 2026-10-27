@@ -26,11 +26,11 @@ public sealed class AppSettings
     // Modules
     [JsonPropertyName("mediaModuleEnabled")] public bool MediaModuleEnabled { get; set; } = true;
     [JsonPropertyName("agentsModuleEnabled")] public bool AgentsModuleEnabled { get; set; } = true;
-    [JsonPropertyName("clockEnabled")] public bool ClockEnabled { get; set; } = true;
     [JsonPropertyName("mascotEnabled")] public bool MascotEnabled { get; set; } = true;
     [JsonPropertyName("mascotAnimationsEnabled")] public bool MascotAnimationsEnabled { get; set; } = true;
     [JsonPropertyName("mascotReactionsEnabled")] public bool MascotReactionsEnabled { get; set; } = true;
-    [JsonPropertyName("mascotSleepyEnabled")] public bool MascotSleepyEnabled { get; set; } = true;
+    // Quiet-doze is opt-in: the brief rejects a two-minute doze as the default.
+    [JsonPropertyName("mascotSleepyEnabled")] public bool MascotSleepyEnabled { get; set; } = false;
     [JsonPropertyName("glowEnabled")] public bool GlowEnabled { get; set; } = true;
     [JsonPropertyName("glowIntensity")] public double GlowIntensity { get; set; } = 0.6;
     [JsonPropertyName("animationIntensity")] public double AnimationIntensity { get; set; } = 1.0;

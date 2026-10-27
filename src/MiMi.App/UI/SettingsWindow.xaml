@@ -125,8 +125,6 @@
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <CheckBox x:Name="AgentsToggle" Style="{StaticResource Check}" Content="AI agent events"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
-        <CheckBox x:Name="ClockToggle" Style="{StaticResource Check}" Content="Clock in resting state"
-                  Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <CheckBox x:Name="MascotToggle" Style="{StaticResource Check}" Content="Mascot face"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <CheckBox x:Name="GlowToggle" Style="{StaticResource Check}" Content="Gold glow"
