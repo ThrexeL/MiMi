@@ -21,17 +21,11 @@ public static class ActivityHook
     };
 
     /// <summary>Lifecycle hook events MiMi accepts, per provider (research-verified).</summary>
-    public static readonly IReadOnlySet<string> SupportedClaudeEvents = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-        "Stop", "SessionEnd", "SubagentStart", "SubagentStop",
-    };
+    public static readonly IReadOnlySet<string> SupportedClaudeEvents =
+        new HashSet<string>(ProviderHookCatalog.ClaudeActivityEvents, StringComparer.Ordinal);
 
-    public static readonly IReadOnlySet<string> SupportedCodexEvents = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
-        "Stop", "Interrupt", "SessionEnd", "SubagentStart", "SubagentStop",
-    };
+    public static readonly IReadOnlySet<string> SupportedCodexEvents =
+        new HashSet<string>(ProviderHookCatalog.CodexActivityEvents, StringComparer.Ordinal);
 
     public static bool IsSupported(string hookEventName, string provider) =>
         provider == "codex"

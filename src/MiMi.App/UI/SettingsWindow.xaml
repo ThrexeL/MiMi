@@ -138,6 +138,31 @@
 
         <Separator Background="#22FFFFFF" Margin="0,10,0,10"/>
 
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource Sub}" Text="Agent integrations" VerticalAlignment="Center"/>
+            <TextBlock x:Name="ProviderCheckedText" Grid.Column="1" Style="{StaticResource Sub}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Style="{StaticResource Btn}" Content="Refresh"
+                    Click="RefreshProviders_Click" Padding="9,4"/>
+        </Grid>
+        <TextBlock x:Name="ClaudeProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
+                   Margin="0,7,0,0" Text="Claude Code — checking…"/>
+        <TextBlock x:Name="ClaudeProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
+                   Margin="0,1,0,0"/>
+        <TextBlock x:Name="CodexProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
+                   Margin="0,8,0,0" Text="Codex — checking…"/>
+        <TextBlock x:Name="CodexProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
+                   Margin="0,1,0,0"/>
+        <TextBlock x:Name="ProviderHintText" Style="{StaticResource Sub}" TextWrapping="Wrap"
+                   Margin="0,4,0,0" Text="Hook trust is verified by the provider, never guessed by MiMi."/>
+
+        <Separator Background="#22FFFFFF" Margin="0,10,0,10"/>
+
         <CheckBox x:Name="AutoStartToggle" Style="{StaticResource Check}" Content="Start with Windows"
                   Checked="AutoStart_Changed" Unchecked="AutoStart_Changed"/>
 

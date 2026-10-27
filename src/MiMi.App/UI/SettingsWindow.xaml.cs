@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using MiMi.Agents;
 using MiMi.App.Interop;
 using MiMi.Core;
 
@@ -11,15 +12,18 @@ public partial class SettingsWindow : Window
 {
     private readonly ConfigStore _config;
     private readonly Action<bool> _autoStartChanged;
+    private readonly ProviderIntegrationInspector _providerInspector;
     private bool _loading;
 
     private readonly Func<bool> _hotkeyStatus;
 
-    public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null)
+    public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null,
+        ProviderIntegrationInspector? providerInspector = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
         _hotkeyStatus = hotkeyStatus ?? (() => true);
+        _providerInspector = providerInspector ?? new ProviderIntegrationInspector();
         InitializeComponent();
         Load();
     }
@@ -47,6 +51,7 @@ public partial class SettingsWindow : Window
             : "Global toggle shortcut: Ctrl + Alt + M  (unavailable — another program owns it)";
         RefreshLabels();
         _loading = false;
+        _ = RefreshProvidersAsync();
     }
 
     private void RefreshLabels()
@@ -95,6 +100,42 @@ public partial class SettingsWindow : Window
     }
 
     private void Checkbox_Changed2(object sender, RoutedEventArgs e) => CaptureToSettings();
+
+    private async void RefreshProviders_Click(object sender, RoutedEventArgs e) => await RefreshProvidersAsync();
+
+    private async Task RefreshProvidersAsync()
+    {
+        ProviderCheckedText.Text = "checking…";
+        try
+        {
+            var statuses = await Task.Run(() => _providerInspector.InspectAll(includeVersions: true));
+            var claude = statuses.First(s => s.Provider == "claude-code");
+            var codex = statuses.First(s => s.Provider == "codex");
+            ApplyProvider("Claude Code", claude, ClaudeProviderStatus, ClaudeProviderDetail);
+            ApplyProvider("Codex", codex, CodexProviderStatus, CodexProviderDetail);
+            ProviderCheckedText.Text = $"checked {DateTime.Now:HH:mm}";
+            ProviderHintText.Text = codex.IsHealthy
+                ? "Codex: trust is maintained by Codex itself; if approvals do not appear, open /hooks and review the MiMi entries."
+                : codex.Instructions;
+        }
+        catch (Exception ex)
+        {
+            ProviderCheckedText.Text = "check failed";
+            ProviderHintText.Text = ex.Message;
+        }
+    }
+
+    private static void ApplyProvider(string displayName, ProviderIntegrationStatus status,
+        TextBlock statusText, TextBlock detailText)
+    {
+        statusText.Text = $"{displayName} — {status.Summary}";
+        var version = string.IsNullOrEmpty(status.Version) ? "" : $" · {status.Version}";
+        var hooks = status.ExpectedHooks > 0
+            ? $" · hooks {status.InstalledHooks}/{status.ExpectedHooks}"
+            : "";
+        detailText.Text = status.Detail + version + hooks;
+        detailText.ToolTip = $"{status.ConfigPath}\n{status.ExecutablePath}\n{status.Instructions}";
+    }
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e)
     {

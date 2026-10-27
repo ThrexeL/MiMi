@@ -27,6 +27,7 @@ public partial class App : Application
     private FullscreenWatcher _fullscreen = null!;
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
+    private ProviderIntegrationInspector _providerInspector = null!;
     private bool _ownsMutex;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -65,6 +66,7 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _config = new ConfigStore();
+        _providerInspector = new ProviderIntegrationInspector();
         MascotOptions.Apply(_config.Current);
         _config.Changed += settings => MascotOptions.Apply(settings);
         _approvals = new ApprovalStore(TimeSpan.FromMinutes(_config.Current.ApprovalTtlMinutes));
@@ -202,7 +204,7 @@ public partial class App : Application
             return;
         }
         _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable),
-            () => _island.HotkeyRegistered);
+            () => _island.HotkeyRegistered, _providerInspector);
         _settingsWindow.Show();
     }
 
