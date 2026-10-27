@@ -12,7 +12,8 @@ public class BatteryNoticePolicyTests
     {
         var policy = new BatteryNoticePolicy();
         Assert.Equal(BatteryNoticePolicy.NoticeKind.None, policy.Evaluate(charging: true, percent: 80));
-        Assert.Equal(BatteryNoticePolicy.NoticeKind.None, policy.Evaluate(charging: false, percent: 60));
+        // A later unplug IS a real transition and still announces.
+        Assert.Equal(BatteryNoticePolicy.NoticeKind.ChargingDisconnected, policy.Evaluate(false, 60));
     }
 
     [Fact]
