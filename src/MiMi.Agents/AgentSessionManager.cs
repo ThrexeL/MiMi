@@ -78,12 +78,21 @@ public sealed class AgentSessionManager : IDisposable
         _sessions.Values.OrderBy(s => s.Provider).ThenBy(s => s.SessionId).ToList();
 
     /// <summary>Sessions worth showing in the compact indicator/panel: live ones, plus
-    /// recently finished ones (turn finished / error) until they age out.</summary>
-    public IReadOnlyList<AgentSession> Active =>
-        All.Where(s => !s.Ended || s.State is SessionActivity.TurnFinished or SessionActivity.Error
-                or SessionActivity.Interrupted)
-           .Where(s => !s.Stale || !s.Ended)
-           .ToList();
+    /// recently finished ones (turn finished / error / interrupted) until they age out.</summary>
+    public IReadOnlyList<AgentSession> Active => All.Where(s => IsVisible(s, DateTimeOffset.UtcNow)).ToList();
+
+    /// <summary>Finished sessions stay listed briefly; ended sessions are terminal and
+    /// only remain while still "recent" (bounded history is pruned separately).</summary>
+    public static readonly TimeSpan FinishedVisibleFor = TimeSpan.FromMinutes(5);
+
+    public static bool IsVisible(AgentSession session, DateTimeOffset asOf)
+    {
+        if (session.State == SessionActivity.Ended) return false;
+        // Finished / failed / interrupted sessions stay visible briefly, then age out.
+        if (session.State is SessionActivity.TurnFinished or SessionActivity.Error or SessionActivity.Interrupted)
+            return asOf - session.LastEventUtc <= FinishedVisibleFor;
+        return true; // live session (stale sessions remain visible as "status unknown")
+    }
 
     public int WorkingCount =>
         _sessions.Values.Count(s => !s.Ended && s.State is SessionActivity.Started

@@ -579,10 +579,23 @@ public partial class IslandWindow : Window
     {
         if (_hoverExpanded || !_config.Current.ExpandOnHover) return;
         if (_pinnedContent is not { Expandable: true } content) return;
+
+        // While music plays, the compact pill's agent badge (right edge) opens the
+        // multi-agent panel; hovering anywhere else opens the media controls.
+        if (content is MediaCompactView { HasAgentBadge: true } && PointerOverAgentBadge())
+        {
+            _hoverExpanded = true;
+            ApplyContent(_agentPanelProvider());
+            return;
+        }
+
         if (Expanded(content) is not { } expandedView) return;
         _hoverExpanded = true;
         ApplyContent(expandedView);
     }
+
+    private bool PointerOverAgentBadge() =>
+        Mouse.GetPosition(Pill).X >= Pill.Width - 44;
 
     public void CollapseHover()
     {

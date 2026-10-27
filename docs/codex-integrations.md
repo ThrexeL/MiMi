@@ -368,3 +368,42 @@ and returns allow/deny while the user keeps driving Codex from the terminal).
 
 Phases 3 and 4 are composable and independent of Phase 5; none of the three wraps or proxies the
 Codex session itself.
+
+---
+
+## MiMi implementation notes (Phase 3.6)
+
+What MiMi actually ships today. The research and recommendation above are unchanged.
+
+- **Chosen integration:** the `PermissionRequest` command-hook shim (the doc's Phase 4 option)
+  plus lifecycle hooks for activity. MiMi does **not** embed `codex app-server` yet; the optional
+  `notify` adapter remains turn-complete-only and carries no decisions.
+- **Approval path (synchronous).** `MiMi.AgentCli.exe codex-permission` reads the hook stdin JSON,
+  forwards `agent.approval_requested` over the authenticated bridge, waits for the island decision
+  (default 90 s, installed hook `timeout` 260 s), and prints the Codex decision object:
+
+  ```json
+  {"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow","message":"Approved via MiMi."}}}
+  ```
+
+  Deny uses the same shape with `"behavior":"deny"`. MiMi never auto-approves and never rewrites
+  tool input.
+- **Fail closed.** MiMi offline / bridge timeout / expired or dismissed request / parse error all
+  print `behavior: "deny"` with an explanatory message. The decision is written only to the
+  connection that sent the request, so concurrent Claude Code and Codex hooks cannot receive each
+  other's answer. When the requesting hook disconnects first, its pending card is dismissed and
+  the hook still denies.
+- **Lifecycle path (fire-and-forget).** `activity --provider codex` is installed for
+  `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `Interrupt`,
+  `SessionEnd`, `SubagentStart`, and `SubagentStop`. These entries carry no `timeout`, exit 0
+  immediately, print no decision, and never block Codex — including when MiMi is not running.
+- **Installer and trust.** `install-codex` writes `~/.codex/hooks.json`, preserves existing hook
+  definitions, writes a timestamped backup first, and is idempotent. Codex pins trust to the hook
+  definition hash, so after installing or upgrading run `/hooks` in the Codex TUI, review and
+  trust the MiMi entries, then start a new Codex session. `uninstall-codex` removes only
+  MiMi-signed commands.
+- **Optional notify.** `install-codex-notify` adds
+  `notify = ["<MiMi.AgentCli>", "codex-notify"]` to `~/.codex/config.toml` only when no `notify`
+  is configured; otherwise it skips and leaves the existing program untouched.
+  `uninstall-codex-notify` removes only MiMi's line. This path produces turn-complete toasts and
+  cannot approve or deny anything.

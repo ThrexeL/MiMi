@@ -194,6 +194,60 @@ public class NamedPipeAgentBridgeTests
     }
 
     [Fact]
+    public async Task Approval_IsRegisteredBeforeSubscribersSeeIt()
+    {
+        var bus = new AgentEventBus();
+        using var approvals = new ApprovalStore();
+        var token = "testtoken" + new string('5', 55);
+        await using var bridge = new NamedPipeAgentBridge(bus, approvals, token, pipeName: $"mimi-test-{Guid.NewGuid():N}");
+        bridge.Start();
+
+        var registeredWhenPublished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bus.Subscribe(ev =>
+        {
+            if (ev.Type == AgentEventTypes.ApprovalRequested)
+                registeredWhenPublished.TrySetResult(approvals.Get(ev.ApprovalRequestId!) is { IsPending: true });
+        });
+
+        await using var client = new NamedPipeClientStream(".", bridge.PipeName, PipeDirection.InOut);
+        await client.ConnectAsync(5000);
+        await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "hello", Token = token, Client = "xunit" }, CancellationToken.None);
+
+        var approval = AgentEventFactory.Create("sim", "s1", AgentEventTypes.ApprovalRequested, approvalRequestId: "ap-order");
+        var ack = await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "event", Event = approval }, CancellationToken.None);
+        Assert.True(ack!.Ok);
+
+        Assert.True(await registeredWhenPublished.Task.WaitAsync(TimeSpan.FromSeconds(5)),
+            "approvals must be registered before the bus publishes them so the UI can resolve the card");
+    }
+
+    [Fact]
+    public async Task DisconnectingRequester_DismissesStillPendingApproval()
+    {
+        var bus = new AgentEventBus();
+        using var approvals = new ApprovalStore();
+        var token = "testtoken" + new string('6', 55);
+        await using var bridge = new NamedPipeAgentBridge(bus, approvals, token, pipeName: $"mimi-test-{Guid.NewGuid():N}");
+        bridge.Start();
+
+        var client = new NamedPipeClientStream(".", bridge.PipeName, PipeDirection.InOut);
+        await client.ConnectAsync(5000);
+        await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "hello", Token = token, Client = "xunit" }, CancellationToken.None);
+
+        var approval = AgentEventFactory.Create("sim", "s1", AgentEventTypes.ApprovalRequested, approvalRequestId: "ap-drop");
+        var ack = await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "event", Event = approval }, CancellationToken.None);
+        Assert.True(ack!.Ok);
+
+        // The hook times out or crashes: no decision can ever be delivered.
+        await client.DisposeAsync();
+
+        for (var i = 0; i < 60 && approvals.Get("ap-drop")?.Decision is null; i++)
+            await Task.Delay(50);
+
+        Assert.Equal(ApprovalDecision.Dismissed, approvals.Get("ap-drop")?.Decision);
+    }
+
+    [Fact]
     public async Task ApprovalDecision_IsPushedBackToClient()
     {
         var bus = new AgentEventBus();

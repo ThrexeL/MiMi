@@ -47,6 +47,11 @@ Development is phased. What is implemented today:
   "Open in Agent" still copies approval details to the clipboard; direct session focus is
   not implemented.
 
+- **Phase 3.6 — agent activity & multi-agent UI (implemented; see "Phase 3.6" below).**
+  Provider lifecycle hooks feed per-session state (working / executing tool / awaiting
+  approval / turn finished), a compact indicator (or badge on the media pill), a hover
+  activity panel for multiple concurrent sessions, and navigable multi-approval cards.
+
 - **Phase 4 — extra modules (not started).** Lyrics, Pomodoro, file shelf, to-do, system
   indicators.
 
@@ -147,7 +152,9 @@ system expiry; sent over the pipe of the client that originated the approval):
   "decision": "approved", "by": "user", "at": "2026-10-27T12:00:05.0000000+00:00" }
 ```
 
-`decision` is one of `approved`, `denied`, `expired`. `by` is `user` or `system`.
+`decision` is one of `approved`, `denied`, `expired`, `dismissed`. `by` is `user`,
+`system`, or `provider-disconnected` (a pending approval is dismissed when its requesting
+connection drops, so the card cannot linger for an agent that can no longer receive it).
 
 ### AgentEvent schema
 
@@ -167,7 +174,10 @@ system expiry; sent over the pipe of the client that originated the approval):
 
 Event types: `agent.started`, `agent.status`, `agent.tool_started`,
 `agent.approval_requested`, `agent.approval_resolved`, `agent.completed`, `agent.failed`,
-`agent.cancelled`.
+`agent.cancelled`, plus the Phase 3.6 lifecycle additions:
+`agent.prompt_submitted`, `agent.tool_finished`, `agent.tool_failed`,
+`agent.turn_finished`, `agent.interrupted`, `agent.session_ended`,
+`agent.subagent_started`, `agent.subagent_stopped`.
 
 ### Validation rules
 
@@ -331,6 +341,124 @@ hook timeout, makes the final call.
 - **Simulator:** `tools\Invoke-MiMiEvent.ps1` exercises the same bridge/approval pipeline
   without a provider (examples above).
 
+## Phase 3.6 — agent activity and multi-agent UI
+
+### How activity events reach MiMi
+
+```
+Claude Code / Codex lifecycle hook
+  → MiMi.AgentCli activity --provider <claude-code|codex>   (fire-and-forget, never blocks)
+  → authenticated named-pipe bridge (same token, ACL, dedup, normalization as approvals)
+  → AgentEventBus
+  → AgentSessionManager   (per-session state, staleness, bounded history)
+  → IslandPresenter       (compact indicator, badge, panel rows, approval queue)
+  → IslandWindow
+```
+
+Lifecycle hooks are **not** approval hooks: they are fast, best-effort telemetry. If the
+bridge is down they exit 0 silently and never affect the agent. Approvals still travel only
+through the synchronous `claude-permission` / `codex-permission` path, which fails closed.
+
+### Session identity and state
+
+A session is identified by `(provider, session_id)` — never by project name or provider
+label, because several sessions (including two from the same provider) can share a project.
+`project` is display metadata only.
+
+`AgentSessionManager` maps provider events to one of these truthful states:
+
+| State | Meaning | Set by |
+|---|---|---|
+| Started | session opened, no task yet | `SessionStart` / `agent.started` |
+| Working | a task was submitted or a tool finished | `UserPromptSubmit`, `PostToolUse`, `agent.prompt_submitted`, `agent.tool_finished` |
+| Executing tool | a tool call is in progress | `PreToolUse`, `SubagentStart`, `agent.tool_started` |
+| Awaiting approval | a permission request is pending | `agent.approval_requested` |
+| Turn finished | the provider ended the turn; **the session is still alive** | `Stop`, `agent.turn_finished` |
+| Interrupted | the user/provider interrupted the turn | `Interrupt`, `agent.interrupted` |
+| Error | a tool or the turn failed | `PostToolUseFailure`, `agent.failed` |
+| Ended | the session terminated | `SessionEnd`, `agent.session_ended` |
+| Unknown | no confirmed event for 90 s (silence is not proof of completion) | staleness sweeper |
+
+Silence never becomes "finished", and MiMi does not claim the model is generating tokens —
+hook telemetry cannot see that. `Turn finished` and `Ended` are deliberately distinct.
+Out-of-order `sequence` metadata cannot rewind a session, late events cannot resurrect an
+ended one, and ended history is capped at 20 sessions.
+
+### Compact indicator
+
+- One working session: `Claude Code · Executing tool` (provider + state).
+- Two or more: `3 agents active`, with a pending-approval count when applicable.
+- While music is playing, the media pill keeps its place and shows a small agent-count
+  badge. Hover the **badge** to open the agent activity panel; hover anywhere else on the
+  pill to open the media controls.
+- Lifecycle updates change the indicator in place — they do not re-trigger island
+  animations. Only turn completion/failure/interruption produces a short toast.
+
+### Multi-agent activity panel
+
+Hovering the agent pill (or the badge on the media pill) opens a panel with one row per
+session: provider, project, state, last action/tool, age, and pending approvals. Finished
+rows stay visible for 5 minutes, then age out; live sessions that have gone silent show
+`Status unknown`.
+
+### Multi-approval navigation
+
+Approval cards are sticky and outrank media. When several approvals are pending, the newest
+is shown first with `1 of 2` / `2 of 2` and `‹ ›` arrow buttons. Each decision resolves only
+its own `approval_request_id` and is pushed back over the connection that requested it;
+concurrent Claude Code and Codex hooks never receive each other's answers. If the requesting
+hook times out or disconnects before a decision, its pending card is dismissed (and the hook
+itself still denies, fail-closed).
+
+### Installing the lifecycle hooks
+
+Users who installed MiMi before Phase 3.6 must re-run the installers to add the activity
+hooks (existing hooks are preserved; the operation is idempotent):
+
+```powershell
+MiMi.AgentCli.exe install-claude
+MiMi.AgentCli.exe install-codex
+```
+
+- **Claude Code** (`~/.claude/settings.json`): adds `SessionStart`, `UserPromptSubmit`,
+  `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `SessionEnd`, `SubagentStart`,
+  and `SubagentStop` command hooks. No trust step is needed. Start a new Claude Code session
+  (or restart it) if an already-running session does not pick up newly written settings.
+- **Codex** (`~/.codex/hooks.json`): adds `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+  `PostToolUse`, `Stop`, `Interrupt`, `SessionEnd`, `SubagentStart`, and `SubagentStop`, in
+  addition to `PermissionRequest`. Run `/hooks` in the Codex TUI to trust the updated hook,
+  then start a new Codex session.
+
+Activity hooks carry no timeout override, so they can never gate or delay the provider.
+`uninstall-claude` / `uninstall-codex` remove only MiMi-signed commands.
+
+### Verification performed for Phase 3.6
+
+- 100/100 automated tests (session lifecycle, multi-provider/multi-session, staleness,
+  out-of-order events, bounded history, activity parsing, installers, bridge ordering and
+  disconnect dismissal, approval correlation).
+- Bridge integration test: approval is registered before subscribers see it, and a pending
+  approval is dismissed when its requesting connection drops.
+- Live bridge + UI verification using provider-shaped hook JSON through the real
+  `MiMi.AgentCli activity` and `*-permission` commands (three concurrent sessions across two
+  providers; approval card priority; ‹ › navigation; Approve/Deny routing verified from each
+  hook's stdout; 8 s timeout produced a deny; hidden mode stayed hidden on new events;
+  media badge and both hover panels inspected in screenshots).
+- **Not verified with a live Claude Code or Codex session in this pass.** The hook payloads
+  were provider-shaped simulations driven through the real adapter and bridge, not actual
+  paid provider sessions. Treat real-provider end-to-end as still to be confirmed.
+
+### Known limitations
+
+- No token-level/"thinking" telemetry; states reflect hook moments only.
+- A session that goes silent flips to `Status unknown` after 90 s; MiMi cannot know whether
+  the agent is still reasoning unless the provider emits another hook.
+- Finished session rows are hidden after 5 minutes; ended-session history is capped at 20.
+- Only one approval card is visible at a time; the others are reachable with the arrows.
+- Codex lifecycle hooks require the one-time `/hooks` trust review.
+- "Open in Agent" copies identifying text to the clipboard; it does not focus the provider.
+- The activity panel is built on hover (ages refresh when it is opened), not live-updated.
+
 ## Settings reference
 
 Persisted to `%LOCALAPPDATA%\MiMi\settings.json`. Invalid or corrupt files fall back to
@@ -366,8 +494,16 @@ defaults; values are clamped to the ranges below on every save.
 - **Approval UI shows "expired".** The approval TTL passed (default 5 minutes,
   `approvalTtlMinutes`). Expired approvals cannot be approved or denied; send a new
   `agent.approval_requested` event.
-- **Logs:** `%LOCALAPPDATA%\MiMi\logs\mimi.log`. Bridge connections, rejections, and
-  approval decisions are logged there.
+- **Agent activity never appears.** Check that `agentsModuleEnabled` and `bridgeEnabled`
+  are on, then re-run `MiMi.AgentCli.exe install-claude` / `install-codex` (builds before
+  Phase 3.6 did not install lifecycle hooks), start a new provider session, and for Codex
+  approve the hook in `/hooks`. The log shows `Bridge: client 'claude-code-activity'
+  connected` for each event; if that line is absent the provider is not invoking the hook.
+- **An approval card stays on screen after the agent gave up.** It should be dismissed
+  automatically when the requesting hook disconnects. If it persists, check the log for
+  `dismissed: requesting client ... disconnected`; otherwise the TTL will clear it.
+- **Logs:** `%LOCALAPPDATA%\MiMi\logs\mimi.log`. Bridge connections, rejections, approval
+  cards/decisions, dismissals, and visibility transitions are logged there.
 
 ## Architecture
 
@@ -375,9 +511,9 @@ defaults; values are clamped to the ranges below on every save.
 |---|---|
 | `MiMi.Core` | Settings/config store, island state manager (priorities, alerts, pinned state), dedup store, logger |
 | `MiMi.Media` | GSMTC media service and media models |
-| `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus |
-| `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security |
-| `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest, Codex notify) and their installers |
+| `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus, `AgentSessionManager` (per-session lifecycle, staleness, bounded history) |
+| `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security, per-connection approval correlation |
+| `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest and `activity` lifecycle hooks, Codex notify) and their installers |
 | `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest |
 | `MiMi.Tests` | xUnit tests for config, dedup, events, approvals, state, bridge, and hook adapters |
 | `docs/` | Research references: Claude Code hooks (`claude-code-hooks.md`), Codex integrations (`codex-integrations.md`) |
@@ -389,7 +525,7 @@ wins, transients expire back to the pinned state), and the window renders it.
 
 ## Testing checklist
 
-Covered by 52 automated tests (`dotnet test MiMi.slnx -c Debug`) and `MiMi.exe --selftest`:
+Covered by 100 automated tests (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Debug`) and `MiMi.exe --selftest`:
 
 - Settings round-trip and corrupt-file fallback to defaults; value clamping.
 - Dedup store: duplicate ids rejected, capacity eviction, empty id accepted.
@@ -401,7 +537,17 @@ Covered by 52 automated tests (`dotnet test MiMi.slnx -c Debug`) and `MiMi.exe -
   re-fire, transient alerts expire and the pinned state returns.
 - Bridge: pipe frame round-trip, oversized frame rejection, invalid token rejection,
   malformed event rejection with error ack, hello/event/ack handshake end-to-end,
-  approval decision push-back to the originating client (also exercised by `--selftest`).
+  approval decision push-back to the originating client (also exercised by `--selftest`),
+  approval registered before subscribers are notified, pending approval dismissed when its
+  requesting connection disconnects.
+- Phase 3.6 session tracking: full lifecycle, prompt/tool states, two sessions from one
+  provider, mixed providers with identical session ids, approval correlation, staleness →
+  `Unknown`, ended sessions ignore late events, out-of-order sequences cannot rewind,
+  bounded ended history, finished-row aging, active-count excludes ended/stale sessions.
+- Activity hooks and installers: `PreToolUse`/`PostToolUse`/`Stop`/`SessionEnd`/
+  `SubagentStart`/`SubagentStop`/`Interrupt` mapping, permission events not double-reported,
+  provider-aware approval text, all Claude/Codex activity hooks installed idempotently with
+  no timeout gate, uninstall preserves user hooks.
 - Hook adapters: Claude Code / Codex PermissionRequest stdin parsing (tool mapping, unknown
   input fields tolerated, wrong event rejected) and the decision-JSON shape — allow/deny
   with a message only, never `updatedInput`; Codex notify payload parsing (turn-complete

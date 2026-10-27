@@ -61,7 +61,20 @@ public sealed class MediaCompactView : IslandContent
 
     /// <summary>Agent sessions active while music plays: a tiny count on the pill's
     /// right edge keeps both worlds discoverable without displacing either.</summary>
-    public int AgentBadgeCount { get => _agentBadgeCount; set => Set(ref _agentBadgeCount, value); }
+    public int AgentBadgeCount
+    {
+        get => _agentBadgeCount;
+        set
+        {
+            if (_agentBadgeCount == value) return;
+            _agentBadgeCount = value;
+            Raise(nameof(AgentBadgeCount));
+            // The template binds the derived properties, so they must notify too.
+            Raise(nameof(HasAgentBadge));
+            Raise(nameof(AgentBadgeLabel));
+        }
+    }
+
     public bool HasAgentBadge => AgentBadgeCount > 0;
     public string AgentBadgeLabel => AgentBadgeCount.ToString();
 }
@@ -331,11 +344,10 @@ public sealed class AgentCardViewModel : ObservableObject
     {
         _approvalIndex = index;
         _approvalTotal = total;
-        Set(ref _positionField, ApprovalPosition);
-        Set(ref _hasMultipleField, HasMultipleApprovals);
+        // Bindings target the computed properties, not the backing fields.
+        Raise(nameof(ApprovalPosition));
+        Raise(nameof(HasMultipleApprovals));
     }
-    private string _positionField = "";
-    private bool _hasMultipleField;
 
     public required string ApprovalId { get; init; }
     public Action<ApprovalDecision>? Decide { get; init; }
@@ -421,6 +433,9 @@ public abstract class ObservableObject : INotifyPropertyChanged
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return;
         field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        Raise(name);
     }
+
+    protected void Raise(string? name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

@@ -400,3 +400,44 @@ The local file `C:\Users\basit\.zcode\cli\plugins\cache\zcode-plugins-official\z
 - Silence (exit 0, no output): normal permission flow (interactive prompt) proceeds
 - Fail closed: add `"onFailure": "block"` to the handler so a crash/timeout denies the request (v2.1.295+)
 - Never rely on exit 2 for this event; it is ignored
+
+---
+
+## MiMi implementation notes (Phase 3.6)
+
+What MiMi actually ships for Claude Code. The research above is unchanged.
+
+- **Approval path (synchronous).** `MiMi.AgentCli.exe claude-permission` is the `PermissionRequest`
+  command hook. It reads the section-B stdin JSON, normalizes it, sends
+  `agent.approval_requested` over the authenticated bridge, waits for the island decision
+  (default 90 s, bounded by the hook's own `timeout`, installed default 260 s), then prints
+  exactly one JSON object on stdout:
+
+  ```json
+  {"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow","message":"Approved via MiMi."}}}
+  ```
+
+  Deny uses the same shape with `"behavior":"deny"`. MiMi never returns `updatedInput` or
+  `updatedPermissions`, and never approves without a user click.
+- **Fail closed.** MiMi offline, bridge timeout, expired or dismissed request, malformed stdin,
+  or an internal error all print `behavior: "deny"` with an explanatory message and exit 0.
+  The integration does not rely on exit 2 or on `onFailure`.
+- **Lifecycle path (fire-and-forget).** `MiMi.AgentCli.exe activity --provider claude-code` is
+  installed for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+  `PostToolUseFailure`, `Stop`, `SessionEnd`, `SubagentStart`, and `SubagentStop`. These entries
+  carry no `timeout`, exit 0 immediately, print no hook output, and never gate or delay Claude.
+  State mapping on the island: `SessionStart` → Started, `UserPromptSubmit` → Working,
+  `PreToolUse` / `SubagentStart` → Executing tool, `PostToolUse` → Working,
+  `PostToolUseFailure` → Error, `Stop` → Turn finished, `SessionEnd` → Ended,
+  `SubagentStop` → Working. `PermissionRequest` is not duplicated as a lifecycle event; the
+  approval event itself carries the awaiting-approval state.
+- **Installer behavior.** `install-claude` edits `~/.claude/settings.json` only, adds
+  matcher-less hook groups, preserves existing hooks, writes a timestamped
+  `settings.json.mimi-backup-*` copy before modifying, and is idempotent. `uninstall-claude`
+  removes only entries whose executable and argument are MiMi's. No trust step is required, but
+  Claude Code loads hook settings at session start: start (or restart) a session after
+  installing.
+- **Correlation and security.** An approval is correlated by its pipe connection plus
+  `approval_request_id`; the decision is written only to the connection that sent the request.
+  If that connection drops before a decision arrives, the card is dismissed and the hook denies.
+  Every bridge failure remains a deny.

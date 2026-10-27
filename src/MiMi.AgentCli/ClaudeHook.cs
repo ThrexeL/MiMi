@@ -53,7 +53,7 @@ public static class ClaudeHook
             sessionId: sessionId,
             type: AgentEventTypes.ApprovalRequested,
             title: "Approval Required",
-            message: $"Claude Code wants to use {toolName}.",
+            message: $"{(provider == "codex" ? "Codex CLI" : "Claude Code")} wants to use {toolName}.",
             project: project,
             approvalRequestId: "cc-" + Guid.NewGuid().ToString("N"),
             metadata: new Dictionary<string, string>

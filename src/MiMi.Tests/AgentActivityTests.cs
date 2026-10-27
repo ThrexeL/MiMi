@@ -156,6 +156,23 @@ public class AgentSessionManagerTests : IDisposable
     }
 
     [Fact]
+    public void Active_ShowsLiveSessions_AndAgesOutFinishedOnes()
+    {
+        _mgr.Apply(Ev("codex", "live", AgentEventTypes.ToolStarted));
+        _mgr.Apply(Ev("claude-code", "gone", AgentEventTypes.SessionEnded));
+        _mgr.Apply(Ev("codex", "done", AgentEventTypes.TurnFinished));
+
+        var active = _mgr.Active;
+        Assert.Contains(active, s => s.SessionId == "live");
+        Assert.Contains(active, s => s.SessionId == "done");
+        Assert.DoesNotContain(active, s => s.SessionId == "gone");
+
+        var finished = _mgr.Get("codex", "done")!;
+        Assert.True(AgentSessionManager.IsVisible(finished, DateTimeOffset.UtcNow));
+        Assert.False(AgentSessionManager.IsVisible(finished, DateTimeOffset.UtcNow.AddMinutes(6)));
+    }
+
+    [Fact]
     public void WorkingCount_IgnoresEndedAndStale()
     {
         _mgr.Apply(Ev("codex", "w1", AgentEventTypes.ToolStarted));

@@ -71,6 +71,23 @@ public class AgentEventTests
     }
 
     [Fact]
+    public void Normalize_MissingEventId_GeneratesUniqueIds()
+    {
+        var a = AgentEvent.Normalize(new AgentEvent { Provider = "codex", Type = AgentEventTypes.Status }, out _);
+        var b = AgentEvent.Normalize(new AgentEvent { Provider = "codex", Type = AgentEventTypes.Status }, out _);
+        Assert.False(string.IsNullOrEmpty(a!.EventId));
+        Assert.NotEqual(a.EventId, b!.EventId);
+    }
+
+    [Fact]
+    public void Normalize_ControlOnlyProvider_Rejected()
+    {
+        var raw = new AgentEvent { Provider = "\u0001\u0002", Type = AgentEventTypes.Status };
+        Assert.Null(AgentEvent.Normalize(raw, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
     public void TryParse_ValidJson_ReturnsEvent()
     {
         var json = """

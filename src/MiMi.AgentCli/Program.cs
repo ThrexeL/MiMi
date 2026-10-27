@@ -127,7 +127,7 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
     {
         await using var bridge = await BridgeClient.ConnectAsync(TimeSpan.FromSeconds(5), $"{provider}-hook");
         await bridge.SendEventAsync(request.Event, TimeSpan.FromSeconds(5));
-        Console.Error.WriteLine($"MiMi: approval '{request.Event.ApprovalRequestId}' shown ({request.DecisionSummary}); waiting up to {waitSeconds}s.");
+        Console.Error.WriteLine($"MiMi: approval '{request.Event.ApprovalRequestId}' sent ({request.DecisionSummary}); waiting up to {waitSeconds}s.");
 
         var decision = await bridge.WaitDecisionAsync(request.Event.ApprovalRequestId!, TimeSpan.FromSeconds(waitSeconds), default);
         var (mapped, reason) = decision switch

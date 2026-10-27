@@ -83,13 +83,15 @@ public sealed record AgentEvent
         }
 
         var provider = Sanitize(raw.Provider, 40);
-        if (provider is null) { error = "provider contains control characters"; return null; }
+        if (string.IsNullOrEmpty(provider)) { error = "provider contains control characters"; return null; }
 
         var title = Sanitize(raw.Title, 120) ?? "";
         var message = Sanitize(raw.Message, 500) ?? "";
         var project = Sanitize(raw.Project, 80) ?? "";
         var sessionId = Sanitize(raw.SessionId, 80) ?? "";
-        var eventId = Sanitize(raw.EventId, 80) ?? Guid.NewGuid().ToString("N");
+        var eventId = Sanitize(raw.EventId, 80);
+        // An empty id would make every such event dedup against the first one.
+        if (string.IsNullOrEmpty(eventId)) eventId = Guid.NewGuid().ToString("N");
 
         // Trust our own clock for ordering/sweeps; client timestamps are advisory only.
         var timestamp = raw.TimestampUtc is { } ts && ts <= DateTimeOffset.UtcNow

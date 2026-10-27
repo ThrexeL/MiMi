@@ -349,8 +349,10 @@
                     <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
                                 Visibility="{Binding Agent.HasMultipleApprovals, Converter={StaticResource BoolToVis}}">
                         <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                                AutomationProperties.Name="Previous approval"
                                 Command="{Binding Agent.PrevApprovalCommand}" Content="&#xE76B;"/>
                         <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                                AutomationProperties.Name="Next approval"
                                 Command="{Binding Agent.NextApprovalCommand}" Content="&#xE76C;"/>
                     </StackPanel>
                 </StackPanel>

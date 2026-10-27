@@ -56,7 +56,8 @@ public sealed class IslandPresenter
         // Session-manager changes arrive on worker threads; refresh silently on the UI.
         _sessions.SessionChanged += _ => _dispatcher.BeginInvoke(RefreshPinned);
 
-        _approvals.Resolved += request => _dispatcher.BeginInvoke(() => OnApprovalResolved(request));
+        // ApprovalStore.Resolved is wired once by the composition root (App), which also
+        // logs decisions. Subscribing here as well would handle every resolution twice.
 
         // Low-frequency session sweep (staleness + bounded history) lives in the manager.
         _sessionSweeper = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
@@ -88,8 +89,7 @@ public sealed class IslandPresenter
     {
         var agentsEnabled = _config.Current.AgentsModuleEnabled;
         var activeSessions = agentsEnabled ? _sessions.Active : Array.Empty<AgentSession>();
-        var workingCount = activeSessions.Count(s => !s.Ended && !s.Stale
-            && s.State is not (SessionActivity.TurnFinished or SessionActivity.Interrupted));
+        var workingCount = activeSessions.Count(IsWorking);
 
         var mediaActive = _config.Current.MediaModuleEnabled && _mediaCompact is not null;
         if (!mediaActive) _mediaCompact = null;
@@ -127,6 +127,13 @@ public sealed class IslandPresenter
         if (_sessions.All.Count > 0) _sessionSweeper.Start(); else _sessionSweeper.Stop();
     }
 
+    /// <summary>The one definition of "actively working" used by both the count and the
+    /// single-session label, so the two can never disagree.</summary>
+    private static bool IsWorking(AgentSession s) =>
+        !s.Ended && !s.Stale
+        && s.State is SessionActivity.Started or SessionActivity.Working
+            or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval;
+
     private void UpdateAgentIndicator(IReadOnlyList<AgentSession> sessions, int workingCount)
     {
         _agentIndicatorVm ??= new AgentIndicatorViewModel();
@@ -137,8 +144,7 @@ public sealed class IslandPresenter
         }
         else
         {
-            var s = sessions.First(s => !s.Ended && !s.Stale
-                && s.State is not (SessionActivity.TurnFinished or SessionActivity.Interrupted));
+            var s = sessions.First(IsWorking);
             var provider = AgentCardViewModel.DisplayProvider(s.Provider);
             _agentIndicatorVm.Update($"{provider} · {StatusLabel(s)}", ExpressionFor(s), s.PendingApprovalIds.Count);
         }
@@ -210,8 +216,16 @@ public sealed class IslandPresenter
         {
             case AgentEventTypes.ApprovalRequested:
             {
-                var request = _approvals.Get(ev.ApprovalRequestId!) ?? _approvals.Register(ev);
-                if (request is null) return;
+                var request = _approvals.Get(ev.ApprovalRequestId!)
+                    ?? _approvals.Register(ev)
+                    // Register can race another registration path; re-read before giving up.
+                    ?? _approvals.Get(ev.ApprovalRequestId!);
+                if (request is not { IsPending: true })
+                {
+                    Logger.Warn($"Approval '{ev.ApprovalRequestId}' ignored (unknown, resolved, or expired).");
+                    return;
+                }
+                Logger.Info($"Approval requested: id='{ev.ApprovalRequestId}' provider='{ev.Provider}' session='{ev.SessionId}' project='{ev.Project}'.");
                 EnqueueApproval(ev.ApprovalRequestId!, isNavigating: false);
                 break;
             }
@@ -295,7 +309,7 @@ public sealed class IslandPresenter
         if (!isNavigating) _approvalQueueIndex = _approvalQueue.Count - 1; // newest wins the view
 
         var request = _approvals.Get(approvalId);
-        if (request is null) return;
+        if (request is not { IsPending: true }) return;
 
         var card = new AgentCardViewModel(
             navigateApprovals: delta => _dispatcher.BeginInvoke(() => NavigateApprovals(delta)))
@@ -340,6 +354,7 @@ public sealed class IslandPresenter
             Content = new ApprovalView(card),
             // Sticky: stays until resolved/expired — a song change never displaces it.
         });
+        Logger.Info($"Approval card '{approvalId}' shown ({_approvalQueueIndex + 1} of {_approvalQueue.Count}).");
     }
 
     private void NavigateApprovals(int delta)
@@ -351,6 +366,7 @@ public sealed class IslandPresenter
 
     public void OnApprovalResolved(ApprovalRequest request)
     {
+        Logger.Info($"Approval resolved in UI: id='{request.ApprovalRequestId}' decision={request.Decision} by='{request.ResolvedBy}'.");
         _approvalCards.Remove(request.ApprovalRequestId);
         _state.Clear("approval:" + request.ApprovalRequestId);
 

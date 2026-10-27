@@ -102,6 +102,9 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
     private async Task ServeClientAsync(NamedPipeServerStream server, CancellationToken ct)
     {
         var clientLabel = "unknown";
+        // Approvals sent on this connection: if it drops before a decision is written,
+        // nobody can receive the response any more, so they must not linger in the UI.
+        var approvalsOnConnection = new HashSet<string>(StringComparer.Ordinal);
         try
         {
             // Plain await-using: server runs on a threadpool thread (no sync context), and
@@ -159,12 +162,17 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
                             continue;
                         }
 
+                        // Register before publishing: subscribers must always be able to
+                        // resolve the approval they are about to display. (Registering from
+                        // both sides around Publish raced and could drop the first card.)
+                        if (normalized.Type == AgentEventTypes.ApprovalRequested)
+                        {
+                            _approvals.Register(normalized);
+                            if (_approvals.Get(normalized.ApprovalRequestId!) is { IsPending: true })
+                                approvalsOnConnection.Add(normalized.ApprovalRequestId!);
+                        }
                         EventAccepted?.Invoke(normalized);
                         _bus.Publish(normalized);
-                        // The bridge is the security boundary: approvals are registered here
-                        // so UI decisions correlate even if no presenter is attached.
-                        if (normalized.Type == AgentEventTypes.ApprovalRequested)
-                            _approvals.Register(normalized);
                         await BridgeProtocol.WriteFrameAsync(server,
                             new BridgeProtocol { Kind = "ack", Ok = true }, ct);
                     }
@@ -173,6 +181,13 @@ public sealed class NamedPipeAgentBridge : IAsyncDisposable
                 {
                     lock (_targetGate) _responseTargets.Remove(server);
                     Logger.Info($"Bridge: client '{clientLabel}' disconnected.");
+                    // A dropped requester can never receive a decision. Dismiss its still-
+                    // pending approvals so cards and session states do not go stale.
+                    foreach (var id in approvalsOnConnection)
+                    {
+                        if (_approvals.TryDecide(id, ApprovalDecision.Dismissed, "provider-disconnected"))
+                            Logger.Warn($"Approval '{id}' dismissed: requesting client '{clientLabel}' disconnected before a decision.");
+                    }
                 }
             }
         }

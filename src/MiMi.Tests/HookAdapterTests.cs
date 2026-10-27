@@ -41,6 +41,14 @@ public class ClaudeHookTests
     }
 
     [Fact]
+    public void ParseStdin_CodexProvider_LabelsRequestTruthfully()
+    {
+        var parsed = ClaudeHook.ParseStdin(BashRequest, provider: "codex");
+        Assert.Equal("codex", parsed.Event.Provider);
+        Assert.StartsWith("Codex CLI wants to use Bash.", parsed.Event.Message);
+    }
+
+    [Fact]
     public void ParseStdin_EditTool_MapsFilePath()
     {
         var parsed = ClaudeHook.ParseStdin("""
