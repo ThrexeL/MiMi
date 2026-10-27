@@ -595,6 +595,52 @@
             </StackPanel>
         </DataTemplate>
 
+
+        <DataTemplate DataType="{x:Type ui:ShelfView}">
+            <StackPanel Margin="16,10,14,10">
+                <Grid Margin="0,0,0,6">
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                               FontWeight="SemiBold" Foreground="{StaticResource AccentAmber}" Text="SHELF"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                               Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Right"
+                               Text="{Binding HeaderCount}"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="ShelfRow" Tag="{Binding Path}" Background="Transparent"
+                                    Padding="2,3" Margin="0,0,0,2" Cursor="SizeAll"
+                                    ToolTip="Drag out to Explorer or an app">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                                               Foreground="{StaticResource TextSecondary}" Text="&#xE8B7;"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" Width="170"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                               Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
+                                               Margin="8,0,0,0" Text="{Binding SizeLabel}"/>
+                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                               Foreground="#FFFF8FB1" VerticalAlignment="Center"
+                                               Text="{Binding MissingLabel}"/>
+                                    <Button Style="{StaticResource TransportButton}" Width="20" Height="20"
+                                            Margin="8,0,0,0" Command="{Binding RemoveCommand}"
+                                            ToolTip="Remove from shelf (keeps the original file)">
+                                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9"
+                                                   Text="&#xE711;"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                           Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
+                           Text="Drop files on the island to shelve them — drag rows back out anytime"/>
+            </StackPanel>
+        </DataTemplate>
+
     </Window.Resources>
 
     <!-- Pill anchored top-center; the window is a large transparent canvas whose only

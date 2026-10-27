@@ -84,7 +84,8 @@ public partial class App : Application
 
         var water = new WaterTracker();
         var todos = new TodoStore();
-        _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos);
+        var shelf = new FileShelfStore();
+        _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos, shelf);
 
         _island = new IslandWindow(
             _config,
@@ -94,7 +95,9 @@ public partial class App : Application
                 : TimeSpan.Zero,
             mediaVm,
             () => _presenter.BuildAgentPanel(),
-            secondTick: () => _presenter.OnSecondTick());
+            secondTick: () => _presenter.OnSecondTick(),
+            shelfDrop: paths => Dispatcher.BeginInvoke(() => _presenter.AddToShelf(paths)),
+            shelfRemove: path => Dispatcher.BeginInvoke(() => _presenter.RemoveFromShelf(path)));
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>
@@ -172,11 +175,16 @@ public partial class App : Application
         _tray.SetAutoStartIndicator(AutoStart.IsEnabled());
         _tray.SetVisibilityIndicator(true);
         _tray.SetUtilityIndicators(false, false, false);
+        _tray.SetShelfIndicator(shelf.Count > 0, false);
         _tray.UtilityIndicatorsRequested += () => Dispatcher.BeginInvoke(() =>
+        {
             _tray.SetUtilityIndicators(
                 _presenter.UtilityPins.Contains("pomodoro"),
                 _presenter.UtilityPins.Contains("water"),
-                _presenter.UtilityPins.Contains("todo")));
+                _presenter.UtilityPins.Contains("todo"));
+            _tray.SetShelfIndicator(_presenter.Shelf.Count > 0,
+                _presenter.UtilityPins.Contains("shelf"));
+        });
         _tray.CommandSelected += OnTrayCommand;
         _island.VisibilityPreferenceChanged += preference =>
             Dispatcher.BeginInvoke(() =>
@@ -253,6 +261,9 @@ public partial class App : Application
                     break;
                 case TrayMenuCommand.ToggleTodo:
                     _presenter.ToggleUtility("todo");
+                    break;
+                case TrayMenuCommand.ToggleShelf:
+                    _presenter.ToggleUtility("shelf");
                     break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;

@@ -61,16 +61,22 @@ public partial class IslandWindow : Window
     private double _glowLevel = 0.55; // current in-pill aurora level (0..1)
     private readonly Func<AgentActivityPanelView> _agentPanelProvider;
     private readonly Action? _secondTick;
+    private readonly Action<string[]>? _shelfDrop;
+    private readonly Action<string>? _shelfRemove;
 
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
         Func<string, TimeSpan?> approvalTimeLeft,
         MediaViewModel mediaVm,
         Func<AgentActivityPanelView>? agentPanelProvider = null,
-        Action? secondTick = null)
+        Action? secondTick = null,
+        Action<string[]>? shelfDrop = null,
+        Action<string>? shelfRemove = null)
     {
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _secondTick = secondTick;
+        _shelfDrop = shelfDrop;
+        _shelfRemove = shelfRemove;
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -108,6 +114,19 @@ public partial class IslandWindow : Window
         };
 
         Pill.SizeChanged += (_, _) => UpdateClip();
+
+        // File shelf drag-in: drops are accepted ONLY while the shelf panel is the
+        // pinned content, so the idle face never intercepts Explorer drops.
+        Host.AllowDrop = true;
+        Host.Drop += (_, e) =>
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop)
+                && e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
+            {
+                _shelfDrop?.Invoke(paths);
+                e.Handled = true;
+            }
+        };
 
 
         // 1 Hz ticker: extrapolated media position + approval countdowns.
@@ -493,6 +512,9 @@ public partial class IslandWindow : Window
 
     private void HookTemplate(IslandContent content)
     {
+        // Explorer drops land only on an open shelf panel.
+        Host.AllowDrop = content is ShelfView;
+
         StopEq();
         _eqHost = null;
         _progressSlider = null;
@@ -670,6 +692,33 @@ public partial class IslandWindow : Window
     }
 
     // ---- helpers -------------------------------------------------------------------
+
+    /// <summary>Wires every shelf row for drag-out: holding the row starts a real
+    /// OLE drag (FileDrop) that Explorer and most apps accept. Runs on the UI thread
+    /// and blocks inside DoDragDrop until the drop finishes (standard WPF pattern).</summary>
+    private void WireShelfDragOut()
+    {
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+        {
+            WireShelfDragOutRecursive(Pill);
+        });
+    }
+
+    private void WireShelfDragOutRecursive(DependencyObject root)
+    {
+        if (root is Border { Tag: string path } border && root is FrameworkElement { DataContext: ShelfRowViewModel })
+        {
+            border.PreviewMouseLeftButtonDown += (_, e) =>
+            {
+                if (e.ClickCount != 1) return;
+                var data = new DataObject(DataFormats.FileDrop, new[] { path });
+                DragDrop.DoDragDrop(border, data, DragDropEffects.Move | DragDropEffects.Copy);
+            };
+        }
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+            WireShelfDragOutRecursive(VisualTreeHelper.GetChild(root, i));
+    }
 
     private static FrameworkElement? FindDescendant(DependencyObject root, string name)
     {

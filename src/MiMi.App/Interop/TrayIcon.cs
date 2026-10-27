@@ -18,6 +18,7 @@ public sealed class TrayIcon : IDisposable
     private const int MenuPomodoro = 106;
     private const int MenuWater = 107;
     private const int MenuTodo = 108;
+    private const int MenuShelf = 109;
     private const int MenuSettings = 101;
     private const int MenuSimulate = 102;
     private const int MenuAutoStart = 103;
@@ -33,6 +34,7 @@ public sealed class TrayIcon : IDisposable
     private bool _autoStartChecked;
     private bool _islandVisible = true;
     private readonly HashSet<string> _utilityPins = new(StringComparer.Ordinal);
+    private bool _shelfHasItems;
     private uint _taskbarCreatedMsg;
     private Action? _balloonClick;
 
@@ -55,6 +57,9 @@ public sealed class TrayIcon : IDisposable
         if (water) _utilityPins.Add("water");
         if (todo) _utilityPins.Add("todo");
     }
+
+    /// <summary>Shelf pill auto-shows when items are on it; the tray item pins it open.</summary>
+    public void SetShelfIndicator(bool hasItems, bool pinned) => _shelfHasItems = hasItems;
 
     public void Initialize()
     {
@@ -185,6 +190,8 @@ public sealed class TrayIcon : IDisposable
         NativeMethods.AppendMenuW(menu, _utilityPins.Contains("pomodoro") ? 8u : 0u, (IntPtr)MenuPomodoro, "Focus timer");
         NativeMethods.AppendMenuW(menu, _utilityPins.Contains("water") ? 8u : 0u, (IntPtr)MenuWater, "Water tracker");
         NativeMethods.AppendMenuW(menu, _utilityPins.Contains("todo") ? 8u : 0u, (IntPtr)MenuTodo, "To-do list");
+        NativeMethods.AppendMenuW(menu, (_utilityPins.Contains("shelf") || _shelfHasItems) ? 8u : 0u,
+            (IntPtr)MenuShelf, "File shelf");
         NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSettings, "Settings…");
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSimulate, "Simulate agent event");
@@ -205,6 +212,7 @@ public sealed class TrayIcon : IDisposable
             MenuPomodoro => TrayMenuCommand.TogglePomodoro,
             MenuWater => TrayMenuCommand.ToggleWater,
             MenuTodo => TrayMenuCommand.ToggleTodo,
+            MenuShelf => TrayMenuCommand.ToggleShelf,
             MenuToggleVisibility => TrayMenuCommand.ToggleVisibility,
             MenuSettings => TrayMenuCommand.Settings,
             MenuSimulate => TrayMenuCommand.Simulate,
@@ -276,7 +284,7 @@ public sealed class TrayIcon : IDisposable
     }
 }
 
-public enum TrayMenuCommand { ToggleVisibility, TogglePomodoro, ToggleWater, ToggleTodo, Settings, Simulate, ToggleAutoStart, Restart, Exit }
+public enum TrayMenuCommand { ToggleVisibility, TogglePomodoro, ToggleWater, ToggleTodo, ToggleShelf, Settings, Simulate, ToggleAutoStart, Restart, Exit }
 
 /// <summary>Balloon severity: maps to the Shell info icon (not app behavior).</summary>
 public enum TrayNotificationKind { Info, Warning, Error }

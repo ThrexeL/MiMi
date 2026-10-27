@@ -26,6 +26,7 @@ public sealed class IslandPresenter
     private readonly PomodoroTimer _pomodoro = new();
     private readonly WaterTracker _water;
     private readonly TodoStore _todos;
+    private readonly FileShelfStore _shelf;
     private PomodoroViewModel? _pomodoroVm;
     private WaterViewModel? _waterVm;
     private TodoViewModel? _todoVm;
@@ -55,8 +56,10 @@ public sealed class IslandPresenter
     public IslandContent? PinnedContent { get; private set; }
 
     public IslandPresenter(ConfigStore config, IslandStateManager state, ApprovalStore approvals,
-        MediaViewModel mediaVm, Dispatcher dispatcher, WaterTracker water, TodoStore todos)
+        MediaViewModel mediaVm, Dispatcher dispatcher, WaterTracker water, TodoStore todos,
+        FileShelfStore? shelf = null)
     {
+        _shelf = shelf ?? new FileShelfStore();
         _config = config;
         _state = state;
         _approvals = approvals;
@@ -112,6 +115,34 @@ public sealed class IslandPresenter
 
     public AgentSessionManager Sessions => _sessions;
     public IReadOnlyCollection<string> UtilityPins => _utilityPins;
+    public FileShelfStore Shelf => _shelf;
+
+    /// <summary>Files dropped onto the open shelf panel.</summary>
+    public void AddToShelf(IEnumerable<string> paths)
+    {
+        if (_shelf.AddRange(paths) > 0)
+        {
+            _shelf.Save();
+            RefreshPinned();
+        }
+    }
+
+    public void RemoveFromShelf(string path)
+    {
+        _shelf.Remove(path);
+        _shelf.Save();
+        RefreshPinned();
+    }
+
+    public ShelfView BuildShelfView()
+    {
+        var rows = _shelf.Items.Select(i => new ShelfRowViewModel(
+            i.Path,
+            FileShelfStore.FormatSize(i.SizeBytes),
+            !_shelf.Exists(i),
+            path => RemoveFromShelf(path))).ToList();
+        return new ShelfView(rows, $"{_shelf.Count} item{(_shelf.Count == 1 ? "" : "s")}");
+    }
 
     /// <summary>Notification decisions that should become Windows toasts while hidden.
     /// The composition root owns the tray; the presenter never displays system UI itself.</summary>
@@ -297,6 +328,8 @@ public sealed class IslandPresenter
             _utilityPins.Contains("pomodoro") ? new PomodoroView(_pomodoroVm!)
             : _utilityPins.Contains("water") ? new WaterView(_waterVm!)
             : _utilityPins.Contains("todo") ? new TodoView(_todoVm!)
+            : _utilityPins.Contains("shelf") ? BuildShelfView()
+            : _shelf.Count > 0 ? BuildShelfView()
             : pomodoroVisible ? new PomodoroView(_pomodoroVm!)
             : null;
         var utilityPriority = _utilityPins.Count > 0 ? IslandPriority.UserPanel : IslandPriority.Utility;

@@ -265,6 +265,50 @@ public sealed class TodoRowViewModel : ObservableObject
     }
 }
 
+// ---- file shelf (Phase 4 / Milestone 5) -----------------------------------------
+
+/// <summary>One draggable shelf row. Path feeds the drag-out DataObject.</summary>
+public sealed class ShelfRowViewModel : ObservableObject
+{
+    public string Path { get; }
+    public string Name { get; }
+    public string SizeLabel { get; }
+    public bool Missing { get; }
+    public string MissingLabel { get; }
+
+    public ICommand RemoveCommand { get; }
+
+    public ShelfRowViewModel(string path, string sizeLabel, bool missing,
+        Action<string> remove)
+    {
+        Path = path;
+        Name = System.IO.Path.GetFileName(path);
+        SizeLabel = missing ? "missing" : sizeLabel;
+        Missing = missing;
+        MissingLabel = missing ? " (missing)" : "";
+        RemoveCommand = new RelayCommand(() => remove(path));
+    }
+}
+
+/// <summary>File shelf panel: header + rows. Auto-height; drag-out handled by the
+/// window (DoDragDrop with a FileDrop DataObject).</summary>
+public sealed class ShelfView : IslandContent
+{
+    public IReadOnlyList<ShelfRowViewModel> Rows { get; }
+    public string HeaderCount { get; }
+
+    public ShelfView(IReadOnlyList<ShelfRowViewModel> rows, string headerCount)
+    {
+        Rows = rows;
+        HeaderCount = headerCount;
+    }
+
+    public override double TargetWidth => 400;
+    public override double TargetCornerRadius => 22;
+    public override double TargetHeight => 74;
+    public override bool AutoHeight => true;
+}
+
 /// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>
 public sealed class AgentActivityPanelView : IslandContent
 {
