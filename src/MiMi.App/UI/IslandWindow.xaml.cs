@@ -421,10 +421,16 @@ public partial class IslandWindow : Window
     private void UpdateGlow(IslandContent content)
     {
         _glowLevel = MascotOptions.GlowEnabled ? GlowLevelFor(content) * Math.Clamp(MascotOptions.GlowIntensity * 2, 0, 1.4) : 0;
-        GlowRoot.BeginAnimation(OpacityProperty, new DoubleAnimation(Math.Min(_glowLevel, 1), TimeSpan.FromMilliseconds(300))
+        var glowFade = new DoubleAnimation(Math.Min(_glowLevel, 1), TimeSpan.FromMilliseconds(300))
         {
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-        });
+        };
+        glowFade.Completed += (_, _) =>
+        {
+            GlowRoot.BeginAnimation(OpacityProperty, null);
+            GlowRoot.Opacity = Math.Min(_glowLevel, 1);
+        };
+        GlowRoot.BeginAnimation(OpacityProperty, glowFade);
 
         // Geometry is state-aware but FIXED in DIPs: a thin band on the idle pill,
         // a restrained 20 DIP falloff on expanded panels — never proportional to
@@ -534,6 +540,17 @@ public partial class IslandWindow : Window
         Storyboard.SetTargetProperty(_sizeStoryboard.Children[0], new PropertyPath(WidthProperty));
         Storyboard.SetTarget(_sizeStoryboard.Children[1], Pill);
         Storyboard.SetTargetProperty(_sizeStoryboard.Children[1], new PropertyPath(HeightProperty));
+        // Held animation clocks force WPF to compose every frame (idle CPU leak):
+        // detach on completion and pin the final values.
+        _sizeStoryboard.Completed += (_, _) =>
+        {
+            _sizeStoryboard.Remove(Pill);
+            Pill.BeginAnimation(WidthProperty, null);
+            Pill.BeginAnimation(HeightProperty, null);
+            Pill.Width = width;
+            Pill.Height = height;
+            UpdateClip();
+        };
         _sizeStoryboard.Begin(Pill, isControllable: false);
     }
 
@@ -576,6 +593,34 @@ public partial class IslandWindow : Window
         _ = dpi;
         var pillLeft = Left + (Width - Pill.ActualWidth) / 2;
         return new Rect(pillLeft, Top, Pill.ActualWidth, Pill.ActualHeight + 14);
+    }
+
+    /// <summary>Diagnostics: lists elements carrying live animation clocks.</summary>
+    public System.Collections.Generic.List<string> DumpActiveAnimations()
+    {
+        var result = new System.Collections.Generic.List<string>();
+        DumpActiveAnimationsRecursive(Pill, result);
+        if (result.Count == 0) result.Add("(no element carries animation clocks)");
+        return result;
+    }
+
+    private static void DumpActiveAnimationsRecursive(DependencyObject root,
+        System.Collections.Generic.List<string> result)
+    {
+        if (root is System.Windows.Media.Animation.IAnimatable a && a.HasAnimatedProperties)
+        {
+            var fe = root as FrameworkElement;
+            // Live probe: clear the opacity animation and re-check — distinguishes a
+            // stale held clock (clears) from an actively re-applied animation (stays).
+            var wasOpacity = fe is not null && fe.Opacity < 1;
+            fe?.BeginAnimation(OpacityProperty, null);
+            if (fe is not null) fe.Opacity = 1;
+            var stillAnimated = a.HasAnimatedProperties;
+            result.Add($"{root.GetType().Name}[{fe?.Name ?? "-"}] wasOpacity={wasOpacity} stillAnimated={stillAnimated}");
+        }
+        var n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < n; i++)
+            DumpActiveAnimationsRecursive(System.Windows.Media.VisualTreeHelper.GetChild(root, i), result);
     }
 
     private void UpdateClip()

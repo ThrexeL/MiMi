@@ -230,9 +230,23 @@ public partial class MiMiMascotControl : UserControl
             return;
         }
         if (_sleepZStoryboard is not null) return;
-        _sleepZStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
+        // Three gentle drift loops, then the z's freeze in place: a sleepy cue that
+        // never becomes a permanent 60 fps rendering loop at idle.
+        _sleepZStoryboard = new Storyboard { RepeatBehavior = new RepeatBehavior(3) };
         AddZ(_sleepZStoryboard, SleepZ1, SleepZ1Move, delay: 0, peak: 0.55, seconds: 2.8);
         AddZ(_sleepZStoryboard, SleepZ2, SleepZ2Move, delay: 0.9, peak: 0.4, seconds: 3.1);
+        _sleepZStoryboard.Completed += (_, _) =>
+        {
+            // Freeze as static marks (still visible), then stop all animations.
+            SleepZ1.BeginAnimation(OpacityProperty, null);
+            SleepZ2.BeginAnimation(OpacityProperty, null);
+            SleepZ1Move.BeginAnimation(TranslateTransform.YProperty, null);
+            SleepZ2Move.BeginAnimation(TranslateTransform.YProperty, null);
+            SleepZ1.Opacity = 0.5;
+            SleepZ2.Opacity = 0.32;
+            _sleepZStoryboard.Remove(this);
+            _sleepZStoryboard = null;
+        };
         _sleepZStoryboard.Begin(this, isControllable: false);
     }
 

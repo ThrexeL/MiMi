@@ -30,6 +30,10 @@ public sealed class IslandPresenter
     private PomodoroViewModel? _pomodoroVm;
     private WaterViewModel? _waterVm;
     private TodoViewModel? _todoVm;
+    private PomodoroView? _pomodoroCachedView;
+    private WaterView? _waterCachedView;
+    private TodoView? _todoCachedView;
+    private ShelfView? _shelfCachedView;
     private readonly HashSet<string> _utilityPins = new(StringComparer.Ordinal);
     private readonly AgentNotificationCoordinator _notifications = new();
 
@@ -138,6 +142,7 @@ public sealed class IslandPresenter
         if (_shelf.AddRange(paths) > 0)
         {
             _shelf.Save();
+            _shelfCachedView = null; // rows changed: rebuild on next refresh
             RefreshPinned();
         }
     }
@@ -146,6 +151,7 @@ public sealed class IslandPresenter
     {
         _shelf.Remove(path);
         _shelf.Save();
+        _shelfCachedView = null;
         RefreshPinned();
     }
 
@@ -181,19 +187,38 @@ public sealed class IslandPresenter
     }
 
     /// <summary>1 Hz heartbeat from the island window: drives the timer, reminders,
-    /// and live utility VMs. Deliberately cheap when nothing is pinned.</summary>
+    /// and live utility VMs. Deliberately cheap: when no utility is pinned or running
+    /// (the common idle case) it only checks reminder conditions and skips the
+    /// full pin recomputation entirely.</summary>
     public void OnSecondTick()
     {
         _pomodoro.Tick();
-        RefreshPinned(); // timer countdown + phase changes repaint via the pinned VM
 
         var now = DateTimeOffset.Now;
+        var utilityActive = _utilityPins.Count > 0 || _pomodoro.Phase != PomodoroPhase.Idle;
+        if (!utilityActive)
+        {
+            // Reminder checks only (allocation-free when nothing is due).
+            if (_water.ShouldRemindNow(now))
+            {
+                _water.MarkReminded(now);
+                PushUtilityNotice("Time to drink water", $"{_water.RemainingMl} ml to go");
+            }
+            foreach (var due in _todos.DueNow(now.LocalDateTime))
+            {
+                _todos.MarkReminded(due.Id);
+                PushUtilityNotice("Task due", due.Title);
+            }
+            return;
+        }
+
+        RefreshPinned(); // timer countdown + phase changes repaint via the pinned VM
+
         if (_water.ShouldRemindNow(now))
         {
             _water.MarkReminded(now);
             PushUtilityNotice("Time to drink water", $"{_water.RemainingMl} ml to go");
         }
-
         foreach (var due in _todos.DueNow(now.LocalDateTime))
         {
             _todos.MarkReminded(due.Id);
@@ -233,6 +258,7 @@ public sealed class IslandPresenter
 
     private void UpdateUtilityVms()
     {
+        var todoPinned = _utilityPins.Contains("todo");
         // Pomodoro
         _pomodoroVm ??= new PomodoroViewModel(
             playPause: () =>
@@ -274,7 +300,8 @@ public sealed class IslandPresenter
             _water.GoalFraction,
             _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
 
-        // To-do (max 4 open rows)
+        // To-do (max 4 open rows) — rebuilt only while the panel is open.
+        if (!todoPinned) return;
         _todoVm ??= new TodoViewModel(
             add: title =>
             {
@@ -360,13 +387,14 @@ public sealed class IslandPresenter
         // Utility, below agent status, so agents never lose their pill to the timer.
         UpdateUtilityVms();
         var pomodoroVisible = _pomodoro.Phase != PomodoroPhase.Idle;
+        // Cached wrappers: the VMs update in place, so re-wrapping per refresh would
+        // force a full content swap (and a render) every tick.
         IslandContent? utilityView =
-            _utilityPins.Contains("pomodoro") ? new PomodoroView(_pomodoroVm!)
-            : _utilityPins.Contains("water") ? new WaterView(_waterVm!)
-            : _utilityPins.Contains("todo") ? new TodoView(_todoVm!)
-            : _utilityPins.Contains("shelf") ? BuildShelfView()
-            : _shelf.Count > 0 ? BuildShelfView()
-            : pomodoroVisible ? new PomodoroView(_pomodoroVm!)
+            _utilityPins.Contains("pomodoro") || pomodoroVisible ? _pomodoroCachedView ??= new PomodoroView(_pomodoroVm!)
+            : _utilityPins.Contains("water") ? _waterCachedView ??= new WaterView(_waterVm!)
+            : _utilityPins.Contains("todo") ? _todoCachedView ??= new TodoView(_todoVm!)
+            : _utilityPins.Contains("shelf") ? _shelfCachedView ??= BuildShelfView()
+            : _shelf.Count > 0 ? _shelfCachedView ??= BuildShelfView()
             : null;
         var utilityPriority = _utilityPins.Count > 0 ? IslandPriority.UserPanel : IslandPriority.Utility;
 
