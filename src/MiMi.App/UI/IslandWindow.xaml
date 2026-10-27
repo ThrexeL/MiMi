@@ -654,35 +654,33 @@
                 Cursor="Arrow">
             <Grid>
                 <Grid x:Name="GlowRoot" IsHitTestVisible="False" Panel.ZIndex="0">
-                    <!-- Signature warmth per the approved reference: a soft, concentrated
-                         gold light that lives at the INSIDE BOTTOM EDGE of the island —
-                         strongest at the lower center boundary, fading upward; the upper
-                         interior stays nearly black. Geometry is anchored to the bottom
-                         edge with relative gradient centers, so it scales with any panel
-                         size without ever becoming a giant center oval. Opacity is a
-                         separate, state-driven value (code-behind UpdateGlow). -->
-                    <Ellipse x:Name="GlowPool" Stretch="Fill">
-                        <Ellipse.Fill>
-                            <RadialGradientBrush Center="0.5,1.0" GradientOrigin="0.5,1.02"
-                                                 RadiusX="0.58" RadiusY="0.62">
-                                <GradientStop Color="#5BF5B84B" Offset="0"/>
-                                <GradientStop Color="#24EAA63A" Offset="0.45"/>
-                                <GradientStop Color="#00D99B35" Offset="1"/>
-                            </RadialGradientBrush>
-                        </Ellipse.Fill>
-                    </Ellipse>
-                    <!-- Tight warm core hugging the very bottom edge, for the 'light
-                         source just beneath the surface' read. -->
-                    <Ellipse x:Name="GlowCore" Stretch="Fill">
-                        <Ellipse.Fill>
-                            <RadialGradientBrush Center="0.5,1.0" GradientOrigin="0.5,1.0"
-                                                 RadiusX="0.34" RadiusY="0.34">
-                                <GradientStop Color="#59F7C264" Offset="0"/>
-                                <GradientStop Color="#00D99B35" Offset="1"/>
-                            </RadialGradientBrush>
-                        </Ellipse.Fill>
-                    </Ellipse>
-</Grid>
+                    <!-- Signature warmth per the approved reference: a shallow gold band
+                         hugging the INSIDE BOTTOM EDGE of the island — brightest at the
+                         lower center boundary, gone before it reaches the middle. The
+                         band height is a fixed DIP value set per state by the code-behind
+                         (GlowLayout.BandHeight) — never proportional to the panel — so
+                         expanded cards can never grow a giant center oval. Opacity is a
+                         separate, state-driven value. -->
+                    <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
+                        <!-- Wide flat arc: strongest bottom-center, fading toward corners. -->
+                        <Ellipse Stretch="Fill">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush Center="0.5,0.55" GradientOrigin="0.5,0.6"
+                                                     RadiusX="0.5" RadiusY="0.55">
+                                    <GradientStop Color="#73F5B84B" Offset="0"/>
+                                    <GradientStop Color="#2BEAA63A" Offset="0.55"/>
+                                    <GradientStop Color="#00D99B35" Offset="1"/>
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <!-- Thin luminous rim right at the boundary. -->
+                        <Rectangle Height="2.5" VerticalAlignment="Bottom" RadiusX="1.25" RadiusY="1.25">
+                            <Rectangle.Fill>
+                                <SolidColorBrush Color="#4DF7C264"/>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                    </Grid>
+                </Grid>
                 <!-- Ambient top sheen: the premium dark-surface cue. Clipped to the pill. -->
                 <Border IsHitTestVisible="False" Panel.ZIndex="0" VerticalAlignment="Top" Height="24"
                         CornerRadius="17,17,0,0">

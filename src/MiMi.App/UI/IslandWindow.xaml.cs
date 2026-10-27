@@ -399,6 +399,17 @@ public partial class IslandWindow : Window
         {
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
         });
+
+        // Geometry is state-aware but FIXED in DIPs: a thin band on the idle pill,
+        // a restrained 20 DIP falloff on expanded panels — never proportional to
+        // panel height (that was the brown-oval bug).
+        if (GlowBand is not null)
+        {
+            var isIdle = content is RestingView;
+            GlowBand.Height = GlowLayout.ClampToBottomRegion(
+                GlowLayout.BandHeight(isIdle, Pill.ActualHeight <= 0 ? 38 : Pill.ActualHeight),
+                Pill.ActualHeight <= 0 ? 38 : Pill.ActualHeight);
+        }
     }
 
     private void RefreshGlow()
