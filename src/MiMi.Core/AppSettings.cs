@@ -50,6 +50,10 @@ public sealed class AppSettings
     // Startup
     [JsonPropertyName("startWithWindows")] public bool StartWithWindows { get; set; } = false;
 
+    // Media / lyrics
+    [JsonPropertyName("lyricsEnabled")] public bool LyricsEnabled { get; set; } = true;
+    [JsonPropertyName("lyricsOffsetMs")] public int LyricsOffsetMs { get; set; } = 0;
+
     // Desktop behavior
     [JsonPropertyName("desktopPersistVisible")] public bool DesktopPersistVisible { get; set; } = true;
     [JsonPropertyName("fullscreenSuppress")] public bool FullscreenSuppress { get; set; } = true;
@@ -87,6 +91,7 @@ public sealed class AppSettings
         Scale = Math.Clamp(Scale, 0.75, 1.5);
         AnimationSpeed = Math.Clamp(AnimationSpeed, 0.5, 2.5);
         GlowIntensity = Math.Clamp(GlowIntensity, 0, 1);
+        LyricsOffsetMs = Math.Clamp(LyricsOffsetMs, -10000, 10000);
         AnimationIntensity = Math.Clamp(AnimationIntensity, 0.5, 2);
         if (double.IsNaN(GlowIntensity) || double.IsInfinity(GlowIntensity)) GlowIntensity = 0.6;
         if (double.IsNaN(AnimationIntensity) || double.IsInfinity(AnimationIntensity)) AnimationIntensity = 1.0;

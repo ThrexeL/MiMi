@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MiMi.Agents;
 using MiMi.App.UI.Mascot;
+using MiMi.Lyrics;
 using MiMi.Media;
 
 namespace MiMi.App.UI;
@@ -290,6 +291,106 @@ public sealed class MediaViewModel : ObservableObject
             Remaining = "";
             Progress = double.NaN;
         }
+        UpdateLyricWindow();
+    }
+
+    // ---- synchronized lyrics (Phase 4 / Milestone 2) ----------------------------
+
+    private LyricsState _lyricsState = LyricsState.Idle;
+    private IReadOnlyList<LrcLine> _lyricLines = Array.Empty<LrcLine>();
+    private bool _lyricsVisible;
+    private int _lyricOffsetMs;
+    private int _lyricIndex = -1;
+
+    private string _lyricPrev = "";
+    private string _lyricCurrent = "";
+    private string _lyricNext = "";
+    private bool _hasLyricCurrent;
+
+    /// <summary>Idle/loading/instrumental/unavailable → the lyrics block hides.</summary>
+    public bool ShowLyricsBlock { get => _hasLyricCurrent || _lyricsVisible; private set => Set(ref _lyricsVisible, value); }
+    public bool LyricsBlockVisible => ShowLyricsBlock;
+    public bool LyricsBlockHidden => !ShowLyricsBlock;
+    /// <summary>Current line color: gold when a real line is active, dim for ♪ gaps.</summary>
+    public System.Windows.Media.Color LyricCurrentColor =>
+        LyricCurrentIsLine
+            ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFF5B84B")
+            : System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF);
+    public string LyricPrev { get => _lyricPrev; private set => Set(ref _lyricPrev, value); }
+    public string LyricCurrent { get => _lyricCurrent; private set => Set(ref _lyricCurrent, value); }
+    public string LyricNext { get => _lyricNext; private set => Set(ref _lyricNext, value); }
+    public bool LyricCurrentIsLine { get => _hasLyricCurrent; private set => Set(ref _hasLyricCurrent, value); }
+
+    private bool _userWantsLyrics = true;
+
+    /// <summary>User toggle (lyrics glyph on the expanded panel).</summary>
+    public void ToggleLyrics()
+    {
+        _userWantsLyrics = !_userWantsLyrics;
+        UpdateLyricVisibility();
+    }
+
+    private bool LyricsWanted => _userWantsLyrics && _lyricsEnabledBySettings;
+
+    private bool _lyricsEnabledBySettings = true;
+
+    public void UpdateLyrics(LyricsState state, LyricsResult? result, int offsetMs, bool enabled)
+    {
+        _lyricsState = state;
+        _lyricsEnabledBySettings = enabled;
+        _lyricOffsetMs = offsetMs;
+        _lyricLines = state == LyricsState.Synced && result is not null
+            ? result.SyncedLines ?? Array.Empty<LrcLine>()
+            : Array.Empty<LrcLine>();
+        _lyricIndex = -1;
+
+        // Plain lyrics without timestamps: show the first few lines as a static block.
+        if (state == LyricsState.Plain && result is not null)
+        {
+            var plainLines = result.PlainLyrics!
+                .Replace("\r", "").Split("\n", StringSplitOptions.RemoveEmptyEntries);
+            LyricPrev = "";
+            LyricCurrent = plainLines.Length > 0 ? plainLines[0] : "";
+            LyricNext = plainLines.Length > 1 ? plainLines[1] : "";
+            LyricCurrentIsLine = true;
+            UpdateLyricVisibility();
+            return;
+        }
+
+        UpdateLyricVisibility();
+        UpdateLyricWindow();
+    }
+
+    private void UpdateLyricVisibility() => ShowLyricsBlock = LyricsWanted;
+
+    /// <summary>Recomputes the 3-line window (previous / current / next) from the
+    /// playback position. Called by the 1 Hz timeline tick — cheap by design.</summary>
+    public void UpdateLyricWindow()
+    {
+        if (_lyricLines.Count == 0) return;
+        if (_snapshot is null) return;
+
+        var position = _snapshot.CurrentPosition().Add(TimeSpan.FromMilliseconds(_lyricOffsetMs));
+        var index = LrcParser.CurrentLineIndex(_lyricLines, position);
+        if (index == _lyricIndex) return;
+        _lyricIndex = index;
+
+        LyricPrev = index > 0 ? _lyricLines[index - 1].Text : "";
+        var current = index >= 0 ? _lyricLines[index].Text : "";
+        // Instrumental gaps render as a gentle note instead of an empty block.
+        LyricCurrent = current.Length == 0 ? "♪" : current;
+        LyricCurrentIsLine = current.Length > 0;
+        LyricNext = index + 1 < _lyricLines.Count ? _lyricLines[index + 1].Text : "";
+        UpdateLyricVisibility();
+    }
+
+    public void ClearLyrics()
+    {
+        _lyricsState = LyricsState.Idle;
+        _lyricLines = Array.Empty<LrcLine>();
+        _lyricIndex = -1;
+        UpdateLyricVisibility();
+        LyricPrev = LyricCurrent = LyricNext = "";
     }
 
     public static string FriendlyName(string appId) => appId switch

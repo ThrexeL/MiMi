@@ -503,6 +503,8 @@ public partial class IslandWindow : Window
                 break;
 
             case MediaExpandedView media:
+                if (FindDescendant(Pill, "LyricsToggle") is Button lyricsToggle)
+                    lyricsToggle.Click += (_, _) => media.Media.ToggleLyrics();
                 if (FindDescendant(Pill, "ProgressSlider") is Slider slider)
                 {
                     _progressSlider = slider;

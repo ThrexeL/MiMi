@@ -17,5 +17,6 @@
     <ProjectReference Include="..\MiMi.Bridge\MiMi.Bridge.csproj" />
     <ProjectReference Include="..\MiMi.Media\MiMi.Media.csproj" />
     <ProjectReference Include="..\MiMi.AgentCli\MiMi.AgentCli.csproj" />
+    <ProjectReference Include="..\MiMi.Lyrics\MiMi.Lyrics.csproj" />
   </ItemGroup>
 </Project>

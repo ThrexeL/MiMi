@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MiMi.Core\MiMi.Core.csproj" />
     <ProjectReference Include="..\MiMi.Media\MiMi.Media.csproj" />
+    <ProjectReference Include="..\MiMi.Lyrics\MiMi.Lyrics.csproj" />
     <ProjectReference Include="..\MiMi.Agents\MiMi.Agents.csproj" />
     <ProjectReference Include="..\MiMi.Bridge\MiMi.Bridge.csproj" />
   </ItemGroup>

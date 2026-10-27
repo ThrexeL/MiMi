@@ -7,6 +7,7 @@ using MiMi.App.UI;
 using MiMi.App.UI.Mascot;
 using MiMi.Bridge;
 using MiMi.Core;
+using MiMi.Lyrics;
 using MiMi.Media;
 using Wmc = Windows.Media.Control;
 
@@ -21,6 +22,7 @@ public partial class App : Application
     private AgentEventBus _bus = null!;
     private IslandStateManager _stateManager = null!;
     private GsmtcMediaService? _media;
+    private LyricsService _lyrics = new();
     private NamedPipeAgentBridge? _bridge;
     private IslandPresenter _presenter = null!;
     private IslandWindow _island = null!;
@@ -121,6 +123,24 @@ public partial class App : Application
             {
                 mediaVm.Update(snapshot);
                 _presenter.OnMediaChanged(snapshot);
+
+                // Lyrics follow the playing track (Phase 4 / Milestone 2).
+                if (snapshot is null)
+                {
+                    _lyrics.OnTrackChanged(new LyricsQuery("", "", "", 0));
+                    mediaVm.UpdateLyrics(LyricsState.Idle, null, _config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled);
+                }
+                else
+                {
+                    _lyrics.OnTrackChanged(new LyricsQuery(
+                        snapshot.Title, snapshot.Artist, snapshot.Album,
+                        snapshot.Duration.TotalSeconds));
+                    mediaVm.UpdateLyrics(_lyrics.State, _lyrics.Current, _config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled);
+                }
+            });
+            _lyrics.Changed += () => Dispatcher.BeginInvoke(() =>
+            {
+                mediaVm.UpdateLyrics(_lyrics.State, _lyrics.Current, _config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled);
             });
             _ = StartMediaAsync();
         }

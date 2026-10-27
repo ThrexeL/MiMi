@@ -252,17 +252,34 @@
                     <Border Width="58" Height="58" CornerRadius="12" Background="{StaticResource ArtPlaceholder}">
                         <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="58" Height="58"/>
                     </Border>
-                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center" Width="300">
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontTitle}" FontWeight="SemiBold"
-                                   Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                                   Foreground="{StaticResource TextSecondary}"
-                                   Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
-                                   Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                   Foreground="{StaticResource TextTertiary}" Margin="0,3,0,0"
-                                   Text="{Binding Media.Source}" TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
+                    <Grid Margin="14,0,0,0" Width="300" VerticalAlignment="Center">
+                        <StackPanel Visibility="{Binding Media.LyricsBlockVisible, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
+                                       Foreground="{StaticResource TextTertiary}"
+                                       Text="{Binding Media.LyricPrev}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="14" FontWeight="SemiBold"
+                                       Margin="0,2,0,2">
+                                <TextBlock.Foreground>
+                                    <SolidColorBrush Color="{Binding Media.LyricCurrentColor}"/>
+                                </TextBlock.Foreground>
+                                <Run Text="{Binding Media.LyricCurrent, Mode=OneWay}"/>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       Text="{Binding Media.LyricNext}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding Media.LyricsBlockHidden, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="15" FontWeight="SemiBold"
+                                       Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="12"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
+                                       Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                                       Foreground="{StaticResource TextTertiary}" Margin="0,3,0,0"
+                                       Text="{Binding Media.Source}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
 
                 <Slider x:Name="ProgressSlider" Style="{StaticResource IslandSlider}" Margin="0,12,0,0"/>
@@ -276,6 +293,9 @@
                 </Grid>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                    <Button x:Name="LyricsToggle" Style="{StaticResource TransportButton}" FontSize="12"
+                            Width="30" Height="30" Margin="0,0,12,0"
+                            Content="&#xE7C3;" ToolTip="Toggle synchronized lyrics"/>
                     <mascot:MiMiMascotControl Width="26" Height="17" Expression="Lively"
                                               VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <Button Style="{StaticResource TransportButton}" Command="{Binding Media.PreviousCommand}"

@@ -5,6 +5,7 @@
     <Project Path="src/MiMi.App/MiMi.App.csproj" />
     <Project Path="src/MiMi.Bridge/MiMi.Bridge.csproj" />
     <Project Path="src/MiMi.Core/MiMi.Core.csproj" />
+    <Project Path="src/MiMi.Lyrics/MiMi.Lyrics.csproj" />
     <Project Path="src/MiMi.Media/MiMi.Media.csproj" />
     <Project Path="src/MiMi.Tests/MiMi.Tests.csproj" />
   </Folder>
