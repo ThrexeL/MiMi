@@ -30,6 +30,7 @@ public sealed class TrayIcon : IDisposable
     private bool _autoStartChecked;
     private bool _islandVisible = true;
     private uint _taskbarCreatedMsg;
+    private Action? _balloonClick;
 
     public event Action<TrayIcon, TrayMenuCommand>? CommandSelected;
 
@@ -114,6 +115,50 @@ public sealed class TrayIcon : IDisposable
 
     public void SetAutoStartIndicator(bool enabled) => _autoStartChecked = enabled;
 
+    /// <summary>
+    /// Shows a standard Shell balloon notification through the tray icon. This uses the
+    /// long-supported Shell_NotifyIconW path (no Windows App SDK, package identity, or
+    /// registration), respects Focus Assist, and never carries command text. Clicking is
+    /// opt-in via <paramref name="onClick"/>; the callback runs on the tray window thread
+    /// (the UI thread) and should only open/refocus MiMi — never approve anything.
+    /// </summary>
+    public void ShowBalloon(string title, string body, TrayNotificationKind kind,
+        bool playSound, Action? onClick = null)
+    {
+        if (!_added || _hwnd == IntPtr.Zero) return;
+
+        _balloonClick = onClick;
+        var data = new NativeMethods.NOTIFYICONDATAW
+        {
+            cbSize = Marshal.SizeOf<NativeMethods.NOTIFYICONDATAW>(),
+            hWnd = _hwnd,
+            uID = 1,
+            uFlags = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP | NativeMethods.NIF_INFO,
+            uCallbackMessage = NativeMethods.WM_APP_TRAY,
+            hIcon = _icon,
+            szTip = "MiMi",
+            szInfo = Truncate(body, 255),
+            szInfoTitle = Truncate(title, 63),
+            dwInfoFlags = BaseInfoFlags(kind) | NativeMethods.NIIF_RESPECT_QUIET_TIME
+                           | (playSound ? 0 : NativeMethods.NIIF_NOSOUND),
+        };
+        if (!NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_MODIFY, ref data))
+        {
+            Logger.Warn("Balloon notification could not be displayed (tray icon not ready).");
+            _balloonClick = null;
+        }
+    }
+
+    private static uint BaseInfoFlags(TrayNotificationKind kind) => kind switch
+    {
+        TrayNotificationKind.Warning => NativeMethods.NIIF_WARNING,
+        TrayNotificationKind.Error => NativeMethods.NIIF_ERROR,
+        _ => NativeMethods.NIIF_INFO,
+    };
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)] + "…";
+
     private void ShowMenu()
     {
         var menu = NativeMethods.CreatePopupMenu();
@@ -149,6 +194,7 @@ public sealed class TrayIcon : IDisposable
 
     public void Dispose()
     {
+        _balloonClick = null;
         if (_added)
         {
             var data = new NativeMethods.NOTIFYICONDATAW
@@ -178,8 +224,23 @@ public sealed class TrayIcon : IDisposable
         if (msg == NativeMethods.WM_APP_TRAY)
         {
             var mouseMsg = (uint)(lParam.ToInt64() & 0xFFFF);
-            if (mouseMsg == 0x0205 && Instances.TryGetValue(hWnd, out var tray)) // WM_RBUTTONUP
-                tray.ShowMenu();
+            if (Instances.TryGetValue(hWnd, out var tray))
+            {
+                if (mouseMsg == 0x0205) // WM_RBUTTONUP
+                    tray.ShowMenu();
+                else if (mouseMsg == NativeMethods.NIN_BALLOONUSERCLICK)
+                {
+                    // Explicit user action only. Never auto-invoked.
+                    var click = tray._balloonClick;
+                    tray._balloonClick = null;
+                    try { click?.Invoke(); }
+                    catch (Exception ex) { Logger.Warn($"Balloon click handler failed: {ex.Message}"); }
+                }
+                else if (mouseMsg is NativeMethods.NIN_BALLOONTIMEOUT or NativeMethods.NIN_BALLOONHIDE)
+                {
+                    tray._balloonClick = null; // stale activation must not fire later
+                }
+            }
             return IntPtr.Zero;
         }
         if (msg == NativeMethods.WM_CLOSE)
@@ -192,3 +253,6 @@ public sealed class TrayIcon : IDisposable
 }
 
 public enum TrayMenuCommand { ToggleVisibility, Settings, Simulate, ToggleAutoStart, Restart, Exit }
+
+/// <summary>Balloon severity: maps to the Shell info icon (not app behavior).</summary>
+public enum TrayNotificationKind { Info, Warning, Error }

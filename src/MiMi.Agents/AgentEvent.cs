@@ -210,10 +210,10 @@ public static class AgentEventFactory
         string provider, string sessionId, string type,
         string? title = null, string? message = null, string? project = null,
         AgentPriority priority = AgentPriority.Normal, string? approvalRequestId = null,
-        IReadOnlyDictionary<string, string>? metadata = null)
+        IReadOnlyDictionary<string, string>? metadata = null, string? eventId = null)
         => new()
         {
-            EventId = Guid.NewGuid().ToString("N"),
+            EventId = eventId ?? Guid.NewGuid().ToString("N"),
             Provider = provider,
             SessionId = sessionId,
             Type = type,

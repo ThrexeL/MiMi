@@ -136,6 +136,43 @@
         <CheckBox x:Name="BridgeToggle" Style="{StaticResource Check}" Content="Agent bridge (named pipe listener; change needs restart)"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
 
+        <CheckBox x:Name="MascotAnimationsToggle" Style="{StaticResource Check}" Content="Mascot blinking and idle motion"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="MascotReactionsToggle" Style="{StaticResource Check}" Content="Mascot reactions to agent events"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="MascotSleepyToggle" Style="{StaticResource Check}" Content="Doze after 10 minutes of user inactivity"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+
+        <Separator Background="#22FFFFFF" Margin="0,12,0,8"/>
+
+        <TextBlock Style="{StaticResource Sub}" Text="Notifications" Margin="0,0,0,4"/>
+        <CheckBox x:Name="AgentNotificationsToggle" Style="{StaticResource Check}" Content="Show agent notifications in MiMi"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="CompletionNotificationsToggle" Style="{StaticResource Check}" Content="Completion and failure notifications"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="ApprovalNotificationsToggle" Style="{StaticResource Check}" Content="Approval notifications"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="WindowsNotificationsToggle" Style="{StaticResource Check}" Content="Windows notifications while MiMi is hidden"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+        <CheckBox x:Name="NotificationSoundToggle" Style="{StaticResource Check}" Content="Notification sound"
+                  Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
+
+        <Grid Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="52"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Style="{StaticResource Label}" Text="Notification duration"/>
+            <Slider x:Name="NotificationDurationSlider" Grid.Column="1" Minimum="1500" Maximum="8000" Value="3000"
+                    VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="500"
+                    Thumb.DragCompleted="Slider_DragCompleted"/>
+            <TextBlock x:Name="NotificationDurationLabel" Grid.Column="2" Style="{StaticResource Sub}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+        <TextBlock Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="0,3,0,0"
+                   Text="System notifications respect Focus Assist, never include commands or prompts, and never approve anything. Approval notices open the request for review."/>
+
         <Separator Background="#22FFFFFF" Margin="0,10,0,10"/>
 
         <Grid>

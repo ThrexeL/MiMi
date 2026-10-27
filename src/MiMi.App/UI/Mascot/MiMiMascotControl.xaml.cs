@@ -42,17 +42,30 @@ public partial class MiMiMascotControl : UserControl
         MascotExpression.Alert => (1.2, 1.2, 0),
         MascotExpression.Focused => (0.85, 0.9, 0),
         MascotExpression.Concerned => (1.0, 0.92, -4),
+        MascotExpression.Curious => (1.1, 1.1, 0),
+        // Happy: a brief squint, never a crescent-shaped cartoon eye.
+        MascotExpression.Happy => (1.0, 0.6, 0),
+        // Sleepy: softly half-lidded, still round in width.
+        MascotExpression.Sleepy => (1.0, 0.52, 0),
         _ => (1, 1, 0),
     };
 
-    private static bool SmileVisible(MascotExpression e) =>
-        e is MascotExpression.Calm or MascotExpression.Lively;
+    private static double SmileOpacity(MascotExpression e) => e switch
+    {
+        MascotExpression.Lively => 0.62,
+        MascotExpression.Happy => 0.78,
+        MascotExpression.Calm => 0.5,
+        MascotExpression.Curious => 0.45,
+        MascotExpression.Sleepy => 0.3,
+        _ => 0.0,
+    };
 
     private readonly DispatcherTimer _blinkTimer;
     private readonly DispatcherTimer _dartTimer;
     private Storyboard? _bobStoryboard;
     private readonly Random _random = new();
     private bool _templateReady;
+    private MascotExpression _lastExpression = MascotExpression.Calm;
 
     public MiMiMascotControl()
     {
@@ -96,6 +109,10 @@ public partial class MiMiMascotControl : UserControl
     {
         if (!_templateReady) return;
 
+        var wasSleepy = _lastExpression == MascotExpression.Sleepy;
+        _lastExpression = expression;
+        if (MascotOptions.ReducedMotion) animated = false;
+
         var (sx, sy, tilt) = Pose(expression);
         var poseDuration = TimeSpan.FromMilliseconds(animated ? 220 : 0);
         var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
@@ -106,16 +123,14 @@ public partial class MiMiMascotControl : UserControl
         AnimateAngle(EyeLTilt, tilt, poseDuration, ease, animated);
         AnimateAngle(EyeRTilt, -tilt, poseDuration, ease, animated);
 
-        // Smile: fade rather than pop.
-        var smileOpacity = SmileVisible(expression)
-            ? (expression == MascotExpression.Lively ? 0.62 : 0.5)
-            : 0.0;
+        // Smile: fade rather than pop. Minor expressions keep it hidden.
+        var smileOpacity = SmileOpacity(expression);
         if (!animated) { Mouth.BeginAnimation(OpacityProperty, null); Mouth.Opacity = smileOpacity; }
         else Mouth.BeginAnimation(OpacityProperty, new DoubleAnimation(smileOpacity, poseDuration) { EasingFunction = ease });
 
         // Lively: a barely-there float, like nodding along to the music.
         StopBob();
-        if (expression == MascotExpression.Lively)
+        if (expression == MascotExpression.Lively && !MascotOptions.ReducedMotion)
         {
             _bobStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true };
             foreach (var t in new[] { EyeLMove, EyeRMove })
@@ -133,6 +148,21 @@ public partial class MiMiMascotControl : UserControl
             }
             _bobStoryboard.Begin(this, isControllable: false);
         }
+
+        // Happy: one small bounce, under 400 ms, then perfectly still.
+        if (animated && expression == MascotExpression.Happy && !MascotOptions.ReducedMotion)
+            PlayHappyBounce();
+
+        // Waking from a doze is a gentle "oh, hello" rather than a snap.
+        if (animated && wasSleepy && expression != MascotExpression.Sleepy && !MascotOptions.ReducedMotion)
+            PlayWake();
+
+        // Sleepy faces breathe very slowly; blinking stops so they look genuinely asleep.
+        if (expression == MascotExpression.Sleepy) _blinkTimer.Stop();
+        if (expression is MascotExpression.Alert or MascotExpression.Concerned) _dartTimer.Stop();
+        if (expression != MascotExpression.Sleepy && IsVisible && IsLoaded
+            && MascotOptions.AnimationsEnabled && !MascotOptions.ReducedMotion)
+            StartLife();
     }
 
     private void StopBob()
@@ -163,13 +193,17 @@ public partial class MiMiMascotControl : UserControl
 
     private void StartLife()
     {
-        if (!MascotOptions.FaceEnabled || !IsVisible || !_templateReady) return;
+        if (!MascotOptions.FaceEnabled || !MascotOptions.AnimationsEnabled || MascotOptions.ReducedMotion) return;
+        if (!IsVisible || !_templateReady || Expression == MascotExpression.Sleepy) return;
         if (!_blinkTimer.IsEnabled)
         {
             _blinkTimer.Interval = NextBlinkDelay();
             _blinkTimer.Start();
         }
-        if (!_dartTimer.IsEnabled)
+        // Alert/concerned faces stay attentive and still; no darting eyes while the
+        // user is deciding or reading an error.
+        if (Expression is not (MascotExpression.Alert or MascotExpression.Concerned)
+            && !_dartTimer.IsEnabled)
         {
             _dartTimer.Interval = TimeSpan.FromSeconds(7 + _random.NextDouble() * 8 / MascotOptions.AnimationIntensity);
             _dartTimer.Start();
@@ -202,10 +236,16 @@ public partial class MiMiMascotControl : UserControl
         reopen.Tick += (_, _) =>
         {
             reopen.Stop();
+            if (Expression == MascotExpression.Sleepy)
+            {
+                ApplyExpression(MascotExpression.Sleepy, animated: false);
+                return;
+            }
+            var poseY = Pose(Expression).Sy;
             foreach (var eye in new[] { EyeLBlink, EyeRBlink })
             {
                 eye.BeginAnimation(ScaleTransform.ScaleYProperty,
-                    new DoubleAnimation(0.12, 1, open) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+                    new DoubleAnimation(0.12, poseY, open) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
             }
             _blinkTimer.Interval = _random.NextDouble() < 0.2
                 ? TimeSpan.FromMilliseconds(260) // double blink soon
@@ -249,5 +289,17 @@ public partial class MiMiMascotControl : UserControl
         {
             EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 },
         });
+    }
+
+    /// <summary>Celebration: one tiny bounce (≈360 ms total), then still.</summary>
+    private void PlayHappyBounce()
+    {
+        var bounce = new DoubleAnimation(1.0, 1.05, TimeSpan.FromMilliseconds(160))
+        {
+            AutoReverse = true,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut },
+        };
+        WakeScale.BeginAnimation(ScaleTransform.ScaleXProperty, bounce);
+        WakeScale.BeginAnimation(ScaleTransform.ScaleYProperty, bounce);
     }
 }

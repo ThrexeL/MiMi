@@ -2,7 +2,7 @@ namespace MiMi.App.UI.Mascot;
 
 /// <summary>
 /// MiMi's facial expression, derived from the island's current state.
-/// Deliberately coarse: five expressions, subtle deltas between them.
+/// Deliberately coarse: subtle deltas between them, never cartoonish.
 /// </summary>
 public enum MascotExpression
 {
@@ -16,4 +16,10 @@ public enum MascotExpression
     Focused,
     /// <summary>Failure: faint inward tilt of the eyes, dimmed glow. Still composed.</summary>
     Concerned,
+    /// <summary>Agent started: eyes a touch wider, attentive. Settles into Focused.</summary>
+    Curious,
+    /// <summary>Turn completed: brief happy squint and a small smile, then back.</summary>
+    Happy,
+    /// <summary>Long user inactivity: gently half-lidded, dimmer glow, still adorable.</summary>
+    Sleepy,
 }

@@ -39,6 +39,7 @@ public partial class IslandWindow : Window
     private Storyboard? _eqStoryboard;
     private Slider? _progressSlider;
     private bool _sliderDragging;
+    private INotifyPropertyChanged? _glowContent;
 
     private const long WsExNoActivate = 0x08000000;
     private const long WsExToolWindow = 0x00000080;
@@ -353,14 +354,27 @@ public partial class IslandWindow : Window
     // A separate visual system from the face: warm light leaking from beneath the
     // floating island, bound live to the pill's animated bounds in XAML.
 
-    private static double GlowLevelFor(IslandContent content)
+    private static double GlowLevelFor(IslandContent content) => content switch
     {
-        if (content is ApprovalView) return 0.9;
-        if (content is MediaCompactView or MediaExpandedView) return 0.7;
-        if (content is AgentCompactView compact) return compact.Indicator.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
-        if (content is AgentExpandedView expanded) return expanded.Agent.Expression == MascotExpression.Concerned ? 0.4 : 0.6;
-        return 0.55; // resting
-    }
+        ApprovalView => 0.9,
+        MediaCompactView or MediaExpandedView => 0.7,
+        RestingView resting => GlowLevelForExpression(resting.Expression),
+        AgentCompactView compact => GlowLevelForExpression(compact.Indicator.Expression),
+        AgentExpandedView expanded => GlowLevelForExpression(expanded.Agent.Expression),
+        _ => 0.55,
+    };
+
+    private static double GlowLevelForExpression(MascotExpression expression) => expression switch
+    {
+        MascotExpression.Alert => 0.9,
+        MascotExpression.Happy => 0.72,
+        MascotExpression.Curious => 0.66,
+        MascotExpression.Concerned => 0.4,
+        MascotExpression.Sleepy => 0.32,
+        MascotExpression.Focused => 0.5,
+        MascotExpression.Lively => 0.7,
+        _ => 0.55,
+    };
 
     private void UpdateGlow(IslandContent content)
     {
@@ -374,6 +388,12 @@ public partial class IslandWindow : Window
     private void RefreshGlow()
     {
         if (_renderedContent is not null) UpdateGlow(_renderedContent);
+    }
+
+    private void OnGlowContentChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(RestingView.Expression)) return;
+        if (sender is IslandContent content) UpdateGlow(content);
     }
 
     // ---- content application ---------------------------------------------------
@@ -402,6 +422,12 @@ public partial class IslandWindow : Window
         {
             Host.Content = content;
             Host.ApplyTemplate();
+
+            // Glow follows in-place expression changes (sleepy/happy/alert) too, not
+            // only content swaps.
+            if (_glowContent is not null) _glowContent.PropertyChanged -= OnGlowContentChanged;
+            _glowContent = content as INotifyPropertyChanged;
+            if (_glowContent is not null) _glowContent.PropertyChanged += OnGlowContentChanged;
 
             // Measure AFTER the new content is in place (measuring earlier sees the old
             // content and clips cards). Auto-height cards hug their measured content;

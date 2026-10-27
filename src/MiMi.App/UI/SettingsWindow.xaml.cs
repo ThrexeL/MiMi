@@ -39,10 +39,19 @@ public partial class SettingsWindow : Window
         AgentsToggle.IsChecked = s.AgentsModuleEnabled;
         ClockToggle.IsChecked = s.ClockEnabled;
         MascotToggle.IsChecked = s.MascotEnabled;
+        MascotAnimationsToggle.IsChecked = s.MascotAnimationsEnabled;
+        MascotReactionsToggle.IsChecked = s.MascotReactionsEnabled;
+        MascotSleepyToggle.IsChecked = s.MascotSleepyEnabled;
         GlowToggle.IsChecked = s.GlowEnabled;
         GlowSlider.Value = s.GlowIntensity;
         FaceAnimSlider.Value = s.AnimationIntensity;
         BridgeToggle.IsChecked = s.BridgeEnabled;
+        AgentNotificationsToggle.IsChecked = s.AgentNotificationsEnabled;
+        CompletionNotificationsToggle.IsChecked = s.CompletionNotificationsEnabled;
+        ApprovalNotificationsToggle.IsChecked = s.ApprovalNotificationsEnabled;
+        WindowsNotificationsToggle.IsChecked = s.WindowsNotificationsWhenHidden;
+        NotificationSoundToggle.IsChecked = s.NotificationSoundEnabled;
+        NotificationDurationSlider.Value = s.NotificationDurationMs;
         AutoStartToggle.IsChecked = AutoStart.IsEnabled();
         DesktopPersistToggle.IsChecked = s.DesktopPersistVisible;
         FullscreenToggle.IsChecked = s.FullscreenSuppress;
@@ -61,6 +70,7 @@ public partial class SettingsWindow : Window
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
         GlowLabel.Text = $"{GlowSlider.Value:0}%";
         FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0×}";
+        NotificationDurationLabel.Text = $"{NotificationDurationSlider.Value / 1000.0:0.0} s";
     }
 
     private void CaptureToSettings()
@@ -75,10 +85,19 @@ public partial class SettingsWindow : Window
             s.AgentsModuleEnabled = AgentsToggle.IsChecked == true;
             s.ClockEnabled = ClockToggle.IsChecked == true;
             s.MascotEnabled = MascotToggle.IsChecked == true;
+            s.MascotAnimationsEnabled = MascotAnimationsToggle.IsChecked == true;
+            s.MascotReactionsEnabled = MascotReactionsToggle.IsChecked == true;
+            s.MascotSleepyEnabled = MascotSleepyToggle.IsChecked == true;
             s.GlowEnabled = GlowToggle.IsChecked == true;
             s.GlowIntensity = GlowSlider.Value;
             s.AnimationIntensity = FaceAnimSlider.Value;
             s.BridgeEnabled = BridgeToggle.IsChecked == true;
+            s.AgentNotificationsEnabled = AgentNotificationsToggle.IsChecked == true;
+            s.CompletionNotificationsEnabled = CompletionNotificationsToggle.IsChecked == true;
+            s.ApprovalNotificationsEnabled = ApprovalNotificationsToggle.IsChecked == true;
+            s.WindowsNotificationsWhenHidden = WindowsNotificationsToggle.IsChecked == true;
+            s.NotificationSoundEnabled = NotificationSoundToggle.IsChecked == true;
+            s.NotificationDurationMs = (int)NotificationDurationSlider.Value;
             s.DesktopPersistVisible = DesktopPersistToggle.IsChecked == true;
             s.FullscreenSuppress = FullscreenToggle.IsChecked == true;
         });

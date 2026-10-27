@@ -28,6 +28,7 @@ public partial class App : Application
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
     private ProviderIntegrationInspector _providerInspector = null!;
+    private readonly DispatcherTimer _idleTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private bool _ownsMutex;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -148,9 +149,33 @@ public partial class App : Application
         _tray.SetVisibilityIndicator(true);
         _tray.CommandSelected += OnTrayCommand;
         _island.VisibilityPreferenceChanged += preference =>
-            Dispatcher.BeginInvoke(() => _tray.SetVisibilityIndicator(preference == VisibilityPreference.Visible));
+            Dispatcher.BeginInvoke(() =>
+            {
+                var visible = preference == VisibilityPreference.Visible;
+                _tray.SetVisibilityIndicator(visible);
+                // Notification policy follows the user's explicit choice only; fullscreen
+                // suppression is transient and must not enable or disable toasts.
+                _presenter.Notifications.SetHidden(!visible);
+                // Sleep polling only matters while the island is actually rendered.
+                if (visible)
+                {
+                    _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
+                    _idleTimer.Start();
+                }
+                else
+                {
+                    _idleTimer.Stop();
+                }
+            });
         try { _tray.Initialize(); }
         catch (Exception ex) { Logger.Error("Tray icon failed to initialize", ex); }
+
+        _presenter.WindowsNoticeRequested += OnWindowsAgentNotice;
+
+        // Low-rate user-idle probe (30 s) feeds the sleepy face; stopped while hidden.
+        _idleTimer.Tick += (_, _) => _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
+        _idleTimer.Start();
+        _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
 
         SystemParameters.StaticPropertyChanged += OnSystemParamsChanged;
         _island.Closed += (_, _) => Shutdown();
@@ -164,10 +189,30 @@ public partial class App : Application
         catch (Exception ex) { Logger.Error("Media service failed to start (GSMTC unavailable?)", ex); }
     }
 
+    private void OnWindowsAgentNotice(AgentNotice notice)
+    {
+        if (_tray is null) return;
+        var kind = notice.Kind switch
+        {
+            AgentNoticeKind.Error => TrayNotificationKind.Error,
+            AgentNoticeKind.ApprovalRequired => TrayNotificationKind.Warning,
+            _ => TrayNotificationKind.Info,
+        };
+        _tray.ShowBalloon(notice.Title, notice.Body, kind, notice.AllowSound, () => Dispatcher.BeginInvoke(() =>
+        {
+            // An explicit click is the only path that can bring MiMi back; passive
+            // delivery never overrides the user's hidden preference.
+            _island.SetHiddenByUser(false);
+            if (notice.ApprovalRequestId is { Length: > 0 } id) _presenter.ShowApproval(id);
+        }));
+    }
+
     private void OnSystemParamsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SystemParameters.WorkArea))
             Dispatcher.BeginInvoke(() => _island.PositionWindow());
+        else if (e.PropertyName is nameof(SystemParameters.ClientAreaAnimation))
+            Dispatcher.BeginInvoke(MascotOptions.RefreshReducedMotion);
     }
 
     private void OnTrayCommand(TrayIcon _, TrayMenuCommand command)

@@ -193,7 +193,7 @@
         <DataTemplate DataType="{x:Type ui:RestingView}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- MiMi's face: the resting pill's primary visual. -->
-                <mascot:MiMiMascotControl Width="40" Height="25" Expression="Calm" Margin="4,0,0,0"
+                <mascot:MiMiMascotControl Width="40" Height="25" Expression="{Binding Expression}" Margin="4,0,0,0"
                                           Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="13" FontWeight="SemiBold"
                            Text="{Binding Clock}" Margin="10,0,2,0"

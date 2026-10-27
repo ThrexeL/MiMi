@@ -39,8 +39,11 @@ public abstract class IslandContent : ObservableObject
 public sealed class RestingView : IslandContent
 {
     private string _clock;
+    private MascotExpression _expression = MascotExpression.Calm;
     public RestingView(string clock) { _clock = clock; }
     public string Clock { get => _clock; set => Set(ref _clock, value); }
+    /// <summary>Persistent mood (plus any brief reaction) for the resting face.</summary>
+    public MascotExpression Expression { get => _expression; set => Set(ref _expression, value); }
     public bool ShowClock { get; init; } = true;
     public bool ShowMascot { get; init; } = true;
     public override double TargetWidth => 150;
@@ -338,7 +341,12 @@ public sealed class AgentCardViewModel : ObservableObject
     public ICommand PrevApprovalCommand { get; }
 
     /// <summary>Facial expression the mascot shows for this card's state.</summary>
-    public MascotExpression Expression { get; private set; } = MascotExpression.Calm;
+    public MascotExpression Expression
+    {
+        get => _expression;
+        private set => Set(ref _expression, value);
+    }
+    private MascotExpression _expression = MascotExpression.Calm;
 
     public void SetApprovalPosition(int index, int total)
     {
@@ -384,6 +392,16 @@ public sealed class AgentCardViewModel : ObservableObject
             AgentEventTypes.Cancelled => "#9A9AA0",
             _ => "#8AB4FF",
         };
+        Expression = ev.Type switch
+        {
+            AgentEventTypes.ApprovalRequested => MascotExpression.Alert,
+            AgentEventTypes.Failed or AgentEventTypes.ToolFailed => MascotExpression.Concerned,
+            AgentEventTypes.Completed or AgentEventTypes.TurnFinished => MascotExpression.Happy,
+            AgentEventTypes.Started => MascotExpression.Curious,
+            AgentEventTypes.Interrupted or AgentEventTypes.Cancelled or AgentEventTypes.SessionEnded
+                => MascotExpression.Calm,
+            _ => MascotExpression.Focused,
+        };
         ev.Metadata.TryGetValue("action_kind", out var kind);
         ActionKind = kind ?? "";
         ev.Metadata.TryGetValue("command", out var cmd);
@@ -397,12 +415,7 @@ public sealed class AgentCardViewModel : ObservableObject
         ? $"{(int)remaining.TotalMinutes}:{remaining.Seconds:00} left"
         : "";
 
-    public static string DisplayProvider(string provider) => provider switch
-    {
-        "claude-code" => "Claude Code",
-        "codex" => "Codex CLI",
-        var p => string.IsNullOrEmpty(p) ? "Agent" : char.ToUpperInvariant(p[0]) + p[1..],
-    };
+    public static string DisplayProvider(string provider) => ProviderNames.Display(provider);
 
     // ---- computed display strings (empty-safe for missing metadata) ----
 

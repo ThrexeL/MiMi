@@ -18,6 +18,16 @@ internal static class NativeMethods
     public const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_INFO = 0x10;
     public const uint WM_APP_TRAY = 0x8000; // WM_APP
 
+    // Balloon notification callbacks (delivered through uCallbackMessage).
+    public const uint NIN_BALLOONSHOW = 0x0402, NIN_BALLOONHIDE = 0x0403;
+    public const uint NIN_BALLOONTIMEOUT = 0x0404, NIN_BALLOONUSERCLICK = 0x0405;
+
+    // NOTIFYICONINFO dwInfoFlags.
+    public const uint NIIF_NONE = 0x0, NIIF_INFO = 0x1, NIIF_WARNING = 0x2, NIIF_ERROR = 0x3;
+    public const uint NIIF_NOSOUND = 0x10;
+    /// <summary>Honor Windows Do Not Disturb / Focus Assist instead of bypassing it.</summary>
+    public const uint NIIF_RESPECT_QUIET_TIME = 0x80;
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct NOTIFYICONDATAW
     {
@@ -42,6 +52,29 @@ internal static class NativeMethods
     [DllImport("shell32.dll", SetLastError = false)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool Shell_NotifyIconW(uint dwMessage, ref NOTIFYICONDATAW lpData);
+
+    // ---- keyboard / mouse --------------------------------------------------------
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    /// <summary>Time since the last real user input (system-wide). Used only for MiMi's
+    /// sleepy face; unsigned wrap is handled by subtracting in tick space.</summary>
+    public static TimeSpan GetUserIdleTime()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return TimeSpan.Zero;
+        var elapsed = unchecked((uint)Environment.TickCount - info.dwTime);
+        return TimeSpan.FromMilliseconds(elapsed);
+    }
 
     // ---- message-only window ----------------------------------------------------
 

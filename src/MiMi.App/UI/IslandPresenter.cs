@@ -16,15 +16,13 @@ namespace MiMi.App.UI;
 /// </summary>
 public sealed class IslandPresenter
 {
-    private static readonly TimeSpan TransientOutcomeDuration = TimeSpan.FromSeconds(2.5);
-    private static readonly TimeSpan TransientFailureDuration = TimeSpan.FromSeconds(4);
-
     private readonly ConfigStore _config;
     private readonly IslandStateManager _state;
     private readonly ApprovalStore _approvals;
     private readonly MediaViewModel _mediaVm;
     private readonly Dispatcher _dispatcher;
     private readonly AgentSessionManager _sessions = new();
+    private readonly AgentNotificationCoordinator _notifications = new();
 
     private RestingView _resting;
     private MediaCompactView? _mediaCompact;
@@ -38,6 +36,13 @@ public sealed class IslandPresenter
 
     private readonly DispatcherTimer _sessionSweeper;
 
+    // Living personality: persistent mood + one brief one-shot reaction.
+    private readonly DispatcherTimer _reactionTimer;
+    private MascotMood? _reaction;
+    private MascotMood _persistentMood = MascotMood.Calm;
+    private MascotExpression _mascotExpression = MascotExpression.Calm;
+    private TimeSpan _userIdle;
+
     public IslandContent? PinnedContent { get; private set; }
 
     public IslandPresenter(ConfigStore config, IslandStateManager state, ApprovalStore approvals,
@@ -50,8 +55,14 @@ public sealed class IslandPresenter
         _dispatcher = dispatcher;
 
         _resting = MakeResting();
+        _notifications.Configure(_config.Current);
         // Presenter mutates VM state and timers: always run on the UI thread.
-        _config.Changed += _ => _dispatcher.BeginInvoke(() => { _resting = MakeResting(); RefreshPinned(); });
+        _config.Changed += _ => _dispatcher.BeginInvoke(() =>
+        {
+            _notifications.Configure(_config.Current);
+            _resting = MakeResting();
+            RefreshPinned();
+        });
 
         // Session-manager changes arrive on worker threads; refresh silently on the UI.
         _sessions.SessionChanged += _ => _dispatcher.BeginInvoke(RefreshPinned);
@@ -62,9 +73,23 @@ public sealed class IslandPresenter
         // Low-frequency session sweep (staleness + bounded history) lives in the manager.
         _sessionSweeper = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _sessionSweeper.Tick += (_, _) => RefreshPinned();
+
+        _reactionTimer = new DispatcherTimer();
+        _reactionTimer.Tick += (_, _) =>
+        {
+            _reactionTimer.Stop();
+            _reaction = null;
+            RefreshPinned();
+        };
     }
 
     public AgentSessionManager Sessions => _sessions;
+
+    /// <summary>Notification decisions that should become Windows toasts while hidden.
+    /// The composition root owns the tray; the presenter never displays system UI itself.</summary>
+    public event Action<AgentNotice>? WindowsNoticeRequested;
+
+    public AgentNotificationCoordinator Notifications => _notifications;
 
     private RestingView MakeResting() => new(DateTime.Now.ToString("HH:mm"))
     {
@@ -93,6 +118,16 @@ public sealed class IslandPresenter
 
         var mediaActive = _config.Current.MediaModuleEnabled && _mediaCompact is not null;
         if (!mediaActive) _mediaCompact = null;
+
+        // Mood is computed before view composition so the face and indicator agree.
+        _persistentMood = ComputePersistentMood(workingCount, activeSessions, mediaActive);
+        if (_reaction is { } reaction && !MascotMoodPolicy.ReactionAllowed(_persistentMood))
+        {
+            _reaction = null; // an urgent state arrived; never let a stale one-shot win
+            _reactionTimer.Stop();
+        }
+        _mascotExpression = ToExpression(_reaction ?? _persistentMood);
+        _resting.Expression = _mascotExpression;
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.
@@ -125,6 +160,10 @@ public sealed class IslandPresenter
         }, PinnedContent);
 
         if (_sessions.All.Count > 0) _sessionSweeper.Start(); else _sessionSweeper.Stop();
+
+        // Aggregate multi-agent summary: throttled and only when the wording changes.
+        var aggregate = _notifications.NotifyAggregate(workingCount, _sessions.PendingApprovalCount);
+        if (aggregate is not null) PushNotice(aggregate);
     }
 
     /// <summary>The one definition of "actively working" used by both the count and the
@@ -140,14 +179,76 @@ public sealed class IslandPresenter
         if (workingCount > 1)
         {
             var pending = sessions.Sum(s => s.PendingApprovalIds.Count);
-            _agentIndicatorVm.Update($"{workingCount} agents active", MascotExpression.Focused, pending);
+            _agentIndicatorVm.Update($"{workingCount} agents active", _mascotExpression, pending);
         }
         else
         {
             var s = sessions.First(IsWorking);
             var provider = AgentCardViewModel.DisplayProvider(s.Provider);
-            _agentIndicatorVm.Update($"{provider} · {StatusLabel(s)}", ExpressionFor(s), s.PendingApprovalIds.Count);
+            _agentIndicatorVm.Update($"{provider} · {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
         }
+    }
+
+    /// <summary>Persistent mood from confirmed state only. User idleness is measured from
+    /// system input activity, never from agent silence.</summary>
+    private MascotMood ComputePersistentMood(int workingCount, IReadOnlyList<AgentSession> sessions, bool mediaActive)
+    {
+        var approvalPending = _approvals.Pending.Count > 0;
+        var errorActive = sessions.Any(s => !s.Stale && s.State is SessionActivity.Error);
+        var musicPlaying = mediaActive && _mediaVm.IsPlaying;
+        return MascotMoodPolicy.Persistent(new MascotMoodInput(
+            approvalPending,
+            errorActive,
+            workingCount,
+            musicPlaying,
+            _userIdle,
+            _config.Current.MascotSleepyEnabled,
+            MascotMoodPolicy.DefaultSleepAfter));
+    }
+
+    private static MascotExpression ToExpression(MascotMood mood) => mood switch
+    {
+        MascotMood.Sleepy => MascotExpression.Sleepy,
+        MascotMood.Curious => MascotExpression.Curious,
+        MascotMood.Focused => MascotExpression.Focused,
+        MascotMood.Alert => MascotExpression.Alert,
+        MascotMood.Happy => MascotExpression.Happy,
+        MascotMood.Concerned => MascotExpression.Concerned,
+        MascotMood.Lively => MascotExpression.Lively,
+        _ => MascotExpression.Calm,
+    };
+
+    /// <summary>Brief one-shot reaction, always subordinate to approval/error/working.</summary>
+    private void React(MascotMoment moment)
+    {
+        if (!_config.Current.MascotReactionsEnabled || !MascotOptions.ReactionsEnabled) return;
+
+        // Recompute from the just-applied event so a completion sees "not working".
+        var active = _config.Current.AgentsModuleEnabled ? _sessions.Active : Array.Empty<AgentSession>();
+        var workingCount = active.Count(IsWorking);
+        var mediaActive = _config.Current.MediaModuleEnabled && _mediaCompact is not null;
+        _persistentMood = ComputePersistentMood(workingCount, active, mediaActive);
+
+        if (MascotMoodPolicy.Reaction(_persistentMood, moment) is not { } reaction) return;
+
+        _reaction = reaction;
+        _reactionTimer.Stop();
+        _reactionTimer.Interval = TimeSpan.FromMilliseconds(
+            reaction == MascotMood.Happy ? 1000 : 1200);
+        _reactionTimer.Start();
+    }
+
+    /// <summary>Called about twice a minute by the shell; only crossing the sleep threshold
+    /// triggers recomposition, so idle polling stays effectively free.</summary>
+    public void UpdateUserIdle(TimeSpan idle)
+    {
+        var wasSleeping = _userIdle >= MascotMoodPolicy.DefaultSleepAfter;
+        _userIdle = idle;
+        var isSleeping = idle >= MascotMoodPolicy.DefaultSleepAfter;
+        if (wasSleeping == isSleeping) return;
+        _reaction = null;
+        _reactionTimer.Stop();
+        RefreshPinned();
     }
 
     internal static string StatusLabel(AgentSession s) => s.Stale ? "Status unknown" : s.State switch
@@ -161,14 +262,6 @@ public sealed class IslandPresenter
         SessionActivity.Error => "Error",
         SessionActivity.Ended => "Ended",
         _ => "Status unknown",
-    };
-
-    internal static MascotExpression ExpressionFor(AgentSession s) => s.Stale ? MascotExpression.Calm : s.State switch
-    {
-        SessionActivity.AwaitingApproval => MascotExpression.Alert,
-        SessionActivity.Error => MascotExpression.Concerned,
-        SessionActivity.TurnFinished or SessionActivity.Interrupted or SessionActivity.Ended => MascotExpression.Calm,
-        _ => MascotExpression.Focused,
     };
 
     internal static string StateColor(AgentSession s) => s.Stale ? "#9A9AA0" : s.State switch
@@ -227,6 +320,8 @@ public sealed class IslandPresenter
                 }
                 Logger.Info($"Approval requested: id='{ev.ApprovalRequestId}' provider='{ev.Provider}' session='{ev.SessionId}' project='{ev.Project}'.");
                 EnqueueApproval(ev.ApprovalRequestId!, isNavigating: false);
+                foreach (var notice in _notifications.NotifyApproval(request))
+                    if (notice.WindowsEligible) WindowsNoticeRequested?.Invoke(notice);
                 break;
             }
 
@@ -240,36 +335,40 @@ public sealed class IslandPresenter
                 }
                 break;
 
-            // Lifecycle events are silent: they update the indicator, not the island.
-            case AgentEventTypes.Started:
-            case AgentEventTypes.Status:
-            case AgentEventTypes.PromptSubmitted:
-            case AgentEventTypes.ToolStarted:
-            case AgentEventTypes.ToolFinished:
-            case AgentEventTypes.SubagentStarted:
-            case AgentEventTypes.SubagentStopped:
-            case AgentEventTypes.SessionEnded:
-                break;
+            default:
+            {
+                // Living personality reacts to confirmed moments only; tool/status churn
+                // leaves the face in its current focused mood.
+                if (ev.Type == AgentEventTypes.Started) React(MascotMoment.AgentStarted);
+                else if (ev.Type is AgentEventTypes.Completed or AgentEventTypes.TurnFinished)
+                    React(MascotMoment.TurnCompleted);
 
-            // Outcomes stay visible briefly, then the previous view returns automatically.
-            case AgentEventTypes.Failed:
-            case AgentEventTypes.ToolFailed:
-            case AgentEventTypes.Interrupted:
-            case AgentEventTypes.Cancelled:
-                PushTransient(ev, TransientFailureDuration, expanded: true);
+                // Central policy decides what deserves a notice. Tool/status churn stays
+                // silent; start/completion/failure produce island notices via the state
+                // manager, so approvals always outrank them.
+                foreach (var notice in _notifications.OnEvent(ev))
+                {
+                    if (notice.ShowOnIsland) PushNotice(notice);
+                    if (notice.WindowsEligible) WindowsNoticeRequested?.Invoke(notice);
+                }
                 break;
-
-            case AgentEventTypes.Completed:
-            case AgentEventTypes.TurnFinished:
-                PushTransient(ev, TransientOutcomeDuration, expanded: true);
-                break;
+            }
         }
 
         RefreshPinned();
     }
 
-    private void PushTransient(AgentEvent ev, TimeSpan duration, bool expanded)
+    private void PushNotice(AgentNotice notice)
     {
+        // Every island-eligible notice carries an explicit duration; sticky approval
+        // cards are owned by the approval queue instead.
+        if (notice.Duration is not { } duration) return;
+
+        var ev = AgentEventFactory.Create(notice.Provider, notice.SessionId, notice.EventType,
+            title: notice.Title,
+            message: notice.Body,
+            project: notice.Project,
+            approvalRequestId: notice.ApprovalRequestId);
         var card = new AgentCardViewModel
         {
             ApprovalId = "",
@@ -279,8 +378,8 @@ public sealed class IslandPresenter
         card.Update(ev);
         _state.Push(new IslandAlert
         {
-            Id = ev.EventId,
-            Priority = ev.ToIslandPriority(),
+            Id = "notice:" + notice.Key,
+            Priority = notice.Priority,
             Content = new AgentExpandedView(card),
             Duration = duration,
         });
@@ -364,6 +463,22 @@ public sealed class IslandPresenter
         EnqueueApproval(_approvalQueue[_approvalQueueIndex], isNavigating: true);
     }
 
+    /// <summary>Brings a specific pending approval into view (used by notification
+    /// activation). Expired or unknown requests are ignored safely.</summary>
+    public bool ShowApproval(string approvalId)
+    {
+        var request = _approvals.Get(approvalId);
+        if (request is not { IsPending: true })
+        {
+            Logger.Info($"Notification activation ignored: approval '{approvalId}' is no longer pending.");
+            return false;
+        }
+        if (!_approvalQueue.Contains(approvalId)) _approvalQueue.Add(approvalId);
+        _approvalQueueIndex = Math.Max(0, _approvalQueue.IndexOf(approvalId));
+        EnqueueApproval(approvalId, isNavigating: true);
+        return true;
+    }
+
     public void OnApprovalResolved(ApprovalRequest request)
     {
         Logger.Info($"Approval resolved in UI: id='{request.ApprovalRequestId}' decision={request.Decision} by='{request.ResolvedBy}'.");
@@ -401,6 +516,7 @@ public sealed class IslandPresenter
             Content = new AgentExpandedView(toast),
             Duration = TimeSpan.FromSeconds(1.6),
         });
+        RefreshPinned();
     }
 
     // ---- simulation (tray menu; exercises the real pipeline, not a mock UI) ----------
