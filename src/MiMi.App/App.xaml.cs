@@ -57,6 +57,8 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             Logger.Error("UI thread exception (handled)", args.Exception);
+            if (args.Exception.InnerException is { } inner)
+                Logger.Error("  inner", inner);
             args.Handled = true; // the overlay must survive; details land in the log
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>

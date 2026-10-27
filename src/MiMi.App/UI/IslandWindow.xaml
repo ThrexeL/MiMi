@@ -44,6 +44,7 @@
         <ui:StringToVisibilityConverter x:Key="StringToVis"/>
         <ui:PendingCountToVisibilityConverter x:Key="PendingToVis"/>
         <ui:RunningToGlyphConverter x:Key="RunningToGlyph"/>
+        <ui:NullToVisibilityConverter x:Key="NullToCollapsed"/>
 
         <Style x:Key="IslandFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>

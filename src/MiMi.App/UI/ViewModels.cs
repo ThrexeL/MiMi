@@ -376,6 +376,16 @@ public sealed class RunningToGlyphConverter : System.Windows.Data.IValueConverte
         => throw new NotSupportedException();
 }
 
+/// <summary>Shows a progress bar only when a progress value exists (null hides it).</summary>
+public sealed class NullToVisibilityConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Shows a pending-approval marker only when the count is above zero.</summary>
 public sealed class PendingCountToVisibilityConverter : System.Windows.Data.IValueConverter
 {
