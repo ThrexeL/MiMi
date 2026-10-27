@@ -74,6 +74,9 @@ public partial class IslandWindow : Window
     private readonly Action<string[]>? _shelfDrop;
     private readonly Action<string>? _shelfRemove;
     private readonly Action? _shelfOpen;
+    private readonly Action? _quickAccessOpen;
+    private bool _shelfDragActive;
+    private DispatcherTimer? _shelfRevertTimer;
     private readonly Core.ProximityWakePolicy _proximityPolicy = new();
     private readonly DispatcherTimer _proximityTimer;
     private bool _proximityAwake;
@@ -86,13 +89,15 @@ public partial class IslandWindow : Window
         Action? secondTick = null,
         Action<string[]>? shelfDrop = null,
         Action<string>? shelfRemove = null,
-        Action? shelfOpen = null)
+        Action? shelfOpen = null,
+        Action? quickAccessOpen = null)
     {
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _secondTick = secondTick;
         _shelfDrop = shelfDrop;
         _shelfRemove = shelfRemove;
         _shelfOpen = shelfOpen;
+        _quickAccessOpen = quickAccessOpen;
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -143,11 +148,18 @@ public partial class IslandWindow : Window
         {
             // Dragging toward MiMi auto-opens the shelf so the drop target is visible.
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
                 _shelfOpen?.Invoke();
+                OnShelfDragSessionStarted();
+            }
             e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
                 ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
             Logger.Info("Shelf: DragEnter (file drop offered).");
+        };
+        Host.DragLeave += (_, e) =>
+        {
+            if (_shelfDragActive) OnShelfDragEnded();
         };
         Host.DragOver += (_, e) =>
         {
@@ -157,6 +169,8 @@ public partial class IslandWindow : Window
         };
         Host.Drop += (_, e) =>
         {
+            _shelfDragActive = false;
+            _shelfRevertTimer?.Stop();
             if (e.Data.GetDataPresent(DataFormats.FileDrop)
                 && e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
             {
@@ -183,7 +197,6 @@ public partial class IslandWindow : Window
 
         // Mascot life signs (blink, dart, glow breathing) live inside MiMiMascotControl.
     }
-
 
     // ---- global hotkey (Ctrl+Alt+M) --------------------------------------------
 
@@ -643,6 +656,38 @@ public partial class IslandWindow : Window
             DumpActiveAnimationsRecursive(System.Windows.Media.VisualTreeHelper.GetChild(root, i), result);
     }
 
+    private bool _idleClickWired;
+
+    /// <summary>Called while an Explorer drag is over the island: reveal the shelf.
+    /// Uses the same shelf-drag session flags so the reveal/revert cannot race.</summary>
+    private void OnShelfDragSessionStarted()
+    {
+        _shelfDragActive = true;
+        _shelfRevertTimer?.Stop();
+        _shelfOpen?.Invoke();
+        UpdateClip();
+    }
+
+    /// <summary>Drag left without dropping: revert to the previous state shortly.</summary>
+    private void OnShelfDragEnded()
+    {
+        // Small grace so WPF's spurious leave/enter pairs do not flicker.
+        _shelfRevertTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+        _shelfRevertTimer.Tick += (_, _) =>
+        {
+            _shelfRevertTimer.Stop();
+            _shelfDragActive = false;
+            _shelfOpen?.Invoke(); // presenter collapses back via SetUtilityPin(false)
+        };
+        _shelfRevertTimer.Start();
+    }
+
+    private void IdleFaceClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _quickAccessOpen?.Invoke();
+    }
+
     private void UpdateClip()
     {
         if (Pill.ActualWidth <= 0 || Pill.ActualHeight <= 0) return;
@@ -706,7 +751,20 @@ public partial class IslandWindow : Window
                 UpdatePlayGlyph(media.Media.IsPlaying);
                 break;
 
-        }
+            case RestingView resting:
+                // Click the face -> Quick Access hub (island-first interaction).
+                if (FindDescendant(Pill, "IdleFaceHost") is FrameworkElement idleHost)
+                {
+                    idleHost.MouseLeftButtonDown -= IdleFaceClick;
+                    idleHost.MouseLeftButtonDown += IdleFaceClick;
+                }
+                break;
+
+            case ShelfView shelf:
+                WireShelfDragOut();
+                _ = shelf; // rows wire via WireShelfDragOut
+                break;
+            }
     }
 
     private void MediaVmChanged(object? sender, PropertyChangedEventArgs e)

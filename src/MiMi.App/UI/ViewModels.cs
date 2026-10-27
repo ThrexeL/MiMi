@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MiMi.Agents;
 using MiMi.App.UI.Mascot;
+using MiMi.Core;
 using MiMi.Lyrics;
 using MiMi.Media;
 
@@ -265,6 +266,77 @@ public sealed class TodoRowViewModel : ObservableObject
     }
 }
 
+// ---- Quick Access hub (Phase 4.1) ------------------------------------------------
+
+public sealed record QuickAccessButton(string Kind, string Glyph, string Label, bool Accent);
+
+/// <summary>Quick Access hub bindings: four utility shortcuts + back affordance.</summary>
+public sealed class QuickAccessViewModel : ObservableObject
+{
+    private IReadOnlyList<QuickAccessButton> _buttons = Array.Empty<QuickAccessButton>();
+    private string _timerBadge = "";
+
+    public IReadOnlyList<QuickAccessButton> Buttons { get => _buttons; private set => Set(ref _buttons, value); }
+    /// <summary>Shown on the Focus tile while a session runs (context retention cue).</summary>
+    public string TimerBadge { get => _timerBadge; private set => Set(ref _timerBadge, value); }
+
+    public ICommand OpenPomodoroCommand { get; }
+    public ICommand OpenWaterCommand { get; }
+    public ICommand OpenTodoCommand { get; }
+    public ICommand OpenShelfCommand { get; }
+    public ICommand BackCommand { get; }
+
+    public QuickAccessViewModel(Action<string> openUtility, Action back)
+    {
+        OpenPomodoroCommand = new RelayCommand(() => openUtility(UtilityPinState.Pomodoro));
+        OpenWaterCommand = new RelayCommand(() => openUtility(UtilityPinState.Water));
+        OpenTodoCommand = new RelayCommand(() => openUtility(UtilityPinState.Todo));
+        OpenShelfCommand = new RelayCommand(() => openUtility(UtilityPinState.Shelf));
+        BackCommand = new RelayCommand(back);
+    }
+
+    public void UpdateTimerBadge(bool running, int sessions)
+    {
+        TimerBadge = running ? "running" : sessions > 0 ? $"{sessions} done" : "";
+    }
+}
+
+/// <summary>Hydration reminder with quick-add and snooze actions (Phase 4.1).</summary>
+public sealed class WaterReminderView : IslandContent
+{
+    public WaterViewModel Water { get; }
+    public ICommand SnoozeCommand { get; }
+
+    public WaterReminderView(WaterViewModel water, Action snooze)
+    {
+        Water = water;
+        SnoozeCommand = new RelayCommand(snooze);
+    }
+
+    public override double TargetWidth => 380;
+    public override double TargetHeight => 74;
+    public override double TargetCornerRadius => 22;
+}
+
+/// <summary>To-do due reminder with a complete action (Phase 4.1).</summary>
+public sealed class TodoDueView : IslandContent
+{
+    public string TaskTitle { get; }
+    public ICommand CompleteCommand { get; }
+    public ICommand OpenListCommand { get; }
+
+    public TodoDueView(string title, Action complete, Action openList)
+    {
+        TaskTitle = title;
+        CompleteCommand = new RelayCommand(complete);
+        OpenListCommand = new RelayCommand(openList);
+    }
+
+    public override double TargetWidth => 400;
+    public override double TargetHeight => 64;
+    public override double TargetCornerRadius => 20;
+}
+
 // ---- file shelf (Phase 4 / Milestone 5) -----------------------------------------
 
 /// <summary>One draggable shelf row. Path feeds the drag-out DataObject.</summary>
@@ -331,6 +403,16 @@ public sealed class HudView : IslandContent
     public override double TargetWidth => 360;
     public override double TargetHeight => 68;
     public override double TargetCornerRadius => 20;
+}
+
+/// <summary>Quick Access hub: the island-native utility launcher (Phase 4.1).</summary>
+public sealed class QuickAccessView : IslandContent
+{
+    public QuickAccessViewModel QuickAccess { get; }
+    public QuickAccessView(QuickAccessViewModel vm) { QuickAccess = vm; }
+    public override double TargetWidth => 430;
+    public override double TargetHeight => 92;
+    public override double TargetCornerRadius => 22;
 }
 
 /// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>

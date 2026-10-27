@@ -205,9 +205,11 @@
         <DataTemplate DataType="{x:Type ui:RestingView}">
             <!-- Face-only idle per the approved reference: the mascot is the entire
                  content — no clock, no status text, nothing else. -->
-            <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                      Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
+            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True">
+                <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
+            </Grid>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:MediaCompactView}">
@@ -662,6 +664,114 @@
                              Margin="0,8,0,0" Background="#2EFFFFFF" Foreground="{StaticResource AccentAmber}"
                              BorderThickness="0"
                              Visibility="{Binding Progress, Converter={StaticResource NullToCollapsed}}"/>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <DataTemplate DataType="{x:Type ui:QuickAccessView}">
+            <StackPanel Margin="16,12,16,12">
+                <Grid Margin="0,0,0,8">
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                               FontWeight="SemiBold" Text="Quick access"/>
+                    <Button Style="{StaticResource TransportButton}" Width="22" Height="22"
+                            HorizontalAlignment="Right" Command="{Binding QuickAccess.BackCommand}"
+                            ToolTip="Back">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
+                    </Button>
+                </Grid>
+                <UniformGrid Columns="4">
+                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenPomodoroCommand}">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="Focus"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenWaterCommand}">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="Water"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenTodoCommand}">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE73A;"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="To-do"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GhostButton}" Padding="4,8"
+                            Command="{Binding QuickAccess.OpenShelfCommand}">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="Shelf"/>
+                        </StackPanel>
+                    </Button>
+                </UniformGrid>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:WaterReminderView}">
+            <StackPanel Margin="16,10,14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+                                   Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   FontWeight="SemiBold" Text="Time to drink water"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextSecondary}" Text="{Binding Water.TotalLabel}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource ApproveButton}" Padding="12,7"
+                            Command="{Binding Water.QuickAddCommand}" Content="+250 ml"/>
+                </Grid>
+                <Button Style="{StaticResource GhostButton}" Padding="10,5" Margin="0,8,0,0"
+                        HorizontalAlignment="Right" Command="{Binding SnoozeCommand}"
+                        Content="Snooze 10 min"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:TodoDueView}">
+            <StackPanel Margin="16,10,14,10">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                               Foreground="{StaticResource AccentAmber}" Text="&#xE7BE;"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                               FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"
+                               Text="{Binding TaskTitle}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Style="{StaticResource ApproveButton}" Padding="12,6" Margin="0,0,8,0"
+                            Command="{Binding CompleteCommand}" Content="Mark done"/>
+                    <Button Style="{StaticResource GhostButton}" Padding="12,6"
+                            Command="{Binding OpenListCommand}" Content="Open list"/>
+                </StackPanel>
             </StackPanel>
         </DataTemplate>
 

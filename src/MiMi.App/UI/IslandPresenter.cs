@@ -34,7 +34,10 @@ public sealed class IslandPresenter
     private WaterView? _waterCachedView;
     private TodoView? _todoCachedView;
     private ShelfView? _shelfCachedView;
-    private readonly HashSet<string> _utilityPins = new(StringComparer.Ordinal);
+    private readonly UtilityPinState _utilityPins = new();
+    private readonly DragRevertPolicy _shelfDrag = new();
+    private readonly QuickAccessViewModel _quickAccessVm;
+    private QuickAccessView? _quickAccessView;
     private readonly AgentNotificationCoordinator _notifications = new();
 
     private RestingView _resting;
@@ -71,6 +74,7 @@ public sealed class IslandPresenter
         _dispatcher = dispatcher;
         _water = water;
         _todos = todos;
+        _utilityPins.Changed += () => _dispatcher.BeginInvoke(RefreshPinned);
         _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
         {
             var label = phase == PomodoroPhase.Focus ? "Focus time complete" : "Break finished";
@@ -118,7 +122,6 @@ public sealed class IslandPresenter
     }
 
     public AgentSessionManager Sessions => _sessions;
-    public IReadOnlyCollection<string> UtilityPins => _utilityPins;
 
     private bool _proximityAwake;
 
@@ -180,17 +183,47 @@ public sealed class IslandPresenter
 
     /// <summary>Tray toggle: opens/closes a utility panel. User-opened panels pin at
     /// UserPanel priority — only approval alerts (and failures) displace them.</summary>
-    public void ToggleUtility(string kind)
+    public void ToggleUtility(string kind) => _utilityPins.TogglePin(kind);
+
+    /// <summary>Pins a utility panel open without closing it (drag-toward-MiMi).</summary>
+    public void SetUtilityPin(string kind, bool pinned) => _utilityPins.SetPin(kind, pinned);
+
+    public IReadOnlyCollection<string> UtilityPins =>
+        _utilityPins.ActiveUtility is { } active ? new[] { active } : Array.Empty<string>();
+
+    /// <summary>Click the idle face (or the music panel's utilities glyph): the Quick
+    /// Access hub opens and stays until the user picks a utility or goes back.</summary>
+    public void OpenQuickAccess() => _utilityPins.SetHub(true);
+
+    public void CloseUtilityPanel() => _utilityPins.ClearUserPins();
+
+    // ---- file-shelf drag session (drag toward MiMi) ------------------------------
+
+    /// <summary>An Explorer drag entered the island: reveal the shelf as the drop
+    /// target at UserPanel priority (approvals still preempt).</summary>
+    public void ShelfDragEnter()
     {
-        if (!_utilityPins.Remove(kind)) _utilityPins.Add(kind);
+        _shelfDrag.Enter(DateTimeOffset.UtcNow);
         RefreshPinned();
     }
 
-    /// <summary>Pins a utility panel open without closing it (drag-toward-MiMi).</summary>
-    public void SetUtilityPin(string kind, bool pinned)
+    /// <summary>The drag left without dropping: revert after the grace period.</summary>
+    public void ShelfDragLeave() => _shelfDrag.Leave(DateTimeOffset.UtcNow);
+
+    /// <summary>The drop landed: shelve the files and keep the shelf open briefly.</summary>
+    public void ShelfDrop(IEnumerable<string> paths)
     {
-        var changed = pinned ? _utilityPins.Add(kind) : _utilityPins.Remove(kind);
-        if (changed) RefreshPinned();
+        _shelfDrag.Dropped();
+        AddToShelf(paths);
+        _dispatcher.BeginInvoke(ShelfDragRevert, DateTimeOffset.Now + TimeSpan.FromSeconds(4));
+    }
+
+    private void ShelfDragRevert()
+    {
+        if (_shelfDrag.DragActive) return;              // a new drag is in flight
+        if (_utilityPins.IsPinned(UtilityPinState.Shelf)) return; // user pinned it
+        _utilityPins.ClearUserPins();
+        RefreshPinned();
     }
 
     /// <summary>1 Hz heartbeat from the island window: drives the timer, reminders,
@@ -202,34 +235,35 @@ public sealed class IslandPresenter
         _pomodoro.Tick();
 
         var now = DateTimeOffset.Now;
-        var utilityActive = _utilityPins.Count > 0 || _pomodoro.Phase != PomodoroPhase.Idle;
+        var utilityActive = _utilityPins.ActiveUtility is not null || _pomodoro.Phase != PomodoroPhase.Idle;
         if (!utilityActive)
         {
             // Reminder checks only (allocation-free when nothing is due).
             if (_water.ShouldRemindNow(now))
             {
                 _water.MarkReminded(now);
-                PushUtilityNotice("Time to drink water", $"{_water.RemainingMl} ml to go");
+                PushWaterReminder();
             }
             foreach (var due in _todos.DueNow(now.LocalDateTime))
             {
                 _todos.MarkReminded(due.Id);
-                PushUtilityNotice("Task due", due.Title);
+                PushTodoDue(due.Title, due.Id);
             }
             return;
         }
 
         RefreshPinned(); // timer countdown + phase changes repaint via the pinned VM
 
-        if (_water.ShouldRemindNow(now))
+        var now2 = DateTimeOffset.Now;
+        if (_water.ShouldRemindNow(now2))
         {
-            _water.MarkReminded(now);
-            PushUtilityNotice("Time to drink water", $"{_water.RemainingMl} ml to go");
+            _water.MarkReminded(now2);
+            PushWaterReminder();
         }
-        foreach (var due in _todos.DueNow(now.LocalDateTime))
+        foreach (var due in _todos.DueNow(now2.LocalDateTime))
         {
             _todos.MarkReminded(due.Id);
-            PushUtilityNotice("Task due", due.Title);
+            PushTodoDue(due.Title, due.Id);
         }
     }
 
@@ -249,6 +283,48 @@ public sealed class IslandPresenter
         });
     }
 
+    /// <summary>Hydration reminder with quick-add and snooze actions.</summary>
+    private void PushWaterReminder()
+    {
+        UpdateUtilityVms();
+        var view = new WaterReminderView(_waterVm!, snooze: () =>
+        {
+            _water.Snooze(TimeSpan.FromMinutes(10), DateTimeOffset.Now);
+            _state.Clear("hud:water-reminder");
+        });
+        _state.Push(new IslandAlert
+        {
+            Id = "hud:water-reminder",
+            Priority = IslandPriority.Utility,
+            Content = view,
+            Duration = TimeSpan.FromSeconds(30),
+        });
+    }
+
+    /// <summary>To-do due reminder with a mark-done action and a list shortcut.</summary>
+    private void PushTodoDue(string title, Guid id)
+    {
+        _state.Push(new IslandAlert
+        {
+            Id = "hud:todo-due:" + id,
+            Priority = IslandPriority.Utility,
+            Content = new TodoDueView(title,
+                complete: () =>
+                {
+                    _todos.Complete(id);
+                    _todos.Save();
+                    _state.Clear("hud:todo-due:" + id);
+                },
+                openList: () =>
+                {
+                    SetUtilityPin(UtilityPinState.Todo, true);
+                    _state.Clear("hud:todo-due:" + id);
+                }),
+            Duration = TimeSpan.FromSeconds(30),
+        });
+    }
+
+
     private void PushUtilityNotice(string title, string message)
     {
         var card = new AgentCardViewModel { ApprovalId = "", Decide = _ => { }, OpenInAgent = () => { } };
@@ -265,7 +341,7 @@ public sealed class IslandPresenter
 
     private void UpdateUtilityVms()
     {
-        var todoPinned = _utilityPins.Contains("todo");
+        var todoPinned = _utilityPins.IsPinned(UtilityPinState.Todo);
         // Pomodoro
         _pomodoroVm ??= new PomodoroViewModel(
             playPause: () =>
@@ -396,14 +472,19 @@ public sealed class IslandPresenter
         var pomodoroVisible = _pomodoro.Phase != PomodoroPhase.Idle;
         // Cached wrappers: the VMs update in place, so re-wrapping per refresh would
         // force a full content swap (and a render) every tick.
-        IslandContent? utilityView =
-            _utilityPins.Contains("pomodoro") || pomodoroVisible ? _pomodoroCachedView ??= new PomodoroView(_pomodoroVm!)
-            : _utilityPins.Contains("water") ? _waterCachedView ??= new WaterView(_waterVm!)
-            : _utilityPins.Contains("todo") ? _todoCachedView ??= new TodoView(_todoVm!)
-            : _utilityPins.Contains("shelf") ? _shelfCachedView ??= BuildShelfView()
-            : _shelf.Count > 0 ? _shelfCachedView ??= BuildShelfView()
-            : null;
-        var utilityPriority = _utilityPins.Count > 0 ? IslandPriority.UserPanel : IslandPriority.Utility;
+        var activeUtility = _utilityPins.ActiveUtility
+            ?? (pomodoroVisible && !_shelfDrag.DragActive ? UtilityPinState.Pomodoro : null);
+        IslandContent? utilityView = activeUtility switch
+        {
+            UtilityPinState.Hub => _quickAccessView ??= new QuickAccessView(_quickAccessVm),
+            UtilityPinState.Pomodoro => _pomodoroCachedView ??= new PomodoroView(_pomodoroVm!),
+            UtilityPinState.Water => _waterCachedView ??= new WaterView(_waterVm!),
+            UtilityPinState.Todo => _todoCachedView ??= new TodoView(_todoVm!),
+            UtilityPinState.Shelf => _shelfCachedView ??= BuildShelfView(),
+            _ => _shelf.Count > 0 && !_shelfDrag.DragActive ? _shelfCachedView ??= BuildShelfView() : null,
+        };
+        var utilityPriority = activeUtility is not null ? IslandPriority.UserPanel : IslandPriority.Utility;
+        if (_shelfDrag.DragActive) utilityPriority = IslandPriority.UserPanel; // drag target stays up
 
         if (utilityView is not null && (utilityPriority == IslandPriority.UserPanel || !agentsActive))
         {
