@@ -22,6 +22,14 @@ public sealed class IslandPresenter
     private readonly MediaViewModel _mediaVm;
     private readonly Dispatcher _dispatcher;
     private readonly AgentSessionManager _sessions = new();
+
+    private readonly PomodoroTimer _pomodoro = new();
+    private readonly WaterTracker _water;
+    private readonly TodoStore _todos;
+    private PomodoroViewModel? _pomodoroVm;
+    private WaterViewModel? _waterVm;
+    private TodoViewModel? _todoVm;
+    private readonly HashSet<string> _utilityPins = new(StringComparer.Ordinal);
     private readonly AgentNotificationCoordinator _notifications = new();
 
     private RestingView _resting;
@@ -47,13 +55,20 @@ public sealed class IslandPresenter
     public IslandContent? PinnedContent { get; private set; }
 
     public IslandPresenter(ConfigStore config, IslandStateManager state, ApprovalStore approvals,
-        MediaViewModel mediaVm, Dispatcher dispatcher)
+        MediaViewModel mediaVm, Dispatcher dispatcher, WaterTracker water, TodoStore todos)
     {
         _config = config;
         _state = state;
         _approvals = approvals;
         _mediaVm = mediaVm;
         _dispatcher = dispatcher;
+        _water = water;
+        _todos = todos;
+        _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
+        {
+            var label = phase == PomodoroPhase.Focus ? "Focus time complete" : "Break finished";
+            PushUtilityNotice(label, phase == PomodoroPhase.Focus ? "Take a break" : "Back to focus");
+        });
 
         _resting = MakeResting();
         _notifications.Configure(_config.Current);
@@ -96,6 +111,7 @@ public sealed class IslandPresenter
     }
 
     public AgentSessionManager Sessions => _sessions;
+    public IReadOnlyCollection<string> UtilityPins => _utilityPins;
 
     /// <summary>Notification decisions that should become Windows toasts while hidden.
     /// The composition root owns the tray; the presenter never displays system UI itself.</summary>
@@ -107,6 +123,110 @@ public sealed class IslandPresenter
     {
         ShowMascot = _config.Current.MascotEnabled,
     };
+
+    // ---- productivity utilities (Phase 4) ---------------------------------------
+
+    /// <summary>Tray toggle: opens/closes a utility panel. User-opened panels pin at
+    /// UserPanel priority — only approval alerts (and failures) displace them.</summary>
+    public void ToggleUtility(string kind)
+    {
+        if (!_utilityPins.Remove(kind)) _utilityPins.Add(kind);
+        RefreshPinned();
+    }
+
+    /// <summary>1 Hz heartbeat from the island window: drives the timer, reminders,
+    /// and live utility VMs. Deliberately cheap when nothing is pinned.</summary>
+    public void OnSecondTick()
+    {
+        _pomodoro.Tick();
+        RefreshPinned(); // timer countdown + phase changes repaint via the pinned VM
+
+        var now = DateTimeOffset.Now;
+        if (_water.ShouldRemindNow(now))
+        {
+            _water.MarkReminded(now);
+            PushUtilityNotice("Time to drink water", $"{_water.RemainingMl} ml to go");
+        }
+
+        foreach (var due in _todos.DueNow(now.LocalDateTime))
+        {
+            _todos.MarkReminded(due.Id);
+            PushUtilityNotice("Task due", due.Title);
+        }
+    }
+
+    private void PushUtilityNotice(string title, string message)
+    {
+        var card = new AgentCardViewModel { ApprovalId = "", Decide = _ => { }, OpenInAgent = () => { } };
+        card.Update(AgentEventFactory.Create("mimi", "utility", AgentEventTypes.Status,
+            title: title, message: message));
+        _state.Push(new IslandAlert
+        {
+            Id = "util:" + title + ":" + Guid.NewGuid().ToString("N")[..6],
+            Priority = IslandPriority.AgentCompletion,
+            Content = new AgentExpandedView(card),
+            Duration = TimeSpan.FromSeconds(3),
+        });
+    }
+
+    private void UpdateUtilityVms()
+    {
+        // Pomodoro
+        _pomodoroVm ??= new PomodoroViewModel(
+            playPause: () =>
+            {
+                if (_pomodoro.Phase == PomodoroPhase.Idle) _pomodoro.StartFocus();
+                else if (_pomodoro.IsRunning) _pomodoro.Pause();
+                else _pomodoro.Resume();
+                RefreshPinned();
+            },
+            stop: () =>
+            {
+                _pomodoro.Reset();
+                RefreshPinned();
+            });
+        var (phase, remaining, progress, sessions, running) = _pomodoro.Snapshot();
+        var phaseLabel = phase switch
+        {
+            PomodoroPhase.Focus => "Focus time",
+            PomodoroPhase.ShortBreak => "Short break",
+            PomodoroPhase.LongBreak => "Long break",
+            _ => "Focus time",
+        };
+        _pomodoroVm.Update(phaseLabel,
+            phase == PomodoroPhase.Idle
+                ? _pomodoro.FocusDuration.ToString(@"mm\:ss")
+                : remaining.ToString(@"mm\:ss"),
+            running ? "Stay on it" : phase == PomodoroPhase.Idle ? "Press play to begin" : "Paused",
+            progress, running, phase == PomodoroPhase.Idle, sessions);
+
+        // Water
+        _waterVm ??= new WaterViewModel(() =>
+        {
+            _water.Add(_water.QuickAddMl);
+            _water.Save(WaterTracker.DefaultPath);
+            RefreshPinned();
+        });
+        _waterVm.Update(
+            $"{_water.TodayMl / 1000.0:0.0} / {_water.DailyGoalMl / 1000.0:0.0} L",
+            _water.GoalFraction,
+            _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
+
+        // To-do (max 4 open rows)
+        _todoVm ??= new TodoViewModel(
+            add: title =>
+            {
+                try { _todos.Add(title); _todos.Save(); return true; }
+                catch (ArgumentException) { return false; }
+            },
+            refresh: () => RefreshPinned());
+        var open = _todos.Open;
+        _todoVm.HeaderCount = $"{open.Count} of {open.Count + _todos.Done.Count}";
+        _todoVm.Rows = open.Take(4).Select(t => new TodoRowViewModel(
+            t.Id, t.Title,
+            t.Due is { } d ? d.ToString("HH:mm") : "",
+            id => { _todos.Complete(id); _todos.Save(); RefreshPinned(); })).ToList();
+    }
 
     // ---- media ------------------------------------------------------------------
 
@@ -168,19 +288,39 @@ public sealed class IslandPresenter
         if (_mediaCompact is not null)
             _mediaCompact.AgentBadgeCount = agentsActive ? workingCount : 0;
 
-        if (agentsActive && !mediaActive)
-            PinnedContent = _agentCompact!;
-        else if (mediaActive)
-            PinnedContent = _mediaCompact!;
-        else
-            PinnedContent = _resting;
+        // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority —
+        // only approval alerts displace them. A merely RUNNING focus timer pins at
+        // Utility, below agent status, so agents never lose their pill to the timer.
+        UpdateUtilityVms();
+        var pomodoroVisible = _pomodoro.Phase != PomodoroPhase.Idle;
+        IslandContent? utilityView =
+            _utilityPins.Contains("pomodoro") ? new PomodoroView(_pomodoroVm!)
+            : _utilityPins.Contains("water") ? new WaterView(_waterVm!)
+            : _utilityPins.Contains("todo") ? new TodoView(_todoVm!)
+            : pomodoroVisible ? new PomodoroView(_pomodoroVm!)
+            : null;
+        var utilityPriority = _utilityPins.Count > 0 ? IslandPriority.UserPanel : IslandPriority.Utility;
 
-        _state.SetPinned(PinnedContent switch
+        if (utilityView is not null && (utilityPriority == IslandPriority.UserPanel || !agentsActive))
         {
-            AgentCompactView => IslandPriority.AgentCompletion,
-            MediaCompactView => IslandPriority.Media,
-            _ => IslandPriority.Idle,
-        }, PinnedContent);
+            PinnedContent = utilityView;
+            _state.SetPinned(utilityPriority, PinnedContent);
+        }
+        else if (agentsActive && !mediaActive)
+        {
+            PinnedContent = _agentCompact!;
+            _state.SetPinned(IslandPriority.AgentCompletion, PinnedContent);
+        }
+        else if (mediaActive)
+        {
+            PinnedContent = _mediaCompact!;
+            _state.SetPinned(IslandPriority.Media, PinnedContent);
+        }
+        else
+        {
+            PinnedContent = utilityView ?? _resting;
+            _state.SetPinned(utilityView is not null ? utilityPriority : IslandPriority.Idle, PinnedContent);
+        }
 
         if (_sessions.All.Count > 0) _sessionSweeper.Start(); else _sessionSweeper.Stop();
 

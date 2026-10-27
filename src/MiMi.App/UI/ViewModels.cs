@@ -101,6 +101,170 @@ public sealed class AgentCompactView : IslandContent
     public override bool Expandable => true;
 }
 
+// ---- productivity utilities (Phase 4 / Milestone 4) ----------------------------
+
+public sealed class PomodoroView : IslandContent
+{
+    public PomodoroViewModel Pomodoro { get; }
+    public PomodoroView(PomodoroViewModel pomodoro) { Pomodoro = pomodoro; }
+    public override double TargetWidth => 400;
+    public override double TargetHeight => 74;
+    public override double TargetCornerRadius => 22;
+}
+
+public sealed class WaterView : IslandContent
+{
+    public WaterViewModel Water { get; }
+    public WaterView(WaterViewModel water) { Water = water; }
+    public override double TargetWidth => 380;
+    public override double TargetHeight => 74;
+    public override double TargetCornerRadius => 22;
+}
+
+public sealed class TodoView : IslandContent
+{
+    public TodoViewModel Todo { get; }
+    public TodoView(TodoViewModel todo) { Todo = todo; }
+    public override double TargetWidth => 400;
+    public override double TargetHeight => 74;
+    public override double TargetCornerRadius => 22;
+    public override bool AutoHeight => true;
+}
+
+/// <summary>Live Pomodoro bindings. Remaining/progress refresh on the 1 Hz tick.</summary>
+public sealed class PomodoroViewModel : ObservableObject
+{
+    private string _phaseLabel = "Focus time";
+    private string _remaining = "25:00";
+    private string _subLabel = "Press play to begin";
+    private double _progress;
+    private bool _running;
+    private bool _idle = true;
+    private int _sessions;
+    private string _sessionsLabel = "0";
+
+    public string PhaseLabel { get => _phaseLabel; private set => Set(ref _phaseLabel, value); }
+    public string Remaining { get => _remaining; private set => Set(ref _remaining, value); }
+    public string SubLabel { get => _subLabel; private set => Set(ref _subLabel, value); }
+    public double Progress { get => _progress; private set => Set(ref _progress, value); }
+    public bool Running { get => _running; private set => Set(ref _running, value); }
+    public bool Idle { get => _idle; private set => Set(ref _idle, value); }
+    /// <summary>Play glyph when idle/paused, pause glyph when running.</summary>
+    public string RunningGlyph => Running ? "\uE769" : "\uE768";
+    public string SessionsLabel { get => _sessionsLabel; private set => Set(ref _sessionsLabel, value); }
+
+    public ICommand PlayPauseCommand { get; }
+    public ICommand StopCommand { get; }
+    private readonly Action _playPause;
+    private readonly Action _stop;
+
+    public PomodoroViewModel(Action playPause, Action stop)
+    {
+        _playPause = playPause;
+        _stop = stop;
+        PlayPauseCommand = new RelayCommand(() => _playPause());
+        StopCommand = new RelayCommand(() => _stop());
+    }
+
+    public void Update(string phaseLabel, string remaining, string subLabel, double progress,
+        bool running, bool idle, int sessions)
+    {
+        PhaseLabel = phaseLabel;
+        Remaining = remaining;
+        SubLabel = subLabel;
+        Progress = progress;
+        Running = running;
+        Idle = idle;
+        SessionsLabel = sessions.ToString();
+    }
+}
+
+/// <summary>Hydration bindings: today total, goal fraction, quick-add.</summary>
+public sealed class WaterViewModel : ObservableObject
+{
+    private string _totalLabel = "0.0 / 1.8 L";
+    private double _progress;
+    private string _subLabel = "Stay hydrated";
+
+    public string TotalLabel { get => _totalLabel; private set => Set(ref _totalLabel, value); }
+    public double Progress { get => _progress; private set => Set(ref _progress, value); }
+    public string SubLabel { get => _subLabel; private set => Set(ref _subLabel, value); }
+    public string QuickAddLabel => $"+{QuickAddMl} ml";
+
+    public int QuickAddMl { get; set; } = 250;
+
+    public ICommand QuickAddCommand { get; }
+    private readonly Action _quickAdd;
+
+    public WaterViewModel(Action quickAdd)
+    {
+        _quickAdd = quickAdd;
+        QuickAddCommand = new RelayCommand(() => _quickAdd());
+    }
+
+    public void Update(string totalLabel, double progress, string subLabel)
+    {
+        TotalLabel = totalLabel;
+        Progress = progress;
+        SubLabel = subLabel;
+    }
+}
+
+/// <summary>To-do bindings: open tasks (max 4 rows), add box, complete buttons.</summary>
+public sealed class TodoViewModel : ObservableObject
+{
+    private string _headerCount = "";
+    private string _newTaskTitle = "";
+    private IReadOnlyList<TodoRowViewModel> _rows = Array.Empty<TodoRowViewModel>();
+
+    public string HeaderCount { get => _headerCount; set => Set(ref _headerCount, value); }
+    public IReadOnlyList<TodoRowViewModel> Rows { get => _rows; set => Set(ref _rows, value); }
+    public bool HasNoRows => _rows.Count == 0;
+    public string NewTaskTitle { get => _newTaskTitle; set => Set(ref _newTaskTitle, value); }
+
+    public ICommand AddCommand { get; }
+    private readonly Func<string, bool> _add;
+    private readonly Action _refresh;
+
+    public TodoViewModel(Func<string, bool> add, Action refresh)
+    {
+        _add = add;
+        _refresh = refresh;
+        AddCommand = new RelayCommand(() =>
+        {
+            if (_add(NewTaskTitle)) NewTaskTitle = "";
+            _refresh();
+        });
+    }
+
+    public sealed class TodoRow
+    {
+        public required Guid Id { get; init; }
+        public required string Title { get; init; }
+        public required string DueLabel { get; init; }
+    }
+
+    public ICommand? CompleteCommandFor(Guid id) => null; // rows complete via row VMs
+}
+
+/// <summary>Checkbox row VM: completes its task through the presenter callback.</summary>
+public sealed class TodoRowViewModel : ObservableObject
+{
+    public Guid Id { get; }
+    public string Title { get; }
+    public string DueLabel { get; }
+
+    public ICommand CompleteCommand { get; }
+
+    public TodoRowViewModel(Guid id, string title, string dueLabel, Action<Guid> complete)
+    {
+        Id = id;
+        Title = title;
+        DueLabel = dueLabel;
+        CompleteCommand = new RelayCommand(() => complete(id));
+    }
+}
+
 /// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>
 public sealed class AgentActivityPanelView : IslandContent
 {
@@ -132,6 +296,16 @@ public sealed class AgentTimelineItem
     public required string TimeLabel { get; init; }
     public required string Text { get; init; }
     public required string Kind { get; init; }
+}
+
+/// <summary>Running -> pause glyph; idle/paused -> play glyph.</summary>
+public sealed class RunningToGlyphConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is true ? "" : "";
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
 }
 
 /// <summary>Shows a pending-approval marker only when the count is above zero.</summary>

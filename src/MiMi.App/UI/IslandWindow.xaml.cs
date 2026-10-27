@@ -60,14 +60,17 @@ public partial class IslandWindow : Window
 
     private double _glowLevel = 0.55; // current in-pill aurora level (0..1)
     private readonly Func<AgentActivityPanelView> _agentPanelProvider;
+    private readonly Action? _secondTick;
 
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
         Func<string, TimeSpan?> approvalTimeLeft,
         MediaViewModel mediaVm,
-        Func<AgentActivityPanelView>? agentPanelProvider = null)
+        Func<AgentActivityPanelView>? agentPanelProvider = null,
+        Action? secondTick = null)
     {
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
+        _secondTick = secondTick;
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -111,6 +114,8 @@ public partial class IslandWindow : Window
         _progressTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _progressTimer.Tick += (_, _) =>
         {
+            _secondTick?.Invoke(); // productivity heartbeat (timer, reminders)
+
             if (_renderedContent is MediaExpandedView { Media: { } media } && media.IsPlaying)
                 media.RefreshTimeline();
             if (_renderedContent is ApprovalView { Agent: { } card })

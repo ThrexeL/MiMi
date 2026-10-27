@@ -15,6 +15,9 @@ namespace MiMi.App.Interop;
 public sealed class TrayIcon : IDisposable
 {
     private const int MenuToggleVisibility = 100;
+    private const int MenuPomodoro = 106;
+    private const int MenuWater = 107;
+    private const int MenuTodo = 108;
     private const int MenuSettings = 101;
     private const int MenuSimulate = 102;
     private const int MenuAutoStart = 103;
@@ -29,6 +32,7 @@ public sealed class TrayIcon : IDisposable
     private bool _added;
     private bool _autoStartChecked;
     private bool _islandVisible = true;
+    private readonly HashSet<string> _utilityPins = new(StringComparer.Ordinal);
     private uint _taskbarCreatedMsg;
     private Action? _balloonClick;
 
@@ -38,6 +42,18 @@ public sealed class TrayIcon : IDisposable
     public void SetVisibilityIndicator(bool islandVisible)
     {
         _islandVisible = islandVisible;
+    }
+
+    /// <summary>Raised when the menu opens so callers can refresh pin checkmarks.</summary>
+    public event Action? UtilityIndicatorsRequested;
+
+    /// <summary>Checkmarks the pinned utility panels (tray toggles open/close them).</summary>
+    public void SetUtilityIndicators(bool pomodoro, bool water, bool todo)
+    {
+        _utilityPins.Clear();
+        if (pomodoro) _utilityPins.Add("pomodoro");
+        if (water) _utilityPins.Add("water");
+        if (todo) _utilityPins.Add("todo");
     }
 
     public void Initialize()
@@ -161,9 +177,14 @@ public sealed class TrayIcon : IDisposable
 
     private void ShowMenu()
     {
+        UtilityIndicatorsRequested?.Invoke(); // refresh checkmarks at open time
         var menu = NativeMethods.CreatePopupMenu();
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuToggleVisibility,
             _islandVisible ? "Hide MiMi	Ctrl+Alt+M" : "Show MiMi	Ctrl+Alt+M");
+        NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
+        NativeMethods.AppendMenuW(menu, _utilityPins.Contains("pomodoro") ? 8u : 0u, (IntPtr)MenuPomodoro, "Focus timer");
+        NativeMethods.AppendMenuW(menu, _utilityPins.Contains("water") ? 8u : 0u, (IntPtr)MenuWater, "Water tracker");
+        NativeMethods.AppendMenuW(menu, _utilityPins.Contains("todo") ? 8u : 0u, (IntPtr)MenuTodo, "To-do list");
         NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSettings, "Settings…");
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSimulate, "Simulate agent event");
@@ -181,6 +202,9 @@ public sealed class TrayIcon : IDisposable
 
         var command = cmd switch
         {
+            MenuPomodoro => TrayMenuCommand.TogglePomodoro,
+            MenuWater => TrayMenuCommand.ToggleWater,
+            MenuTodo => TrayMenuCommand.ToggleTodo,
             MenuToggleVisibility => TrayMenuCommand.ToggleVisibility,
             MenuSettings => TrayMenuCommand.Settings,
             MenuSimulate => TrayMenuCommand.Simulate,
@@ -252,7 +276,7 @@ public sealed class TrayIcon : IDisposable
     }
 }
 
-public enum TrayMenuCommand { ToggleVisibility, Settings, Simulate, ToggleAutoStart, Restart, Exit }
+public enum TrayMenuCommand { ToggleVisibility, TogglePomodoro, ToggleWater, ToggleTodo, Settings, Simulate, ToggleAutoStart, Restart, Exit }
 
 /// <summary>Balloon severity: maps to the Shell info icon (not app behavior).</summary>
 public enum TrayNotificationKind { Info, Warning, Error }

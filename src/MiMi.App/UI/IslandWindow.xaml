@@ -43,6 +43,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <ui:StringToVisibilityConverter x:Key="StringToVis"/>
         <ui:PendingCountToVisibilityConverter x:Key="PendingToVis"/>
+        <ui:RunningToGlyphConverter x:Key="RunningToGlyph"/>
 
         <Style x:Key="IslandFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
@@ -484,6 +485,113 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+
+
+        <!-- ================= utility panels (Phase 4) ================= -->
+        <DataTemplate DataType="{x:Type ui:PomodoroView}">
+            <StackPanel Margin="16,10,14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+                                   Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   FontWeight="SemiBold" Text="{Binding Pomodoro.PhaseLabel}"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   Foreground="{StaticResource AccentAmber}"
+                                   Text="{Binding Pomodoro.Remaining, StringFormat='{}{0} remaining'}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource TransportButton}" Width="30" Height="30"
+                                Command="{Binding Pomodoro.PlayPauseCommand}">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
+                                       Text="{Binding Pomodoro.Running, Converter={StaticResource RunningToGlyph}}"/>
+                        </Button>
+                        <Button Style="{StaticResource TransportButton}" Width="30" Height="30" Margin="8,0,0,0"
+                                Command="{Binding Pomodoro.StopCommand}">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
+                                       Text="&#xE71A;"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+                <ProgressBar Height="4" Minimum="0" Maximum="1" Value="{Binding Pomodoro.Progress, Mode=OneWay}"
+                             Margin="0,8,0,0" Background="#2EFFFFFF" Foreground="{StaticResource AccentAmber}"
+                             BorderThickness="0"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:WaterView}">
+            <StackPanel Margin="16,10,14,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+                                   Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   FontWeight="SemiBold" Text="Water today"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   Foreground="{StaticResource AccentAmber}"
+                                   Text="{Binding Water.TotalLabel}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource ApproveButton}" Padding="14,7"
+                            Command="{Binding Water.QuickAddCommand}"
+                            Content="{Binding Water.QuickAddLabel}"/>
+                </Grid>
+                <ProgressBar Height="4" Minimum="0" Maximum="1" Value="{Binding Water.Progress, Mode=OneWay}"
+                             Margin="0,8,0,0" Background="#2EFFFFFF" Foreground="{StaticResource AccentAmber}"
+                             BorderThickness="0"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:TodoView}">
+            <StackPanel Margin="16,10,14,10">
+                <Grid Margin="0,0,0,6">
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                               FontWeight="SemiBold" Text="Today"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                               Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
+                               Text="{Binding Todo.HeaderCount}"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Todo.Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                <Button Style="{StaticResource TransportButton}" Width="20" Height="20"
+                                        Command="{Binding CompleteCommand}" ToolTip="Complete task">
+                                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                               Text="&#xE739;"/>
+                                </Button>
+                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                           Margin="9,0,0,0" VerticalAlignment="Center"
+                                           Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                           Foreground="{StaticResource TextTertiary}" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" Text="{Binding DueLabel}"
+                                           Visibility="{Binding DueLabel, Converter={StaticResource StringToVis}}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                           Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
+                           Text="All done — add tasks from the tray when the list is empty"
+                           Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
 

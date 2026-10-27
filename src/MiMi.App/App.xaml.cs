@@ -8,6 +8,7 @@ using MiMi.App.UI.Mascot;
 using MiMi.Bridge;
 using MiMi.Core;
 using MiMi.Lyrics;
+using MiMi.App.UI.Mascot;
 using MiMi.Media;
 using Wmc = Windows.Media.Control;
 
@@ -81,7 +82,9 @@ public partial class App : Application
             previous: () => _ = _media?.SendCommandAsync(MediaCommand.Previous),
             seek: pos => _ = _media?.SeekAsync(pos));
 
-        _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher);
+        var water = new WaterTracker();
+        var todos = new TodoStore();
+        _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos);
 
         _island = new IslandWindow(
             _config,
@@ -90,7 +93,8 @@ public partial class App : Application
                 ? r.TimeToLive - (DateTimeOffset.UtcNow - r.CreatedUtc)
                 : TimeSpan.Zero,
             mediaVm,
-            () => _presenter.BuildAgentPanel());
+            () => _presenter.BuildAgentPanel(),
+            secondTick: () => _presenter.OnSecondTick());
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>
@@ -167,6 +171,12 @@ public partial class App : Application
         _tray = new TrayIcon();
         _tray.SetAutoStartIndicator(AutoStart.IsEnabled());
         _tray.SetVisibilityIndicator(true);
+        _tray.SetUtilityIndicators(false, false, false);
+        _tray.UtilityIndicatorsRequested += () => Dispatcher.BeginInvoke(() =>
+            _tray.SetUtilityIndicators(
+                _presenter.UtilityPins.Contains("pomodoro"),
+                _presenter.UtilityPins.Contains("water"),
+                _presenter.UtilityPins.Contains("todo")));
         _tray.CommandSelected += OnTrayCommand;
         _island.VisibilityPreferenceChanged += preference =>
             Dispatcher.BeginInvoke(() =>
@@ -234,6 +244,15 @@ public partial class App : Application
                     var hiding = _island.Coordinator.Preference == VisibilityPreference.Visible;
                     if (!hiding) _presenter.NoteUserActivity();
                     _island.SetHiddenByUser(hiding);
+                    break;
+                case TrayMenuCommand.TogglePomodoro:
+                    _presenter.ToggleUtility("pomodoro");
+                    break;
+                case TrayMenuCommand.ToggleWater:
+                    _presenter.ToggleUtility("water");
+                    break;
+                case TrayMenuCommand.ToggleTodo:
+                    _presenter.ToggleUtility("todo");
                     break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;
