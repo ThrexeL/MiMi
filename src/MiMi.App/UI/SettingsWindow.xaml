@@ -203,7 +203,11 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Style="{StaticResource Sub}" Text="Agent integrations" VerticalAlignment="Center"/>
+            <TextBlock Style="{StaticResource Sub}" Text="Windows app notifications" Margin="0,0,0,4"/>
+        <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,10" TextWrapping="Wrap"
+                   Foreground="#90FFFFFF"
+                   Text="Reading other apps' notifications requires MSIX packaging with the userNotificationListener capability plus explicit user consent. The portable build cannot access them, so this integration is intentionally unavailable rather than simulated."/>
+        <TextBlock Style="{StaticResource Sub}" Text="Agent integrations" VerticalAlignment="Center"/>
             <TextBlock x:Name="ProviderCheckedText" Grid.Column="1" Style="{StaticResource Sub}"
                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <Button Grid.Column="2" Style="{StaticResource Btn}" Content="Refresh"
