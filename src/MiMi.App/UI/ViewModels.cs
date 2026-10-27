@@ -40,11 +40,14 @@ public sealed class RestingView : IslandContent
 {
     private string _clock;
     private MascotExpression _expression = MascotExpression.Calm;
+    private bool _showClock = true;
     public RestingView(string clock) { _clock = clock; }
     public string Clock { get => _clock; set => Set(ref _clock, value); }
     /// <summary>Persistent mood (plus any brief reaction) for the resting face.</summary>
     public MascotExpression Expression { get => _expression; set => Set(ref _expression, value); }
-    public bool ShowClock { get; init; } = true;
+    /// <summary>Nusa-style rest: the clock steps aside while MiMi dozes, leaving the
+    /// glowing eyes alone in the pill. Waking restores it.</summary>
+    public bool ShowClock { get => _showClock; set => Set(ref _showClock, value); }
     public bool ShowMascot { get; init; } = true;
     public override double TargetWidth => 150;
     public override double TargetHeight => 36;

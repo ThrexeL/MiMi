@@ -41,7 +41,8 @@ public sealed class IslandPresenter
     private MascotMood? _reaction;
     private MascotMood _persistentMood = MascotMood.Calm;
     private MascotExpression _mascotExpression = MascotExpression.Calm;
-    private TimeSpan _userIdle;
+    private DateTimeOffset _lastActivityUtc = DateTimeOffset.UtcNow;
+    private readonly DispatcherTimer _quietTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
     public IslandContent? PinnedContent { get; private set; }
 
@@ -81,6 +82,17 @@ public sealed class IslandPresenter
             _reaction = null;
             RefreshPinned();
         };
+
+        // Quiet is activity-based, not input-based: when nothing has needed the face for
+        // a while, this tick swaps in the sleepy expression (music and work already
+        // outrank sleep, so they need no special case here).
+        _quietTimer.Tick += (_, _) =>
+        {
+            if (_persistentMood != MascotMood.Calm) return;
+            if (QuietFor() < MascotMoodPolicy.DefaultSleepAfter) return;
+            RefreshPinned();
+        };
+        _quietTimer.Start();
     }
 
     public AgentSessionManager Sessions => _sessions;
@@ -101,11 +113,22 @@ public sealed class IslandPresenter
 
     public void OnMediaChanged(MediaSnapshot? snapshot)
     {
+        TouchActivity();
         // Reuse the compact view: MediaViewModel bindings update live, so recreating it
         // per snapshot would needlessly re-trigger the pill's fade animation.
         if (snapshot is null) _mediaCompact = null;
         else _mediaCompact ??= new MediaCompactView(_mediaVm);
         RefreshPinned();
+    }
+
+    /// <summary>Marks "MiMi has something to reflect". Sleep is measured from this, never
+    /// from desktop input (the display may already be off).</summary>
+    private void TouchActivity() => _lastActivityUtc = DateTimeOffset.UtcNow;
+
+    private TimeSpan QuietFor()
+    {
+        var quiet = DateTimeOffset.UtcNow - _lastActivityUtc;
+        return quiet < TimeSpan.Zero ? TimeSpan.Zero : quiet;
     }
 
     // ---- pinned composition ------------------------------------------------------
@@ -128,6 +151,8 @@ public sealed class IslandPresenter
         }
         _mascotExpression = ToExpression(_reaction ?? _persistentMood);
         _resting.Expression = _mascotExpression;
+        // Resting state is just the eyes (Nusa-inspired); waking brings the clock back.
+        _resting.ShowClock = _config.Current.ClockEnabled && _mascotExpression != MascotExpression.Sleepy;
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.
@@ -189,8 +214,9 @@ public sealed class IslandPresenter
         }
     }
 
-    /// <summary>Persistent mood from confirmed state only. User idleness is measured from
-    /// system input activity, never from agent silence.</summary>
+    /// <summary>Persistent mood from confirmed state only. Sleep follows quiet time —
+    /// time since MiMi last had an agent event, approval, notice, or media change — never
+    /// desktop input idleness.</summary>
     private MascotMood ComputePersistentMood(int workingCount, IReadOnlyList<AgentSession> sessions, bool mediaActive)
     {
         var approvalPending = _approvals.Pending.Count > 0;
@@ -201,7 +227,7 @@ public sealed class IslandPresenter
             errorActive,
             workingCount,
             musicPlaying,
-            _userIdle,
+            QuietFor(),
             _config.Current.MascotSleepyEnabled,
             MascotMoodPolicy.DefaultSleepAfter));
     }
@@ -238,17 +264,12 @@ public sealed class IslandPresenter
         _reactionTimer.Start();
     }
 
-    /// <summary>Called about twice a minute by the shell; only crossing the sleep threshold
-    /// triggers recomposition, so idle polling stays effectively free.</summary>
-    public void UpdateUserIdle(TimeSpan idle)
+    /// <summary>Called after the user acts on MiMi from a system surface (tray/notification).
+    /// Counts as activity so a dozing face wakes before the request is shown.</summary>
+    public void NoteUserActivity()
     {
-        var wasSleeping = _userIdle >= MascotMoodPolicy.DefaultSleepAfter;
-        _userIdle = idle;
-        var isSleeping = idle >= MascotMoodPolicy.DefaultSleepAfter;
-        if (wasSleeping == isSleeping) return;
-        _reaction = null;
-        _reactionTimer.Stop();
-        RefreshPinned();
+        TouchActivity();
+        if (_persistentMood == MascotMood.Sleepy) RefreshPinned();
     }
 
     internal static string StatusLabel(AgentSession s) => s.Stale ? "Status unknown" : s.State switch
@@ -308,6 +329,7 @@ public sealed class IslandPresenter
 
     public void OnAgentEvent(AgentEvent ev)
     {
+        TouchActivity();
         // Every event updates session tracking first — display flows from state.
         if (!string.IsNullOrEmpty(ev.SessionId)) _sessions.Apply(ev);
 
@@ -477,6 +499,7 @@ public sealed class IslandPresenter
     /// activation). Expired or unknown requests are ignored safely.</summary>
     public bool ShowApproval(string approvalId)
     {
+        TouchActivity();
         var request = _approvals.Get(approvalId);
         if (request is not { IsPending: true })
         {
@@ -491,6 +514,7 @@ public sealed class IslandPresenter
 
     public void OnApprovalResolved(ApprovalRequest request)
     {
+        TouchActivity();
         Logger.Info($"Approval resolved in UI: id='{request.ApprovalRequestId}' decision={request.Decision} by='{request.ResolvedBy}'.");
         _approvalCards.Remove(request.ApprovalRequestId);
         _state.Clear("approval:" + request.ApprovalRequestId);

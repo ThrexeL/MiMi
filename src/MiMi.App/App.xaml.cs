@@ -28,7 +28,6 @@ public partial class App : Application
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
     private ProviderIntegrationInspector _providerInspector = null!;
-    private readonly DispatcherTimer _idleTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private bool _ownsMutex;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -156,26 +155,14 @@ public partial class App : Application
                 // Notification policy follows the user's explicit choice only; fullscreen
                 // suppression is transient and must not enable or disable toasts.
                 _presenter.Notifications.SetHidden(!visible);
-                // Sleep polling only matters while the island is actually rendered.
-                if (visible)
-                {
-                    _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
-                    _idleTimer.Start();
-                }
-                else
-                {
-                    _idleTimer.Stop();
-                }
+                // Nusa-style hello: bringing MiMi back counts as activity, so a dozing
+                // face wakes instead of greeting the user asleep.
+                if (visible) _presenter.NoteUserActivity();
             });
         try { _tray.Initialize(); }
         catch (Exception ex) { Logger.Error("Tray icon failed to initialize", ex); }
 
         _presenter.WindowsNoticeRequested += OnWindowsAgentNotice;
-
-        // Low-rate user-idle probe (30 s) feeds the sleepy face; stopped while hidden.
-        _idleTimer.Tick += (_, _) => _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
-        _idleTimer.Start();
-        _presenter.UpdateUserIdle(NativeMethods.GetUserIdleTime());
 
         SystemParameters.StaticPropertyChanged += OnSystemParamsChanged;
         _island.Closed += (_, _) => Shutdown();
@@ -202,6 +189,7 @@ public partial class App : Application
         {
             // An explicit click is the only path that can bring MiMi back; passive
             // delivery never overrides the user's hidden preference.
+            _presenter.NoteUserActivity();
             _island.SetHiddenByUser(false);
             if (notice.ApprovalRequestId is { Length: > 0 } id) _presenter.ShowApproval(id);
         }));
@@ -222,7 +210,9 @@ public partial class App : Application
             switch (command)
             {
                 case TrayMenuCommand.ToggleVisibility:
-                    _island.SetHiddenByUser(_island.Coordinator.Preference == VisibilityPreference.Visible);
+                    var hiding = _island.Coordinator.Preference == VisibilityPreference.Visible;
+                    if (!hiding) _presenter.NoteUserActivity();
+                    _island.SetHiddenByUser(hiding);
                     break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;

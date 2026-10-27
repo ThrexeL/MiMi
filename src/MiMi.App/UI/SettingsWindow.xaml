@@ -164,7 +164,7 @@
                   Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
         <CheckBox x:Name="MascotReactionsToggle" Style="{StaticResource Check}" Content="Mascot reactions to agent events"
                   Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
-        <CheckBox x:Name="MascotSleepyToggle" Style="{StaticResource Check}" Content="Doze after 10 minutes of user inactivity"
+        <CheckBox x:Name="MascotSleepyToggle" Style="{StaticResource Check}" Content="Doze after two quiet minutes (no agents, notices, or media)"
                   Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
 
         <Separator Background="#22FFFFFF" Margin="0,12,0,8"/>

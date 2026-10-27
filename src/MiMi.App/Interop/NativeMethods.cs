@@ -53,29 +53,6 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool Shell_NotifyIconW(uint dwMessage, ref NOTIFYICONDATAW lpData);
 
-    // ---- keyboard / mouse --------------------------------------------------------
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct LASTINPUTINFO
-    {
-        public uint cbSize;
-        public uint dwTime;
-    }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
-
-    /// <summary>Time since the last real user input (system-wide). Used only for MiMi's
-    /// sleepy face; unsigned wrap is handled by subtracting in tick space.</summary>
-    public static TimeSpan GetUserIdleTime()
-    {
-        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
-        if (!GetLastInputInfo(ref info)) return TimeSpan.Zero;
-        var elapsed = unchecked((uint)Environment.TickCount - info.dwTime);
-        return TimeSpan.FromMilliseconds(elapsed);
-    }
-
     // ---- message-only window ----------------------------------------------------
 
     public const uint WS_POPUP = 0x80000000;
