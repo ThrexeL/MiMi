@@ -123,6 +123,16 @@ public sealed class AgentSessionRow
     public required string AgeLabel { get; init; }
     public required int PendingApprovals { get; init; }
     public required Brush StateBrush { get; init; }
+    /// <summary>Newest-last confirmed events (bounded, max three shown).</summary>
+    public required IReadOnlyList<AgentTimelineItem> Timeline { get; init; }
+}
+
+/// <summary>One short timeline line: "14:32 · Started".</summary>
+public sealed class AgentTimelineItem
+{
+    public required string TimeLabel { get; init; }
+    public required string Text { get; init; }
+    public required string Kind { get; init; }
 }
 
 /// <summary>Shows a pending-approval marker only when the count is above zero.</summary>

@@ -286,6 +286,12 @@ public sealed class IslandPresenter
             PendingApprovals = s.PendingApprovalIds.Count,
             StateBrush = new System.Windows.Media.SolidColorBrush(
                 (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(StateColor(s))),
+            Timeline = s.History.TakeLast(3).Select(h => new AgentTimelineItem
+            {
+                TimeLabel = h.TimestampUtc.ToLocalTime().ToString("HH:mm"),
+                Text = h.Text,
+                Kind = h.Kind,
+            }).ToList(),
         }).ToList();
         return new AgentActivityPanelView(rows);
     }
@@ -316,6 +322,10 @@ public sealed class IslandPresenter
                 if (request is not { IsPending: true })
                 {
                     Logger.Warn($"Approval '{ev.ApprovalRequestId}' ignored (unknown, resolved, or expired).");
+                    // Session tracking already saw the event; a rejected request must not
+                    // leave the indicator stuck on "Waiting for approval".
+                    if (ev.ApprovalRequestId is { } ignoredId)
+                        _sessions.MarkApprovalResolved(ev.Provider, ev.SessionId, ignoredId);
                     return;
                 }
                 Logger.Info($"Approval requested: id='{ev.ApprovalRequestId}' provider='{ev.Provider}' session='{ev.SessionId}' project='{ev.Project}'.");

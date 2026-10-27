@@ -33,6 +33,12 @@ public partial class SettingsWindow : Window
         _loading = true;
         var s = _config.Current;
         ScaleSlider.Value = s.Scale;
+        TextSizeCombo.SelectedIndex = s.TextSize switch
+        {
+            "small" => 0,
+            "large" => 2,
+            _ => 1,
+        };
         SpeedSlider.Value = s.AnimationSpeed;
         DelaySlider.Value = s.CollapseDelayMs;
         MediaToggle.IsChecked = s.MediaModuleEnabled;
@@ -79,6 +85,12 @@ public partial class SettingsWindow : Window
         _config.Update(s =>
         {
             s.Scale = ScaleSlider.Value;
+            s.TextSize = TextSizeCombo.SelectedIndex switch
+            {
+                0 => "small",
+                2 => "large",
+                _ => "default",
+            };
             s.AnimationSpeed = SpeedSlider.Value;
             s.CollapseDelayMs = (int)DelaySlider.Value;
             s.MediaModuleEnabled = MediaToggle.IsChecked == true;
@@ -119,6 +131,8 @@ public partial class SettingsWindow : Window
     }
 
     private void Checkbox_Changed2(object sender, RoutedEventArgs e) => CaptureToSettings();
+
+    private void TextSize_Changed(object sender, SelectionChangedEventArgs e) => CaptureToSettings();
 
     private async void RefreshProviders_Click(object sender, RoutedEventArgs e) => await RefreshProvidersAsync();
 

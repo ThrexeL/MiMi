@@ -15,6 +15,8 @@ public sealed class AppSettings
     [JsonPropertyName("horizontalOffsetDip")] public double HorizontalOffsetDip { get; set; } = 0;
     [JsonPropertyName("topMarginDip")] public double TopMarginDip { get; set; } = 6;
     [JsonPropertyName("scale")] public double Scale { get; set; } = 1.0;
+    /// <summary>"small", "default", or "large" — island typography only.</summary>
+    [JsonPropertyName("textSize")] public string TextSize { get; set; } = "default";
 
     // Behavior
     [JsonPropertyName("animationSpeed")] public double AnimationSpeed { get; set; } = 1.0;
@@ -95,6 +97,12 @@ public sealed class AppSettings
         NotificationDurationMs = Math.Clamp(NotificationDurationMs, 1500, 10000);
         if (double.IsNaN(Scale) || double.IsInfinity(Scale)) Scale = 1.0;
         if (double.IsNaN(AnimationSpeed) || double.IsInfinity(AnimationSpeed)) AnimationSpeed = 1.0;
+        TextSize = TextSize?.Trim().ToLowerInvariant() switch
+        {
+            "small" => "small",
+            "large" => "large",
+            _ => "default",
+        };
     }
 
     public static readonly JsonSerializerOptions JsonOpts = new()

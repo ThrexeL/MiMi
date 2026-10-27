@@ -636,7 +636,30 @@ public partial class IslandWindow : Window
     {
         var scale = Math.Clamp(_config.Current.Scale, 0.75, 1.5);
         Pill.LayoutTransform = new ScaleTransform(scale, scale);
+        ApplyTextScale();
         PositionWindow();
+    }
+
+    /// <summary>Text size scales only typography (not the whole island). DynamicResource
+    /// lookups update every visible label in place, including DataTemplates.</summary>
+    private void ApplyTextScale()
+    {
+        var scale = _config.Current.TextSize switch
+        {
+            "small" => 0.94,
+            "large" => 1.12,
+            _ => 1.0,
+        };
+
+        void Set(string key, double baseSize) =>
+            Resources[key] = Math.Round(baseSize * scale * 2, MidpointRounding.AwayFromZero) / 2;
+
+        Set("FontMicro", 11);
+        Set("FontCaption", 12);
+        Set("FontBody", 13);
+        Set("FontPrimary", 14);
+        Set("FontTitle", 15.5);
+        Set("FontMono", 12);
     }
 
     public void PositionWindow()

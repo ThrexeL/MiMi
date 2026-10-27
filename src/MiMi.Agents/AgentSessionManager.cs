@@ -17,6 +17,10 @@ public enum SessionActivity
     Unknown,          // stale: no confirmed events for a while
 }
 
+/// <summary>One short, confirmed history entry for a session. Never contains prompt
+/// text, command text, credentials, or transcript content.</summary>
+public sealed record AgentTimelineEntry(DateTimeOffset TimestampUtc, string Text, string Kind);
+
 /// <summary>One tracked agent session. Identity is (Provider, SessionId) — the project
 /// name is display metadata only, never a key, because several sessions can share one.</summary>
 public sealed class AgentSession
@@ -36,6 +40,10 @@ public sealed class AgentSession
     public bool Stale { get; internal set; }
     public IReadOnlyList<string> PendingApprovalIds => _pendingApprovals;
     internal readonly List<string> _pendingApprovals = new();
+
+    /// <summary>Bounded, newest-last timeline shown in the expanded activity panel.</summary>
+    public IReadOnlyList<AgentTimelineEntry> History => _history;
+    internal readonly List<AgentTimelineEntry> _history = new();
 }
 
 /// <summary>
@@ -55,6 +63,8 @@ public sealed class AgentSessionManager : IDisposable
 {
     public static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(90);
     public const int EndedHistoryLimit = 20;
+    public const int TimelineLimit = 12;
+    private static readonly TimeSpan ToolEntrySpacing = TimeSpan.FromSeconds(2);
 
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly Timer _sweeper;
@@ -191,6 +201,7 @@ public sealed class AgentSessionManager : IDisposable
             }
 
             session.Stale = false;
+            RecordHistory(session, ev);
         }
 
         SessionChanged?.Invoke(session);
@@ -214,6 +225,69 @@ public sealed class AgentSessionManager : IDisposable
         }
         SessionChanged?.Invoke(session);
     }
+
+    /// <summary>Adds one short confirmed event. Consecutive duplicates are collapsed and
+    /// rapid tool churn replaces the newest tool line instead of growing the list.</summary>
+    private static void RecordHistory(AgentSession session, AgentEvent ev)
+    {
+        var text = Describe(ev);
+        if (text is null) return;
+
+        var now = session.LastEventUtc;
+        if (session._history.Count > 0)
+        {
+            var last = session._history[^1];
+            if (string.Equals(last.Text, text, StringComparison.Ordinal)) return;
+            if (text.StartsWith("Running ", StringComparison.Ordinal)
+                && last.Text.StartsWith("Running ", StringComparison.Ordinal)
+                && now - last.TimestampUtc < ToolEntrySpacing)
+            {
+                session._history[^1] = new AgentTimelineEntry(last.TimestampUtc, text, "tool");
+                return;
+            }
+        }
+
+        session._history.Add(new AgentTimelineEntry(now, text, KindOf(ev)));
+        if (session._history.Count > TimelineLimit)
+            session._history.RemoveRange(0, session._history.Count - TimelineLimit);
+    }
+
+    /// <summary>Fixed, content-free wording. Provider messages, prompts, and commands are
+    /// deliberately never copied into history.</summary>
+    private static string? Describe(AgentEvent ev) => ev.Type switch
+    {
+        AgentEventTypes.Started => "Started",
+        AgentEventTypes.PromptSubmitted => "Received a task",
+        AgentEventTypes.ToolStarted => ToolText(ev),
+        AgentEventTypes.ToolFinished => "Tool finished",
+        AgentEventTypes.ToolFailed => "Tool failed",
+        AgentEventTypes.ApprovalRequested => "Approval requested",
+        AgentEventTypes.ApprovalResolved => "Approval resolved",
+        AgentEventTypes.TurnFinished or AgentEventTypes.Completed => "Turn completed",
+        AgentEventTypes.Failed => "Error",
+        AgentEventTypes.Interrupted or AgentEventTypes.Cancelled => "Interrupted",
+        AgentEventTypes.SessionEnded => "Session ended",
+        AgentEventTypes.SubagentStarted => "Subagent started",
+        AgentEventTypes.SubagentStopped => "Subagent stopped",
+        _ => null, // Status and unknown types are noise, not history
+    };
+
+    private static string ToolText(AgentEvent ev)
+    {
+        if (!ev.Metadata.TryGetValue("tool", out var tool) || string.IsNullOrWhiteSpace(tool))
+            return "Running tool";
+        tool = tool.Trim();
+        if (tool.Length > 32) tool = tool[..32] + "…";
+        return "Running " + tool;
+    }
+
+    private static string KindOf(AgentEvent ev) => ev.Type switch
+    {
+        AgentEventTypes.ToolStarted or AgentEventTypes.ToolFinished or AgentEventTypes.ToolFailed => "tool",
+        AgentEventTypes.ApprovalRequested or AgentEventTypes.ApprovalResolved => "approval",
+        AgentEventTypes.Failed or AgentEventTypes.Interrupted or AgentEventTypes.Cancelled => "error",
+        _ => "lifecycle",
+    };
 
     private void SweepStale() => SweepStale(DateTimeOffset.UtcNow);
 

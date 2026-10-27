@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:MiMi.App.UI"
         xmlns:mascot="clr-namespace:MiMi.App.UI.Mascot"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         Title="MiMi"
         Width="960" Height="560"
         WindowStyle="None"
@@ -20,12 +21,21 @@
         <SolidColorBrush x:Key="Surface" Color="#F0141416"/>
         <SolidColorBrush x:Key="Stroke" Color="#22FFFFFF"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#FFF2F2F4"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#B4FFFFFF"/>
-        <SolidColorBrush x:Key="TextTertiary" Color="#70FFFFFF"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#C0FFFFFF"/>
+        <SolidColorBrush x:Key="TextTertiary" Color="#86FFFFFF"/>
         <SolidColorBrush x:Key="AccentAmber" Color="#FFB454"/>
         <SolidColorBrush x:Key="AccentInk" Color="#FF1A1A1C"/>
         <SolidColorBrush x:Key="ArtPlaceholder" Color="#FF2A2A2E"/>
         <SolidColorBrush x:Key="EqBar" Color="#CCFFFFFF"/>
+
+        <!-- Typography ladder (DynamicResource so the Small/Default/Large setting
+             updates live). Sizes are modest step-ups from the previous scale. -->
+        <sys:Double x:Key="FontMicro">11</sys:Double>
+        <sys:Double x:Key="FontCaption">12</sys:Double>
+        <sys:Double x:Key="FontBody">13</sys:Double>
+        <sys:Double x:Key="FontPrimary">14</sys:Double>
+        <sys:Double x:Key="FontTitle">15.5</sys:Double>
+        <sys:Double x:Key="FontMono">12</sys:Double>
 
         <DropShadowEffect x:Key="PillShadow" BlurRadius="34" ShadowDepth="1" Direction="270"
                           Opacity="0.55" Color="#C8000000"/>
@@ -43,7 +53,7 @@
         <Style x:Key="MonoFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontMono}"/>
         </Style>
 
         <!-- ============================ buttons ============================ -->
@@ -195,7 +205,7 @@
                 <!-- MiMi's face: the resting pill's primary visual. -->
                 <mascot:MiMiMascotControl Width="40" Height="25" Expression="{Binding Expression}" Margin="4,0,0,0"
                                           Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="13" FontWeight="SemiBold"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                            Text="{Binding Clock}" Margin="10,0,2,0"
                            Visibility="{Binding ShowClock, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
@@ -207,9 +217,9 @@
                     <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="28" Height="28"/>
                 </Border>
                 <StackPanel Margin="10,0,0,0" VerticalAlignment="Center" Width="200">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="12" FontWeight="SemiBold"
-                               Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" FontWeight="SemiBold"
+                               Text="{Binding Media.Title}" ToolTip="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextSecondary}"
                                Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
                                Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
@@ -232,7 +242,7 @@
                 <Border Background="#22FFB454" CornerRadius="9" Padding="6,2" Margin="4,0,2,0"
                         VerticalAlignment="Center"
                         Visibility="{Binding HasAgentBadge, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10" FontWeight="SemiBold"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
                                Foreground="{StaticResource AccentAmber}"
                                Text="{Binding AgentBadgeLabel, Mode=OneWay}"/>
                 </Border>
@@ -246,13 +256,13 @@
                         <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="58" Height="58"/>
                     </Border>
                     <StackPanel Margin="14,0,0,0" VerticalAlignment="Center" Width="300">
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="15" FontWeight="SemiBold"
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontTitle}" FontWeight="SemiBold"
                                    Text="{Binding Media.Title}" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="12"
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    Foreground="{StaticResource TextSecondary}"
                                    Text="{Binding Media.Subtitle}" TextTrimming="CharacterEllipsis"
                                    Visibility="{Binding Media.Subtitle, Converter={StaticResource StringToVis}}"/>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                    Foreground="{StaticResource TextTertiary}" Margin="0,3,0,0"
                                    Text="{Binding Media.Source}" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
@@ -260,10 +270,10 @@
 
                 <Slider x:Name="ProgressSlider" Style="{StaticResource IslandSlider}" Margin="0,12,0,0"/>
                 <Grid Margin="0,3,0,0">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextSecondary}" Text="{Binding Media.Elapsed}"
                                HorizontalAlignment="Left"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextSecondary}" Text="{Binding Media.Remaining}"
                                HorizontalAlignment="Right"/>
                 </Grid>
@@ -291,9 +301,10 @@
                                           Expression="{Binding Indicator.Expression}"
                                           VerticalAlignment="Center"/>
                 <StackPanel Margin="9,0,0,0" VerticalAlignment="Center" Width="240">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="12" FontWeight="SemiBold"
-                               Text="{Binding Indicator.Line}" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" FontWeight="SemiBold"
+                               Text="{Binding Indicator.Line}" ToolTip="{Binding Indicator.Line}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}"
                                Text="{Binding Indicator.PendingLabel}"
                                Visibility="{Binding Indicator.PendingLabel, Converter={StaticResource StringToVis}}"/>
@@ -306,22 +317,22 @@
                 <StackPanel Orientation="Horizontal">
                     <mascot:MiMiMascotControl Width="20" Height="14" Expression="{Binding Agent.Expression}"
                                               VerticalAlignment="Center"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="14" FontWeight="SemiBold"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                                Margin="9,0,0,0" Text="{Binding Agent.Provider}"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
                                Foreground="{StaticResource TextTertiary}" Margin="10,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.ProjectLabel}"
                                TextTrimming="CharacterEllipsis"
                                Visibility="{Binding Agent.ProjectLabel, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="12.5" Margin="0,10,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" Margin="0,10,0,0"
                            VerticalAlignment="Top"
                            Text="{Binding Agent.Title}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="0,4,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" Margin="0,4,0,0"
                            Foreground="{StaticResource TextSecondary}" Text="{Binding Agent.Message}"
                            TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                            Visibility="{Binding Agent.Message, Converter={StaticResource StringToVis}}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5" Margin="0,6,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" Margin="0,6,0,0"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Agent.SessionLabel}"
                            TextTrimming="CharacterEllipsis"
                            Visibility="{Binding Agent.SessionLabel, Converter={StaticResource StringToVis}}"/>
@@ -333,54 +344,65 @@
                 <StackPanel Orientation="Horizontal">
                     <mascot:MiMiMascotControl Width="22" Height="15" Expression="Alert"
                                               VerticalAlignment="Center"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="13.5" FontWeight="SemiBold"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                                Foreground="{StaticResource AccentAmber}" Margin="9,0,0,0"
                                Text="{Binding Agent.Title}" VerticalAlignment="Center"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
                                Foreground="{StaticResource TextSecondary}" Margin="10,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.Provider}"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextTertiary}" Margin="8,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.TimeLeft}"
                                Visibility="{Binding Agent.TimeLeft, Converter={StaticResource StringToVis}}"/>
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10.5"
+                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}" Margin="8,0,0,0"
                                VerticalAlignment="Center" Text="{Binding Agent.ApprovalPosition}"/>
                     <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
                                 Visibility="{Binding Agent.HasMultipleApprovals, Converter={StaticResource BoolToVis}}">
-                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                        <Button Style="{StaticResource TransportButton}" Width="24" Height="24"
+                                FontSize="{DynamicResource FontMicro}"
                                 AutomationProperties.Name="Previous approval"
+                                ToolTip="Previous approval"
                                 Command="{Binding Agent.PrevApprovalCommand}" Content="&#xE76B;"/>
-                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" FontSize="10"
+                        <Button Style="{StaticResource TransportButton}" Width="24" Height="24"
+                                FontSize="{DynamicResource FontMicro}"
                                 AutomationProperties.Name="Next approval"
+                                ToolTip="Next approval"
                                 Command="{Binding Agent.NextApprovalCommand}" Content="&#xE76C;"/>
                     </StackPanel>
                 </StackPanel>
 
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,9,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" Margin="1,9,0,0"
                            Text="{Binding Agent.Message}" TextTrimming="CharacterEllipsis"
                            Visibility="{Binding Agent.Message, Converter={StaticResource StringToVis}}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11" Margin="1,0,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" Margin="1,0,0,0"
                            Foreground="{StaticResource TextSecondary}"
                            Text="{Binding Agent.ProjectLabel}"
                            Visibility="{Binding Agent.ProjectLabel, Converter={StaticResource StringToVis}}"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" Margin="1,0,0,0"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" Margin="1,0,0,0"
                            Text="{Binding Agent.ActionLabel}" TextTrimming="CharacterEllipsis"
                            Visibility="{Binding Agent.ActionLabel, Converter={StaticResource StringToVis}}"/>
 
                 <Border Background="#1AFFFFFF" CornerRadius="7" Padding="10,6" Margin="1,8,0,0"
-                        HorizontalAlignment="Left" MaxWidth="380"
+                        HorizontalAlignment="Left" MaxWidth="400"
                         Visibility="{Binding Agent.Command, Converter={StaticResource StringToVis}}">
                     <TextBlock Style="{StaticResource MonoFont}" Text="{Binding Agent.Command}"
+                               ToolTip="{Binding Agent.Command}"
                                TextTrimming="CharacterEllipsis"/>
                 </Border>
 
                 <StackPanel Orientation="Horizontal" Margin="1,11,0,0">
                     <Button Style="{StaticResource ApproveButton}" Command="{Binding Agent.ApproveCommand}"
+                            AutomationProperties.Name="Approve request"
+                            ToolTip="Approve this request"
                             Content="Approve"/>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.DenyCommand}"
+                            AutomationProperties.Name="Deny request"
+                            ToolTip="Deny this request"
                             Content="Deny" Margin="8,0,0,0"/>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.OpenCommand}"
+                            AutomationProperties.Name="Open in agent"
+                            ToolTip="Copy a safe session reference to the clipboard"
                             Content="Open in Agent" Margin="8,0,0,0"/>
                 </StackPanel>
             </StackPanel>
@@ -388,40 +410,59 @@
 
         <DataTemplate DataType="{x:Type ui:AgentActivityPanelView}">
             <StackPanel Margin="20,14,20,12">
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="13" FontWeight="SemiBold"
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                            Text="Agent activity"/>
                 <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
-                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
-                                    <Ellipse.Fill>
-                                        <SolidColorBrush Color="{Binding StateBrush.Color}"/>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                                <StackPanel Width="118" VerticalAlignment="Center">
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5" FontWeight="SemiBold"
-                                               Text="{Binding Provider}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
-                                               Foreground="{StaticResource TextTertiary}"
-                                               Text="{Binding Project}" TextTrimming="CharacterEllipsis"/>
+                            <StackPanel Margin="0,0,0,9">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
+                                        <Ellipse.Fill>
+                                            <SolidColorBrush Color="{Binding StateBrush.Color}"/>
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <StackPanel Width="118" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" FontWeight="SemiBold"
+                                                   Text="{Binding Provider}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                   Foreground="{StaticResource TextTertiary}"
+                                                   Text="{Binding Project}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="150">
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
+                                                   Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                   Foreground="{StaticResource TextSecondary}"
+                                                   Text="{Binding LastAction}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                   Foreground="{StaticResource TextTertiary}"
+                                                   Text="{Binding AgeLabel}" HorizontalAlignment="Right"/>
+                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                   Foreground="{StaticResource AccentAmber}"
+                                                   Text="{Binding PendingApprovals, StringFormat='{}{0} pending'}"
+                                                   HorizontalAlignment="Right"/>
+                                    </StackPanel>
                                 </StackPanel>
-                                <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="150">
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
-                                               Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
-                                               Foreground="{StaticResource TextSecondary}"
-                                               Text="{Binding LastAction}" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                                <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
-                                               Foreground="{StaticResource TextTertiary}"
-                                               Text="{Binding AgeLabel}" HorizontalAlignment="Right"/>
-                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
-                                               Foreground="{StaticResource AccentAmber}"
-                                               Text="{Binding PendingApprovals, StringFormat='{}{0} pending'}"
-                                               HorizontalAlignment="Right"/>
-                                </StackPanel>
+
+                                <!-- Confirmed events only; bounded to three newest entries. -->
+                                <ItemsControl ItemsSource="{Binding Timeline}" Margin="16,2,0,0"
+                                              Visibility="{Binding Timeline.Count, Converter={StaticResource PendingToVis}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                           Foreground="{StaticResource TextTertiary}"
+                                                           Text="{Binding TimeLabel}" Width="38"/>
+                                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                           Foreground="{StaticResource TextSecondary}" Margin="6,0,0,0"
+                                                           Text="{Binding Text}" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
