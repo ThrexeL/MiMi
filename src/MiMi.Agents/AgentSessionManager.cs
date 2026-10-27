@@ -206,10 +206,13 @@ public sealed class AgentSessionManager : IDisposable
         SessionChanged?.Invoke(session);
     }
 
-    private void SweepStale()
+    private void SweepStale() => SweepStale(DateTimeOffset.UtcNow);
+
+    /// <summary>Time-injectable staleness sweep (testable without waiting).</summary>
+    public void SweepStale(DateTimeOffset asOf)
     {
         if (_disposed) return;
-        var now = DateTimeOffset.UtcNow;
+        var now = asOf;
         foreach (var session in _sessions.Values)
         {
             var changed = false;
