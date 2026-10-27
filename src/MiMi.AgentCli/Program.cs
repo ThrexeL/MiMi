@@ -4,6 +4,16 @@ using MiMi.Agents;
 // stdout is a DECISION CHANNEL for hooks — never log diagnostics to it. Everything
 // informational goes to stderr, which agents record in their transcripts.
 
+// TEMP DIAGNOSTIC: capture the exact invocation shape Codex uses (argv only —
+// stdin is consumed by the command handlers below).
+try
+{
+    var argv = string.Join(" | ", args.Select(a => a.Length > 300 ? a[..300] + "..." : a));
+    File.AppendAllText(Path.Combine(Path.GetTempPath(), "mimi-hook-diag.txt"),
+        $"{DateTime.Now:HH:mm:ss.fff} argv=[{argv}]{Environment.NewLine}");
+}
+catch { }
+
 if (args.Length == 0)
 {
     Console.Error.WriteLine("usage: MiMi.AgentCli <command> [options]");

@@ -100,7 +100,8 @@ public partial class App : Application
             () => _presenter.BuildAgentPanel(),
             secondTick: () => _presenter.OnSecondTick(),
             shelfDrop: paths => Dispatcher.BeginInvoke(() => _presenter.AddToShelf(paths)),
-            shelfRemove: path => Dispatcher.BeginInvoke(() => _presenter.RemoveFromShelf(path)));
+            shelfRemove: path => Dispatcher.BeginInvoke(() => _presenter.RemoveFromShelf(path)),
+            shelfOpen: () => _presenter.SetUtilityPin("shelf", true));
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>

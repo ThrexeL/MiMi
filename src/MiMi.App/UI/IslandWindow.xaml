@@ -685,7 +685,7 @@
                          (GlowLayout.BandHeight) — never proportional to the panel — so
                          expanded cards can never grow a giant center oval. Opacity is a
                          separate, state-driven value. -->
-                    <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
+                    <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,0">
                         <!-- Wide flat arc: strongest bottom-center, fading toward corners. -->
                         <Ellipse Stretch="Fill">
                             <Ellipse.Fill>
@@ -698,7 +698,7 @@
                             </Ellipse.Fill>
                         </Ellipse>
                         <!-- Thin luminous rim right at the boundary. -->
-                        <Rectangle Height="2.5" VerticalAlignment="Bottom" RadiusX="1.25" RadiusY="1.25">
+                        <Rectangle Height="1.5" VerticalAlignment="Bottom" RadiusX="0.75" RadiusY="0.75">
                             <Rectangle.Fill>
                                 <SolidColorBrush Color="#4DF7C264"/>
                             </Rectangle.Fill>

@@ -186,6 +186,13 @@ public sealed class IslandPresenter
         RefreshPinned();
     }
 
+    /// <summary>Pins a utility panel open without closing it (drag-toward-MiMi).</summary>
+    public void SetUtilityPin(string kind, bool pinned)
+    {
+        var changed = pinned ? _utilityPins.Add(kind) : _utilityPins.Remove(kind);
+        if (changed) RefreshPinned();
+    }
+
     /// <summary>1 Hz heartbeat from the island window: drives the timer, reminders,
     /// and live utility VMs. Deliberately cheap: when no utility is pinned or running
     /// (the common idle case) it only checks reminder conditions and skips the

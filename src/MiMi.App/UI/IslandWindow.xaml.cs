@@ -73,6 +73,7 @@ public partial class IslandWindow : Window
     private readonly Action? _secondTick;
     private readonly Action<string[]>? _shelfDrop;
     private readonly Action<string>? _shelfRemove;
+    private readonly Action? _shelfOpen;
     private readonly Core.ProximityWakePolicy _proximityPolicy = new();
     private readonly DispatcherTimer _proximityTimer;
     private bool _proximityAwake;
@@ -84,12 +85,14 @@ public partial class IslandWindow : Window
         Func<AgentActivityPanelView>? agentPanelProvider = null,
         Action? secondTick = null,
         Action<string[]>? shelfDrop = null,
-        Action<string>? shelfRemove = null)
+        Action<string>? shelfRemove = null,
+        Action? shelfOpen = null)
     {
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _secondTick = secondTick;
         _shelfDrop = shelfDrop;
         _shelfRemove = shelfRemove;
+        _shelfOpen = shelfOpen;
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -133,14 +136,31 @@ public partial class IslandWindow : Window
 
         Pill.SizeChanged += (_, _) => UpdateClip();
 
-        // File shelf drag-in: drops are accepted ONLY while the shelf panel is the
-        // pinned content, so the idle face never intercepts Explorer drops.
+        // File shelf drag-in: the whole pill accepts Explorer drops. Dragging toward
+        // MiMi auto-opens the shelf panel; the file lands immediately.
         Host.AllowDrop = true;
+        Host.DragEnter += (_, e) =>
+        {
+            // Dragging toward MiMi auto-opens the shelf so the drop target is visible.
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                _shelfOpen?.Invoke();
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+            Logger.Info("Shelf: DragEnter (file drop offered).");
+        };
+        Host.DragOver += (_, e) =>
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        };
         Host.Drop += (_, e) =>
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop)
                 && e.Data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0)
             {
+                Logger.Info($"Shelf: Drop received ({paths.Length} path(s)).");
                 _shelfDrop?.Invoke(paths);
                 e.Handled = true;
             }
@@ -635,8 +655,7 @@ public partial class IslandWindow : Window
 
     private void HookTemplate(IslandContent content)
     {
-        // Explorer drops land only on an open shelf panel.
-        Host.AllowDrop = content is ShelfView;
+        // AllowDrop stays true in every state: a drop on any panel shelves the file.
 
         // Proximity wake is active only while the sleepy face is on screen.
         var sleepy = content is RestingView { Expression: MascotExpression.Sleepy }

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MiMi.Agents;
@@ -28,10 +29,37 @@ public static class Installers
     private static string ExePath() => Environment.ProcessPath ?? "";
 
     // Always quote: a MiMi install directory may contain spaces.
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint GetShortPathNameW(string longPath, System.Text.StringBuilder buffer, uint length);
+
     private static string Quote(string path) => path.Length > 0 ? $"\"{path}\"" : "";
 
-    public static string ClaudeHookCommand() => $"{Quote(ExePath())} claude-permission";
-    public static string CodexHookCommand() => $"{Quote(ExePath())} codex-permission";
+    /// <summary>
+    /// Hook commands must be launchable by every provider's hook runner. A quoted
+    /// exe path failed to spawn under Codex's runner (verified live: the process
+    /// never started), so the path is written unquoted whenever possible; when it
+    /// contains spaces, the Win32 8.3 short path is substituted (space-free).
+    /// </summary>
+    private static string LaunchSafe(string path)
+    {
+        if (path.Length == 0) return path;
+        if (!path.Contains(' ')) return path;
+        try
+        {
+            var sb = new System.Text.StringBuilder(1024);
+            var size = GetShortPathNameW(path, sb, (uint)sb.Capacity);
+            if (size > 0)
+            {
+                var shortPath = sb.ToString(0, (int)size);
+                if (!shortPath.Contains(' ')) return shortPath;
+            }
+        }
+        catch { /* short names may be disabled: fall through */ }
+        return $"\"{path}\""; // last resort: quoted (documented risk)
+    }
+
+    public static string ClaudeHookCommand() => $"{LaunchSafe(ExePath())} claude-permission";
+    public static string CodexHookCommand() => $"{LaunchSafe(ExePath())} codex-permission";
     // Tolerant ownership checks: match MiMi's command signature even if the executable
     // has moved, but never touch entries without it.
     private static bool IsMiMiClaudeHook(string? command) =>
@@ -52,8 +80,8 @@ public static class Installers
 
     private static readonly string[] CodexActivityEvents = ProviderHookCatalog.CodexActivityEvents;
 
-    public static string ClaudeActivityCommand() => $"{Quote(ExePath())} activity --provider claude-code";
-    public static string CodexActivityCommand() => $"{Quote(ExePath())} activity --provider codex";
+    public static string ClaudeActivityCommand() => $"{LaunchSafe(ExePath())} activity --provider claude-code";
+    public static string CodexActivityCommand() => $"{LaunchSafe(ExePath())} activity --provider codex";
 
     public static string InstallClaude(int timeoutSeconds, string? settingsPath = null, string? executablePath = null)
     {
@@ -61,8 +89,8 @@ public static class Installers
         if (exe is not { Length: > 0 } || !File.Exists(exe))
             return "REFUSED: MiMi.AgentCli executable path is unavailable; hooks were not modified.";
         var path = settingsPath ?? ClaudeSettingsPath;
-        var permission = $"{Quote(exe)} claude-permission";
-        var activity = $"{Quote(exe)} activity --provider claude-code";
+        var permission = $"{LaunchSafe(exe)} claude-permission";
+        var activity = $"{LaunchSafe(exe)} activity --provider claude-code";
         var result = InstallJsonHook(path, "PermissionRequest", permission, timeoutSeconds, IsMiMiClaudeHook);
         var details = new List<string> { result };
         foreach (var eventName in ClaudeActivityEvents)
@@ -85,8 +113,8 @@ public static class Installers
         if (exe is not { Length: > 0 } || !File.Exists(exe))
             return "REFUSED: MiMi.AgentCli executable path is unavailable; hooks were not modified.";
         var path = hooksPath ?? CodexHooksPath;
-        var permission = $"{Quote(exe)} codex-permission";
-        var activity = $"{Quote(exe)} activity --provider codex";
+        var permission = $"{LaunchSafe(exe)} codex-permission";
+        var activity = $"{LaunchSafe(exe)} activity --provider codex";
         var result = InstallJsonHook(path, "PermissionRequest", permission, timeoutSeconds, IsMiMiCodexHook);
         var details = new List<string> { result };
         foreach (var eventName in CodexActivityEvents)
