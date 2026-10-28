@@ -7,7 +7,7 @@ Sources:
 - Hooks guide: https://code.claude.com/docs/en/hooks-guide
 - Settings precedence: https://code.claude.com/docs/en/settings
 - CLI reference: https://code.claude.com/docs/en/cli-reference
-- Local cross-check: `C:\Users\basit\.zcode\cli\plugins\cache\zcode-plugins-official\zcode-guide\0.3.0\skills\diagnosing-hooks\SKILL.md` (documents **ZCode's** hook system, a different product — see the last section)
+- Local cross-check: `<ZCode install>\skills\diagnosing-hooks\SKILL.md` (documents **ZCode's** hook system, a different product — see the last section)
 
 ---
 
@@ -355,7 +355,7 @@ Hooks are per-event; for tool events, `PermissionRequest` runs per tool-call tha
 
 ## Cross-check: local ZCode skill file vs. official Claude Code docs
 
-The local file `C:\Users\basit\.zcode\cli\plugins\cache\zcode-plugins-official\zcode-guide\0.3.0\skills\diagnosing-hooks\SKILL.md` documents **ZCode's** hook runner (this CLI environment), not Claude Code's. It agrees that a `PermissionRequest` event exists, but the systems differ materially:
+The local file `<ZCode install>\skills\diagnosing-hooks\SKILL.md` documents **ZCode's** hook runner (this CLI environment), not Claude Code's. It agrees that a `PermissionRequest` event exists, but the systems differ materially:
 
 | Aspect | Official Claude Code | ZCode (local skill) |
 | :- | :- | :- |
