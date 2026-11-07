@@ -79,6 +79,21 @@ public class UtilityPinStateTests
         state.SetHub(true); // no-op
         Assert.Equal(2, fired);
     }
+
+    [Fact]
+    public void OpenUtilityFromHub_TransitionsAtomicallyInSingleNotification()
+    {
+        var state = new UtilityPinState();
+        state.SetHub(true);
+        var notifications = 0;
+        state.Changed += () => notifications++;
+
+        state.OpenUtilityFromHub(UtilityPinState.Pomodoro);
+        Assert.False(state.IsHubOpen);
+        Assert.True(state.IsPinned(UtilityPinState.Pomodoro));
+        Assert.Equal(UtilityPinState.Pomodoro, state.ActiveUtility);
+        Assert.Equal(1, notifications);
+    }
 }
 
 public class DragRevertPolicyTests

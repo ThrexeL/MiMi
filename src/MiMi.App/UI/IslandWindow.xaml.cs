@@ -81,6 +81,8 @@ public partial class IslandWindow : Window
     private readonly DispatcherTimer _proximityTimer;
     private bool _proximityAwake;
 
+    public ICommand CloseUtilityCommand { get; }
+
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
         Func<string, TimeSpan?> approvalTimeLeft,
@@ -90,8 +92,10 @@ public partial class IslandWindow : Window
         Action<string[]>? shelfDrop = null,
         Action<string>? shelfRemove = null,
         Action? shelfOpen = null,
-        Action? quickAccessOpen = null)
+        Action? quickAccessOpen = null,
+        Action? closeUtility = null)
     {
+        CloseUtilityCommand = new RelayCommand(() => closeUtility?.Invoke());
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _secondTick = secondTick;
         _shelfDrop = shelfDrop;
@@ -186,6 +190,14 @@ public partial class IslandWindow : Window
         _progressTimer.Tick += (_, _) =>
         {
             _secondTick?.Invoke(); // productivity heartbeat (timer, reminders)
+            if (_renderedContent is AgentActivityPanelView activity && IsVisible && !Coordinator.FullscreenSuppressed)
+            {
+                activity.Update(_agentPanelProvider().Rows);
+                Host.Measure(new Size(activity.TargetWidth, double.PositiveInfinity));
+                var height = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
+                if (Math.Abs(height - Pill.ActualHeight) > 2)
+                    AnimatePillSize(activity.TargetWidth, height, TimeSpan.FromMilliseconds(140));
+            }
             if (IsVisible && !Coordinator.FullscreenSuppressed) KeyboardTick?.Invoke();
 
             if (_renderedContent is MediaExpandedView { Media: { } media } && media.IsPlaying)
@@ -500,7 +512,12 @@ public partial class IslandWindow : Window
 
     private void ApplyContent(IslandContent content)
     {
-        if (ReferenceEquals(content, _renderedContent)) return;
+        if (ReferenceEquals(content, _renderedContent))
+        {
+            if (content is AgentCompactView && Math.Abs(Pill.ActualWidth - content.TargetWidth) > 2)
+                AnimatePillSize(content.TargetWidth, content.TargetHeight, TimeSpan.FromMilliseconds(180));
+            return;
+        }
         _renderedContent = content;
 
         var speed = _config.Current.AnimationSpeed;
@@ -656,7 +673,6 @@ public partial class IslandWindow : Window
             DumpActiveAnimationsRecursive(System.Windows.Media.VisualTreeHelper.GetChild(root, i), result);
     }
 
-    private bool _idleClickWired;
 
     /// <summary>Called while an Explorer drag is over the island: reveal the shelf.
     /// Uses the same shelf-drag session flags so the reveal/revert cannot race.</summary>
@@ -864,6 +880,8 @@ public partial class IslandWindow : Window
         _hoverExpanded = false;
         if (_pinnedContent is not null) ApplyContent(_pinnedContent);
     }
+
+
 
     // ---- layout / DPI ------------------------------------------------------------
 

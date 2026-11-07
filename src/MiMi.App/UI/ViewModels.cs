@@ -96,7 +96,10 @@ public sealed class AgentCompactView : IslandContent
 {
     public AgentIndicatorViewModel Indicator { get; }
     public AgentCompactView(AgentIndicatorViewModel indicator) { Indicator = indicator; }
-    public override double TargetWidth => 330;
+    public override double TargetWidth => Math.Clamp(88 + new FormattedText(
+        Indicator.Line, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+        new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+        13, Brushes.White, 1).WidthIncludingTrailingWhitespace, 180, 380);
     public override double TargetHeight => 44;
     public override double TargetCornerRadius => 22;
     public override bool Expandable => true;
@@ -141,7 +144,6 @@ public sealed class PomodoroViewModel : ObservableObject
     private double _progress;
     private bool _running;
     private bool _idle = true;
-    private int _sessions;
     private string _sessionsLabel = "0";
 
     public string PhaseLabel { get => _phaseLabel; private set => Set(ref _phaseLabel, value); }
@@ -286,13 +288,18 @@ public sealed class QuickAccessViewModel : ObservableObject
     public ICommand OpenShelfCommand { get; }
     public ICommand BackCommand { get; }
 
+    private readonly Action<string> _openUtility;
+    private readonly Action _back;
+
     public QuickAccessViewModel(Action<string> openUtility, Action back)
     {
-        OpenPomodoroCommand = new RelayCommand(() => openUtility(UtilityPinState.Pomodoro));
-        OpenWaterCommand = new RelayCommand(() => openUtility(UtilityPinState.Water));
-        OpenTodoCommand = new RelayCommand(() => openUtility(UtilityPinState.Todo));
-        OpenShelfCommand = new RelayCommand(() => openUtility(UtilityPinState.Shelf));
-        BackCommand = new RelayCommand(back);
+        _openUtility = openUtility;
+        _back = back;
+        OpenPomodoroCommand = new RelayCommand(() => _openUtility(UtilityPinState.Pomodoro));
+        OpenWaterCommand = new RelayCommand(() => _openUtility(UtilityPinState.Water));
+        OpenTodoCommand = new RelayCommand(() => _openUtility(UtilityPinState.Todo));
+        OpenShelfCommand = new RelayCommand(() => _openUtility(UtilityPinState.Shelf));
+        BackCommand = new RelayCommand(_back);
     }
 
     public void UpdateTimerBadge(bool running, int sessions)
@@ -413,13 +420,22 @@ public sealed class QuickAccessView : IslandContent
     public override double TargetWidth => 430;
     public override double TargetHeight => 92;
     public override double TargetCornerRadius => 22;
+    public override bool AutoHeight => true;
 }
 
 /// <summary>Expanded multi-agent activity panel: one row per tracked session.</summary>
 public sealed class AgentActivityPanelView : IslandContent
 {
-    public IReadOnlyList<AgentSessionRow> Rows { get; }
-    public AgentActivityPanelView(IReadOnlyList<AgentSessionRow> rows) { Rows = rows; }
+    private IReadOnlyList<AgentSessionRow> _rows = Array.Empty<AgentSessionRow>();
+    public IReadOnlyList<AgentSessionRow> Rows => _rows;
+    public string Summary => Rows.Count == 0 ? "No recent activity" : $"{Rows.Count} recent sessions · approvals first";
+    public AgentActivityPanelView(IReadOnlyList<AgentSessionRow> rows) { _rows = rows; }
+    public void Update(IReadOnlyList<AgentSessionRow> rows)
+    {
+        _rows = rows;
+        Raise(nameof(Rows));
+        Raise(nameof(Summary));
+    }
     public override double TargetWidth => 450;
     public override double TargetHeight => 200;
     public override double TargetCornerRadius => 24;
@@ -435,6 +451,8 @@ public sealed class AgentSessionRow
     public required string LastAction { get; init; }
     public required string AgeLabel { get; init; }
     public required int PendingApprovals { get; init; }
+    public bool HasDetail => !string.IsNullOrEmpty(LastAction) && LastAction != StatusLabel;
+    public string Section { get; init; } = "";
     public required Brush StateBrush { get; init; }
     /// <summary>Newest-last confirmed events (bounded, max three shown).</summary>
     public required IReadOnlyList<AgentTimelineItem> Timeline { get; init; }
@@ -805,6 +823,7 @@ public sealed class AgentCardViewModel : ObservableObject
     public Action? OpenInAgent { get; init; }
 
     public ICommand ApproveCommand { get; }
+    public string ApproveLabel => Provider == "Thursday" ? "Allow for this task" : "Approve";
     public ICommand DenyCommand { get; }
     public ICommand OpenCommand { get; }
 
@@ -818,11 +837,17 @@ public sealed class AgentCardViewModel : ObservableObject
             NextApprovalCommand = new RelayCommand(() => navigateApprovals(+1));
             PrevApprovalCommand = new RelayCommand(() => navigateApprovals(-1));
         }
+        else
+        {
+            NextApprovalCommand = new RelayCommand(() => { });
+            PrevApprovalCommand = new RelayCommand(() => { });
+        }
     }
 
     public void Update(AgentEvent ev)
     {
         Provider = DisplayProvider(ev.Provider);
+        Raise(nameof(ApproveLabel));
         Title = ev.Title;
         Message = ev.Message;
         Project = ev.Project;

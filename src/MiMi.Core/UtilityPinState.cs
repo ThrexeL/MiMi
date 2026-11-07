@@ -54,6 +54,15 @@ public sealed class UtilityPinState
         Changed?.Invoke();
     }
 
+    /// <summary>Atomically closes the hub and opens a selected utility in a single change event.</summary>
+    public void OpenUtilityFromHub(string kind)
+    {
+        _hubOpen = false;
+        _pins.Clear();
+        _pins.Add(kind);
+        Changed?.Invoke();
+    }
+
     public void ClearUserPins()
     {
         if (_pins.Count == 0 && !_hubOpen) return;

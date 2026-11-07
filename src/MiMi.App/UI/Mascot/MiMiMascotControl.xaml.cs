@@ -37,7 +37,6 @@ public partial class MiMiMascotControl : UserControl
     private readonly DispatcherTimer _blinkTimer;
     private readonly DispatcherTimer _dartTimer;
     private Storyboard? _bobStoryboard;
-    private Storyboard? _sleepStoryboard;
     private Storyboard? _sleepZStoryboard;
     private readonly Random _random = new();
     private MascotExpression _lastExpression = MascotExpression.Calm;

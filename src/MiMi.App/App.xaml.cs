@@ -8,7 +8,6 @@ using MiMi.App.UI.Mascot;
 using MiMi.Bridge;
 using MiMi.Core;
 using MiMi.Lyrics;
-using MiMi.App.UI.Mascot;
 using MiMi.Media;
 using Wmc = Windows.Media.Control;
 
@@ -102,7 +101,8 @@ public partial class App : Application
             shelfDrop: paths => Dispatcher.BeginInvoke(() => _presenter.AddToShelf(paths)),
             shelfRemove: path => Dispatcher.BeginInvoke(() => _presenter.RemoveFromShelf(path)),
             shelfOpen: () => _presenter.SetUtilityPin("shelf", true),
-            quickAccessOpen: () => _presenter.OpenQuickAccess());
+            quickAccessOpen: () => _presenter.OpenQuickAccess(),
+            closeUtility: () => _presenter.CloseUtilityPanel());
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>
@@ -287,6 +287,15 @@ public partial class App : Application
                     _tray.SetAutoStartIndicator(enable);
                     break;
                 case TrayMenuCommand.Restart:
+                    // Release the single-instance mutex immediately so the new instance can acquire it successfully
+                    if (_ownsMutex)
+                    {
+                        try { _singleInstance?.ReleaseMutex(); } catch { }
+                        _ownsMutex = false;
+                    }
+                    try { _singleInstance?.Dispose(); } catch { }
+                    _singleInstance = null;
+
                     System.Diagnostics.Process.Start(Environment.ProcessPath ?? "");
                     Shutdown();
                     break;

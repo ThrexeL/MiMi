@@ -128,7 +128,32 @@ public partial class SettingsWindow : Window
         _config.Update(s => s.StartWithWindows = enable, persist: true);
     }
 
-    private void Checkbox_Changed2(object sender, RoutedEventArgs e) => CaptureToSettings();
+    private void Checkbox_Changed2(object sender, RoutedEventArgs e)
+    {
+        // Identify which checkbox was clicked based on event source name
+        var chk = sender as CheckBox;
+        if (chk != null)
+        {
+            switch (chk.Name)
+            {
+                case "MascotAnimationsToggle":
+                case "MascotReactionsToggle":
+                case "MascotSleepyToggle":
+                case "AgentNotificationsToggle":
+                case "CompletionNotificationsToggle":
+                case "ApprovalNotificationsToggle":
+                case "WindowsNotificationsToggle":
+                case "NotificationSoundToggle":
+                case "DesktopPersistToggle":
+                case "FullscreenToggle":
+                    CaptureToSettings();
+                    break;
+                default:
+                    CaptureToSettings();
+                    break;
+            }
+        }
+    }
 
     private void TextSize_Changed(object sender, SelectionChangedEventArgs e) => CaptureToSettings();
 

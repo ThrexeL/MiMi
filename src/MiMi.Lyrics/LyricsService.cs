@@ -60,7 +60,6 @@ public sealed class LyricsService : IDisposable
 
     private LyricsQuery _currentQuery = new("", "", "", 0);
     private LyricsResult? _current;
-    private bool _loading;
     private DateTimeOffset _lastFetchUtc;
 
     public LyricsService(LrcLibClient? client = null) => _client = client ?? new LrcLibClient();
@@ -103,7 +102,6 @@ public sealed class LyricsService : IDisposable
 
     private async Task FetchAsync(LyricsQuery query, CancellationToken ct)
     {
-        _loading = true;
         try
         {
             // Light pacing: never more than one fetch per second, so rapid track skips
@@ -129,7 +127,6 @@ public sealed class LyricsService : IDisposable
                 Changed?.Invoke();
             }
         }
-        finally { _loading = false; }
     }
 
     private void Apply(LyricsResult? result)

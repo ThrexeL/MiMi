@@ -15,6 +15,7 @@ public enum SessionActivity
     Error,
     Ended,
     Unknown,          // stale: no confirmed events for a while
+    WaitingForInput,
 }
 
 /// <summary>One short, confirmed history entry for a session. Never contains prompt
@@ -89,15 +90,22 @@ public sealed class AgentSessionManager : IDisposable
 
     /// <summary>Sessions worth showing in the compact indicator/panel: live ones, plus
     /// recently finished ones (turn finished / error / interrupted) until they age out.</summary>
-    public IReadOnlyList<AgentSession> Active => All.Where(s => IsVisible(s, DateTimeOffset.UtcNow)).ToList();
+    public IReadOnlyList<AgentSession> Active => _sessions.Values
+        .Where(s => IsVisible(s, DateTimeOffset.UtcNow))
+        .OrderBy(s => s.State == SessionActivity.AwaitingApproval ? 0
+            : s.State is SessionActivity.Started or SessionActivity.Working or SessionActivity.ExecutingTool or SessionActivity.WaitingForInput ? 1
+            : s.State == SessionActivity.Unknown ? 3 : 2)
+        .ThenByDescending(s => s.LastEventUtc).ToList();
 
     /// <summary>Finished sessions stay listed briefly; ended sessions are terminal and
     /// only remain while still "recent" (bounded history is pruned separately).</summary>
-    public static readonly TimeSpan FinishedVisibleFor = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan FinishedVisibleFor = TimeSpan.FromMinutes(2);
 
     public static bool IsVisible(AgentSession session, DateTimeOffset asOf)
     {
         if (session.State == SessionActivity.Ended) return false;
+        if (session.State == SessionActivity.Unknown)
+            return asOf - session.LastEventUtc <= TimeSpan.FromMinutes(5);
         // Finished / failed / interrupted sessions stay visible briefly, then age out.
         if (session.State is SessionActivity.TurnFinished or SessionActivity.Error or SessionActivity.Interrupted)
             return asOf - session.LastEventUtc <= FinishedVisibleFor;
@@ -106,7 +114,7 @@ public sealed class AgentSessionManager : IDisposable
 
     public int WorkingCount =>
         _sessions.Values.Count(s => !s.Ended && s.State is SessionActivity.Started
-            or SessionActivity.Working or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval);
+            or SessionActivity.Working or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval or SessionActivity.WaitingForInput);
 
     public int PendingApprovalCount =>
         _sessions.Values.Sum(s => s._pendingApprovals.Count);
@@ -145,7 +153,9 @@ public sealed class AgentSessionManager : IDisposable
             session.TurnId = ev.Metadata.TryGetValue("turn_id", out var turn) ? turn : session.TurnId;
             session.SubagentId = ev.Metadata.TryGetValue("subagent_id", out var sub) ? sub : session.SubagentId;
 
-            switch (ev.Type)
+            var activityType = ev.Type == AgentEventTypes.Heartbeat
+                && ev.Metadata.TryGetValue("activity_type", out var confirmedType) ? confirmedType : ev.Type;
+            switch (activityType)
             {
                 case AgentEventTypes.Started:
                     session.State = SessionActivity.Started;
@@ -156,8 +166,12 @@ public sealed class AgentSessionManager : IDisposable
                     session.Ended = false;
                     break;
                 case AgentEventTypes.Status:
-                    if (session.State is SessionActivity.Started or SessionActivity.Unknown)
+                    if (session.State is SessionActivity.Started or SessionActivity.Unknown or SessionActivity.ExecutingTool or SessionActivity.WaitingForInput)
                         session.State = SessionActivity.Working;
+                    break;
+                case AgentEventTypes.WaitingForInput:
+                    session.State = session._pendingApprovals.Count > 0
+                        ? SessionActivity.AwaitingApproval : SessionActivity.WaitingForInput;
                     break;
                 case AgentEventTypes.ToolStarted or AgentEventTypes.SubagentStarted:
                     session.State = SessionActivity.ExecutingTool;
@@ -304,7 +318,7 @@ public sealed class AgentSessionManager : IDisposable
                 if (session.Ended) continue; // ended is terminal
                 // Long silence while "working" becomes Unknown — never "finished".
                 if (!session.Stale && now - session.LastEventUtc > StaleAfter
-                    && session.State is not SessionActivity.AwaitingApproval)
+                    && session.State is SessionActivity.Started or SessionActivity.Working or SessionActivity.ExecutingTool)
                 {
                     session.Stale = true;
                     if (session.State is SessionActivity.Started or SessionActivity.Working
@@ -320,6 +334,9 @@ public sealed class AgentSessionManager : IDisposable
         var ended = _sessions.Values.Where(s => s.Ended)
             .OrderByDescending(s => s.LastEventUtc).Skip(EndedHistoryLimit).ToList();
         foreach (var s in ended)
+            _sessions.TryRemove(Key(s.Provider, s.SessionId), out _);
+        foreach (var s in _sessions.Values.Where(s => s.State != SessionActivity.AwaitingApproval
+                     && !s.Ended && now - s.LastEventUtc > TimeSpan.FromMinutes(15)))
             _sessions.TryRemove(Key(s.Provider, s.SessionId), out _);
     }
 

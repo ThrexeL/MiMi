@@ -74,6 +74,11 @@ public sealed class IslandPresenter
         _dispatcher = dispatcher;
         _water = water;
         _todos = todos;
+        // Initialize Quick Access ViewModel with proper callbacks for opening utilities and closing the hub.
+        _quickAccessVm = new QuickAccessViewModel(
+            openUtility: kind => _utilityPins.OpenUtilityFromHub(kind),
+            back: () => _utilityPins.SetHub(false)
+        );
         _utilityPins.Changed += () => _dispatcher.BeginInvoke(RefreshPinned);
         _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
         {
@@ -195,7 +200,12 @@ public sealed class IslandPresenter
     /// Access hub opens and stays until the user picks a utility or goes back.</summary>
     public void OpenQuickAccess() => _utilityPins.SetHub(true);
 
-    public void CloseUtilityPanel() => _utilityPins.ClearUserPins();
+    public void CloseUtilityPanel()
+    {
+        _utilityPins.ClearUserPins();
+        _quickAccessView = null;
+        RefreshPinned();
+    }
 
     // ---- file-shelf drag session (drag toward MiMi) ------------------------------
 
@@ -474,6 +484,13 @@ public sealed class IslandPresenter
         // force a full content swap (and a render) every tick.
         var activeUtility = _utilityPins.ActiveUtility
             ?? (pomodoroVisible && !_shelfDrag.DragActive ? UtilityPinState.Pomodoro : null);
+        
+        // FIX: Clear hub cache when switching from Hub to utility to prevent text jumbling
+        if (_quickAccessView != null && activeUtility != UtilityPinState.Hub)
+        {
+            _quickAccessView = null;
+        }
+        
         IslandContent? utilityView = activeUtility switch
         {
             UtilityPinState.Hub => _quickAccessView ??= new QuickAccessView(_quickAccessVm),
@@ -519,7 +536,7 @@ public sealed class IslandPresenter
     private static bool IsWorking(AgentSession s) =>
         !s.Ended && !s.Stale
         && s.State is SessionActivity.Started or SessionActivity.Working
-            or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval;
+            or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval or SessionActivity.WaitingForInput;
 
     private void UpdateAgentIndicator(IReadOnlyList<AgentSession> sessions, int workingCount)
     {
@@ -598,9 +615,10 @@ public sealed class IslandPresenter
     internal static string StatusLabel(AgentSession s) => s.Stale ? "Status unknown" : s.State switch
     {
         SessionActivity.Started => "Started",
-        SessionActivity.Working => "Working",
-        SessionActivity.ExecutingTool => "Executing tool",
+        SessionActivity.Working => ThursdayProgress(s, "Working"),
+        SessionActivity.ExecutingTool => ThursdayProgress(s, "Executing tool"),
         SessionActivity.AwaitingApproval => "Waiting for approval",
+        SessionActivity.WaitingForInput => "Waiting for input",
         SessionActivity.TurnFinished => "Turn finished",
         SessionActivity.Interrupted => "Interrupted",
         SessionActivity.Error => "Error",
@@ -608,9 +626,14 @@ public sealed class IslandPresenter
         _ => "Status unknown",
     };
 
+    private static string ThursdayProgress(AgentSession s, string fallback) =>
+        s.Provider == "thursday" && !string.IsNullOrWhiteSpace(s.LastSummary)
+            ? (s.LastSummary.Length > 48 ? s.LastSummary[..47] + "…" : s.LastSummary)
+            : fallback;
+
     internal static string StateColor(AgentSession s) => s.Stale ? "#9A9AA0" : s.State switch
     {
-        SessionActivity.AwaitingApproval => "#FFB454",
+        SessionActivity.AwaitingApproval or SessionActivity.WaitingForInput => "#FFB454",
         SessionActivity.Error => "#FF6B6B",
         SessionActivity.TurnFinished => "#5DD97C",
         SessionActivity.Ended => "#9A9AA0",
@@ -620,8 +643,20 @@ public sealed class IslandPresenter
     /// <summary>Rows for the expanded activity panel, built fresh on each hover.</summary>
     public AgentActivityPanelView BuildAgentPanel()
     {
-        var rows = _sessions.Active.Select(s => new AgentSessionRow
+        var recent = _sessions.Active;
+        var live = recent.Where(s => s.State is SessionActivity.Started or SessionActivity.Working
+            or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval or SessionActivity.WaitingForInput).ToList();
+        var visible = live.Concat(recent.Except(live).Take(3));
+        var previousSection = "";
+        var rows = visible.Select(s =>
         {
+            var section = s.State == SessionActivity.AwaitingApproval ? "NEEDS APPROVAL"
+                : live.Contains(s) ? "ACTIVE" : "RECENT";
+            var heading = section != previousSection ? section : "";
+            previousSection = section;
+            return new AgentSessionRow
+        {
+            Section = heading,
             Provider = AgentCardViewModel.DisplayProvider(s.Provider),
             Project = string.IsNullOrEmpty(s.Project) ? "—" : s.Project,
             StatusLabel = StatusLabel(s),
@@ -630,13 +665,13 @@ public sealed class IslandPresenter
             PendingApprovals = s.PendingApprovalIds.Count,
             StateBrush = new System.Windows.Media.SolidColorBrush(
                 (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(StateColor(s))),
-            Timeline = s.History.TakeLast(3).Select(h => new AgentTimelineItem
+            Timeline = s.History.TakeLast(live.Contains(s) ? 2 : 1).Select(h => new AgentTimelineItem
             {
                 TimeLabel = h.TimestampUtc.ToLocalTime().ToString("HH:mm"),
                 Text = h.Text,
                 Kind = h.Kind,
             }).ToList(),
-        }).ToList();
+        }; }).ToList();
         return new AgentActivityPanelView(rows);
     }
 

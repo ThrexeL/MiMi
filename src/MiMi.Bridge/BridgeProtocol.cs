@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using MiMi.Agents;
 using MiMi.Core;
 using System.IO.Pipes;
+using System.Runtime.CompilerServices;
 
 namespace MiMi.Bridge;
 
@@ -29,6 +30,7 @@ namespace MiMi.Bridge;
 public sealed class BridgeProtocol
 {
     public const int MaxFrameBytes = 64 * 1024;
+    private static readonly ConditionalWeakTable<Stream, SemaphoreSlim> WriteLocks = new();
 
     [JsonPropertyName("kind")] public string Kind { get; set; } = "";
     [JsonPropertyName("token")] public string? Token { get; set; }
@@ -85,9 +87,17 @@ public sealed class BridgeProtocol
         var payload = Encoding.UTF8.GetBytes(frame.Serialize());
         if (payload.Length > MaxFrameBytes) throw new IOException("outgoing frame too large");
         var header = BitConverter.GetBytes(payload.Length);
-        await stream.WriteAsync(header, ct);
-        await stream.WriteAsync(payload, ct);
-        await stream.FlushAsync(ct);
+        var gate = WriteLocks.GetValue(stream, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            // Acknowledgements and asynchronous approval decisions share a pipe.
+            // Serialize complete frames so their headers/bodies cannot interleave.
+            await stream.WriteAsync(header, ct);
+            await stream.WriteAsync(payload, ct);
+            await stream.FlushAsync(ct);
+        }
+        finally { gate.Release(); }
     }
 
     /// <summary>Creates a random bridge token and stores it user-private.</summary>

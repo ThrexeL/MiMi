@@ -51,7 +51,7 @@ Development is phased. State as of the 4.0 release candidate:
 | 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
 | 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
 | 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language | **implemented in 4.0** |
-| 5 — personal harness adapter; Codex app-server full embedding | | candidate; not started |
+| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; app-server embedding deferred | partial |
 | 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
 | 8 — mascot polish | Expressions live (mood policy); final screenshot pass pending | in progress |
 | 9 — release prep | This document, portable build script | in progress |
@@ -488,7 +488,7 @@ ended one, and ended history is capped at 20 sessions.
 
 Hovering the agent pill (or the badge on the media pill) opens a panel with one row per
 session: provider, project, state, last action/tool, age, and pending approvals. Finished
-rows stay visible for 5 minutes, then age out; live sessions that have gone silent show
+rows stay visible for 2 minutes, then age out; live sessions that have gone silent show
 `Status unknown`.
 
 ### Multi-approval navigation
@@ -534,11 +534,39 @@ Activity hooks carry no timeout override, so they can never gate or delay the pr
 - No token-level/"thinking" telemetry; states reflect hook moments only.
 - A session that goes silent flips to `Status unknown` after 90 s; MiMi cannot know whether
   the agent is still reasoning unless the provider emits another hook.
-- Finished session rows are hidden after 5 minutes; ended-session history is capped at 20.
+- Finished session rows are hidden after 2 minutes; ended-session history is capped at 20.
 - Only one approval card is visible at a time; the others are reachable with the arrows.
 - Codex lifecycle hooks require the one-time `/hooks` trust review.
 - "Open in Agent" copies identifying text to the clipboard; it does not focus the provider.
-- The activity panel is built on hover (ages refresh when it is opened), not live-updated.
+- The activity panel refreshes in place every second while visible, with approvals first and at most three recent inactive rows.
+
+## Thursday local harness
+
+Thursday reports detached chat/agent runs through `MiMi.AgentCli.exe relay`, a
+activity adapter that accepts one normalized `AgentEvent` JSON object per
+stdin line. It shows thinking/progress stages, tool activity, waiting for input,
+completion, errors and interruptions alongside Codex CLI and Claude Code.
+Hover over the island for per-chat details. Thursday permission requests use the
+separate `thursday-permission` adapter, kept connected while the island displays
+the complete sealed action with **Allow for this task** and **Deny** controls.
+Decisions return through Thursday's authenticated continuation route and retain
+its exact-action checks. An offline island grants nothing; the Thursday card
+remains usable. Session-wide approval is available in Thursday itself.
+
+Build the solution and restart both apps. Thursday automatically finds the newest
+CLI build in the sibling `MiMi` project, or an executable on PATH. For a separate
+installation, set `THURSDAY_MIMI_CLI` to its `MiMi.AgentCli.exe` path. Set
+`THURSDAY_MIMI_ENABLED=0` to opt out. Agents and Bridge must be enabled in MiMi.
+No provider hooks are needed. The relay authenticates over the existing local
+named pipe and retries on later updates if MiMi is unavailable. Activity sends
+progress labels and tool names, without prompts or tool output. Permission cards
+also include the sealed action input; oversized actions remain in Thursday.
+
+The activity panel groups approvals, active work and up to three recent results,
+with a bounded scrolling area and live updates while open. Confirmed terminal
+states retain their result instead of becoming "Status unknown". Silent live
+sessions still become unknown after 90 seconds, and heartbeat frames refresh
+Thursday activity without repeating timeline entries.
 
 ## Settings reference
 

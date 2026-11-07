@@ -10,6 +10,8 @@ public static class AgentEventTypes
     // Phase 1/2 contract (unchanged)
     public const string Started = "agent.started";
     public const string Status = "agent.status";
+    public const string Heartbeat = "agent.heartbeat";
+    public const string WaitingForInput = "agent.waiting_for_input";
     public const string ToolStarted = "agent.tool_started";
     public const string ApprovalRequested = "agent.approval_requested";
     public const string ApprovalResolved = "agent.approval_resolved";
@@ -29,7 +31,7 @@ public static class AgentEventTypes
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
-        Started, Status, ToolStarted, ApprovalRequested, ApprovalResolved, Completed, Failed, Cancelled,
+        Started, Status, Heartbeat, WaitingForInput, ToolStarted, ApprovalRequested, ApprovalResolved, Completed, Failed, Cancelled,
         PromptSubmitted, ToolFinished, ToolFailed, TurnFinished, Interrupted, SessionEnded,
         SubagentStarted, SubagentStopped,
     };
@@ -103,7 +105,7 @@ public sealed record AgentEvent
             foreach (var (k, v) in raw.Metadata.Take(16))
             {
                 var key = Sanitize(k, 40);
-                var val = Sanitize(v, 200);
+                var val = Sanitize(v, k == "command" ? 12000 : 200, k == "command");
                 if (key is not null && val is not null) metadata[key] = val;
             }
         }
@@ -154,13 +156,13 @@ public sealed record AgentEvent
     };
 
     /// <summary>Trims length and strips control characters (no newlines into single-line labels).</summary>
-    private static string? Sanitize(string? s, int max)
+    private static string? Sanitize(string? s, int max, bool multiline = false)
     {
         if (string.IsNullOrEmpty(s)) return s?.Length == 0 ? "" : null;
         var sb = new System.Text.StringBuilder(s.Length);
         foreach (var ch in s)
         {
-            if (!char.IsControl(ch)) sb.Append(ch);
+            if (!char.IsControl(ch) || (multiline && ch is '\r' or '\n' or '\t')) sb.Append(ch);
             if (sb.Length >= max) break;
         }
         return sb.ToString();

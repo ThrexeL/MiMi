@@ -23,7 +23,6 @@ public sealed class SystemHudController : IDisposable
     private readonly NetworkMonitor _network = new();
     private readonly KeyboardHudPolicy _keyboardPolicy = new();
     private BatteryNoticePolicy _batteryPolicy = new();
-    private bool _lastCaps;
     private string _lastLayout = "";
 
     private DateTimeOffset _volumeHudUntil = DateTimeOffset.MinValue;

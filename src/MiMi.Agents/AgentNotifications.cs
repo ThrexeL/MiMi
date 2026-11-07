@@ -9,6 +9,7 @@ public static class ProviderNames
     {
         "claude-code" => "Claude Code",
         "codex" => "Codex CLI",
+        "thursday" => "Thursday",
         var p => string.IsNullOrEmpty(p) ? "Agent" : char.ToUpperInvariant(p[0]) + p[1..],
     };
 }

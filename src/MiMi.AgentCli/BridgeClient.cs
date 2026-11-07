@@ -16,6 +16,7 @@ public sealed class BridgeClient : IAsyncDisposable
 {
     private readonly NamedPipeClientStream _pipe;
     private readonly string _clientLabel;
+    private readonly Queue<BridgeProtocol> _earlyDecisions = new();
 
     private BridgeClient(NamedPipeClientStream pipe, string clientLabel)
     {
@@ -29,23 +30,26 @@ public sealed class BridgeClient : IAsyncDisposable
     public static string PipeName => BridgeProtocol.PipeNameForUser();
 
     /// <summary>Connects and performs the token handshake. Throws with a clear message when MiMi is not running.</summary>
-    public static async Task<BridgeClient> ConnectAsync(TimeSpan connectTimeout, string clientLabel)
+    public static async Task<BridgeClient> ConnectAsync(TimeSpan connectTimeout, string clientLabel,
+        string? pipeName = null, string? token = null)
     {
-        var token = ReadToken();
-        var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut);
+        token ??= ReadToken();
+        var pipe = new NamedPipeClientStream(".", pipeName ?? PipeName, PipeDirection.InOut);
         try
         {
             await pipe.ConnectAsync((int)connectTimeout.TotalMilliseconds);
             await WriteFrameAsync(pipe, new BridgeProtocol { Kind = "hello", Token = token, Client = clientLabel });
 
-            var ack = BridgeProtocol.Deserialize(await ReadFrameAsync(pipe, WithTimeout(connectTimeout)) ?? "");
+            using var handshakeTimeout = new CancellationTokenSource(connectTimeout);
+            var ack = BridgeProtocol.Deserialize(await ReadFrameAsync(pipe, handshakeTimeout.Token) ?? "");
             if (ack is not { Ok: true })
                 throw new IOException($"MiMi bridge rejected the handshake: {ack?.Error ?? "no ack"}");
             return new BridgeClient(pipe, clientLabel);
         }
-        catch (Exception ex) when (ex is not IOException && ex is not TimeoutException)
+        catch (Exception ex)
         {
             await pipe.DisposeAsync();
+            if (ex is IOException or TimeoutException) throw;
             throw new IOException(
                 $"Could not reach the MiMi bridge pipe '{PipeName}' ({ex.Message}). Is MiMi running with the agent bridge enabled?");
         }
@@ -64,7 +68,16 @@ public sealed class BridgeClient : IAsyncDisposable
     public async Task SendEventAsync(AgentEvent ev, TimeSpan ackTimeout)
     {
         await WriteFrameAsync(_pipe, new BridgeProtocol { Kind = "event", Event = ev });
-        var ack = BridgeProtocol.Deserialize(await ReadFrameAsync(_pipe, WithTimeout(ackTimeout)) ?? "");
+        using var timeout = new CancellationTokenSource(ackTimeout);
+        BridgeProtocol? ack;
+        while (true)
+        {
+            ack = BridgeProtocol.Deserialize(await ReadFrameAsync(_pipe, timeout.Token) ?? "");
+            // A fast island decision may arrive before the event acknowledgement.
+            // Preserve it for WaitDecisionAsync instead of losing the user's click.
+            if (ack is { Kind: "approval_resolved" }) { _earlyDecisions.Enqueue(ack); continue; }
+            break;
+        }
         if (ack is not { Ok: true })
             throw new IOException(ack is { Error: { Length: > 0 } err } && err == "duplicate"
                 ? "duplicate event (already delivered)"
@@ -83,7 +96,8 @@ public sealed class BridgeClient : IAsyncDisposable
         {
             while (true)
             {
-                var frame = BridgeProtocol.Deserialize(await ReadFrameAsync(_pipe, cts.Token) ?? "");
+                var frame = _earlyDecisions.Count > 0 ? _earlyDecisions.Dequeue()
+                    : BridgeProtocol.Deserialize(await ReadFrameAsync(_pipe, cts.Token) ?? "");
                 if (frame is null) throw new IOException("MiMi closed the connection before a decision arrived.");
                 if (!string.Equals(frame.Kind, "approval_resolved", StringComparison.Ordinal)) continue;
                 if (!string.Equals(frame.ApprovalRequestId, approvalId, StringComparison.Ordinal)) continue;
@@ -100,12 +114,6 @@ public sealed class BridgeClient : IAsyncDisposable
         {
             return null; // our wait timeout, not an external cancel
         }
-    }
-
-    private static CancellationToken WithTimeout(TimeSpan timeout)
-    {
-        var cts = new CancellationTokenSource(timeout);
-        return cts.Token; // cts intentionally not disposed: fires during the awaited read
     }
 
     private static async Task WriteFrameAsync(Stream stream, BridgeProtocol frame)

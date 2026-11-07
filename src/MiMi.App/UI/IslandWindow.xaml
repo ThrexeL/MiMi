@@ -5,7 +5,7 @@
         xmlns:mascot="clr-namespace:MiMi.App.UI.Mascot"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         Title="MiMi"
-        Width="960" Height="560"
+        Width="960" Height="560" ResizeMode="NoResize"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="{x:Null}"
@@ -13,7 +13,6 @@
         ShowActivated="False"
         Focusable="False"
         Topmost="True"
-        ResizeMode="NoResize"
         Cursor="Arrow">
 
     <Window.Resources>
@@ -45,6 +44,29 @@
         <ui:PendingCountToVisibilityConverter x:Key="PendingToVis"/>
         <ui:RunningToGlyphConverter x:Key="RunningToGlyph"/>
         <ui:NullToVisibilityConverter x:Key="NullToCollapsed"/>
+
+        <Style x:Key="IslandScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True"
+                               Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                               ViewportSize="{TemplateBinding ViewportSize}"
+                               Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Margin="2,0">
+                                    <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="#55FFFFFF" CornerRadius="2"/></ControlTemplate></Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="IslandFont" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
@@ -317,20 +339,27 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentCompactView}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <mascot:MiMiMascotControl Width="18" Height="12" Margin="2,0,0,0"
+            <Grid Margin="18,0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="38"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Viewbox Width="38" Height="24" Stretch="Uniform" VerticalAlignment="Center">
+                <mascot:MiMiMascotControl Width="48" Height="30"
                                           Expression="{Binding Indicator.Expression}"
                                           VerticalAlignment="Center"/>
-                <StackPanel Margin="9,0,0,0" VerticalAlignment="Center" Width="240">
+                </Viewbox>
+                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" FontWeight="SemiBold"
                                Text="{Binding Indicator.Line}" ToolTip="{Binding Indicator.Line}"
-                               TextTrimming="CharacterEllipsis"/>
+                               TextAlignment="Center" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}"
                                Text="{Binding Indicator.PendingLabel}"
+                               TextAlignment="Center"
                                Visibility="{Binding Indicator.PendingLabel, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentExpandedView}">
@@ -407,16 +436,19 @@
                 <Border Background="#1AFFFFFF" CornerRadius="7" Padding="10,6" Margin="1,8,0,0"
                         HorizontalAlignment="Left" MaxWidth="400"
                         Visibility="{Binding Agent.Command, Converter={StaticResource StringToVis}}">
-                    <TextBlock Style="{StaticResource MonoFont}" Text="{Binding Agent.Command}"
+                    <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
+                    <TextBlock Style="{StaticResource MonoFont}" Text="{Binding Agent.Command}" TextWrapping="Wrap"
                                ToolTip="{Binding Agent.Command}"
-                               TextTrimming="CharacterEllipsis"/>
+                               />
+                    </ScrollViewer>
                 </Border>
 
                 <StackPanel Orientation="Horizontal" Margin="1,11,0,0">
                     <Button Style="{StaticResource ApproveButton}" Command="{Binding Agent.ApproveCommand}"
                             AutomationProperties.Name="Approve request"
                             ToolTip="Approve this request"
-                            Content="Approve"/>
+                            Content="{Binding Agent.ApproveLabel}"/>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.DenyCommand}"
                             AutomationProperties.Name="Deny request"
                             ToolTip="Deny this request"
@@ -424,7 +456,7 @@
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.OpenCommand}"
                             AutomationProperties.Name="Open in agent"
                             ToolTip="Copy a safe session reference to the clipboard"
-                            Content="Open in Agent" Margin="8,0,0,0"/>
+                            Content="Copy session" Margin="8,0,0,0"/>
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
@@ -433,10 +465,17 @@
             <StackPanel Margin="20,14,20,12">
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                            Text="Agent activity"/>
+                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                           Foreground="{StaticResource TextTertiary}" Text="{Binding Summary}" Margin="0,3,0,0"/>
+                <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
                 <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Margin="0,0,0,9">
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock Text="{Binding Section}" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextTertiary}" Margin="0,6,0,7"
+                                           Visibility="{Binding Section, Converter={StaticResource StringToVis}}"/>
                                 <StackPanel Orientation="Horizontal">
                                     <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
                                         <Ellipse.Fill>
@@ -455,6 +494,7 @@
                                                    Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                                    Foreground="{StaticResource TextSecondary}"
+                                                   Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}"
                                                    Text="{Binding LastAction}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
@@ -464,6 +504,7 @@
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                                    Foreground="{StaticResource AccentAmber}"
                                                    Text="{Binding PendingApprovals, StringFormat='{}{0} pending'}"
+                                                   Visibility="{Binding PendingApprovals, Converter={StaticResource PendingToVis}}"
                                                    HorizontalAlignment="Right"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -488,6 +529,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </ScrollViewer>
             </StackPanel>
         </DataTemplate>
 
@@ -497,23 +539,29 @@
             <StackPanel Margin="16,10,14,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
+                    <Button Grid.Column="0" Style="{StaticResource TransportButton}" Width="24" Height="24" Margin="0,0,8,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE72B;"/>
+                    </Button>
+                    <Border Grid.Column="1" Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
                         <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
                                    Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    FontWeight="SemiBold" Text="{Binding Pomodoro.PhaseLabel}"/>
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    Foreground="{StaticResource AccentAmber}"
                                    Text="{Binding Pomodoro.Remaining, StringFormat='{}{0} remaining'}"/>
                     </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource TransportButton}" Width="30" Height="30"
                                 Command="{Binding Pomodoro.PlayPauseCommand}">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
@@ -536,23 +584,29 @@
             <StackPanel Margin="16,10,14,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
+                    <Button Grid.Column="0" Style="{StaticResource TransportButton}" Width="24" Height="24" Margin="0,0,8,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE72B;"/>
+                    </Button>
+                    <Border Grid.Column="1" Width="34" Height="34" CornerRadius="17" Background="#22F5B84B">
                         <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
                                    Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    FontWeight="SemiBold" Text="Water today"/>
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    Foreground="{StaticResource AccentAmber}"
                                    Text="{Binding Water.TotalLabel}"/>
                     </StackPanel>
-                    <Button Grid.Column="2" Style="{StaticResource ApproveButton}" Padding="14,7"
+                    <Button Grid.Column="3" Style="{StaticResource ApproveButton}" Padding="14,7"
                             Command="{Binding Water.QuickAddCommand}"
                             Content="{Binding Water.QuickAddLabel}"/>
                 </Grid>
@@ -565,8 +619,15 @@
         <DataTemplate DataType="{x:Type ui:TodoView}">
             <StackPanel Margin="16,10,14,10">
                 <Grid Margin="0,0,0,6">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                               FontWeight="SemiBold" Text="Today"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" Margin="0,0,8,0"
+                                Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                                ToolTip="Back to island">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
+                        </Button>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   FontWeight="SemiBold" Text="Today"/>
+                    </StackPanel>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
                                Text="{Binding Todo.HeaderCount}"/>
@@ -602,8 +663,15 @@
         <DataTemplate DataType="{x:Type ui:ShelfView}">
             <StackPanel Margin="16,10,14,10">
                 <Grid Margin="0,0,0,6">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                               FontWeight="SemiBold" Foreground="{StaticResource AccentAmber}" Text="SHELF"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource TransportButton}" Width="22" Height="22" Margin="0,0,8,0"
+                                Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                                ToolTip="Back to island">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
+                        </Button>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
+                                   FontWeight="SemiBold" Foreground="{StaticResource AccentAmber}" Text="SHELF"/>
+                    </StackPanel>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Right"
                                Text="{Binding HeaderCount}"/>
@@ -620,7 +688,7 @@
                                                VerticalAlignment="Center"/>
                                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                                Margin="8,0,0,0" VerticalAlignment="Center"
-                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" Width="170"/>
+                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" Width="200"/>
                                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                                Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
                                                Margin="8,0,0,0" Text="{Binding SizeLabel}"/>
@@ -688,7 +756,7 @@
                                        HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Focus"/>
+                                       Margin="0,2,0,0" Text="Focus" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
@@ -699,7 +767,7 @@
                                        HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Water"/>
+                                       Margin="0,2,0,0" Text="Water" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
@@ -710,7 +778,7 @@
                                        HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="To-do"/>
+                                       Margin="0,2,0,0" Text="To-do" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource GhostButton}" Padding="4,8"
@@ -721,7 +789,7 @@
                                        HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Shelf"/>
+                                       Margin="0,2,0,0" Text="Shelf" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
                 </UniformGrid>
@@ -774,6 +842,8 @@
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
+
+
 
     </Window.Resources>
 

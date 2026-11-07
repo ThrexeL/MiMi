@@ -21,6 +21,8 @@ if (args.Length == 0)
     Console.Error.WriteLine("  codex-permission  [--wait N] [--dry-run]   (stdin: Codex PermissionRequest JSON; stdout: decision JSON)");
     Console.Error.WriteLine("  activity --provider <claude-code|codex>    (stdin: lifecycle hook JSON; fire-and-forget)");
     Console.Error.WriteLine("  codex-notify '<json>'                      (Codex notify adapter; turn-complete toasts)");
+    Console.Error.WriteLine("  relay                                     (stdin: normalized activity events, one JSON per line)");
+    Console.Error.WriteLine("  thursday-permission                       (stdin: sealed-action event; stdout: task decision)");
     Console.Error.WriteLine("  install-claude [--timeout N] | uninstall-claude   (~/.claude/settings.json)");
     Console.Error.WriteLine("  install-codex  [--timeout N] | uninstall-codex    (~/.codex/hooks.json)");
     Console.Error.WriteLine("  install-codex-notify | uninstall-codex-notify     (~/.codex/config.toml, optional)");
@@ -35,6 +37,10 @@ try
 {
     switch (args[0].ToLowerInvariant())
     {
+        case "relay":
+            return await ActivityRelay.RunAsync(Console.In);
+        case "thursday-permission":
+            return await ThursdayPermission.RunAsync(Console.In, Console.Out);
         case "claude-permission":
         case "codex-permission":
             return await PermissionHookAsync(args.Skip(1).ToArray(), args[0].ToLowerInvariant());

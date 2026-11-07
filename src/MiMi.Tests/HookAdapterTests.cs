@@ -144,7 +144,7 @@ public class InstallerTests : IDisposable
         var second = Installers.InstallClaude(260, SettingsPath);
         Assert.Contains("ALREADY INSTALLED", second);
         var json = File.ReadAllText(SettingsPath);
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(json, "claude-permission").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(json, "claude-permission"));
     }
 
     [Fact]

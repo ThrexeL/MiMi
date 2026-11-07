@@ -186,8 +186,8 @@ public class InstallerUpgradeTests : IDisposable
         var json = File.ReadAllText(path);
         Assert.DoesNotContain(@"C:\\Old\\MiMi.AgentCli.exe", json);
         Assert.Contains("user-policy.py", json);
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(json,
-            "MiMi\\.AgentCli\\.exe.*claude-permission").Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(json,
+            "MiMi\\.AgentCli\\.exe.*claude-permission"));
     }
 
     [Fact]

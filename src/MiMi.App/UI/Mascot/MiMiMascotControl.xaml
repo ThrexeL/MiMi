@@ -20,7 +20,9 @@
          The face per the approved reference: two prominent bright-white ROUND eyes with
          balanced spacing — nothing else. The warm-gold light is a separate island-level
          aurora beneath the eyes (IslandWindow's GlowRoot), not part of this control. -->
-    <Viewbox Stretch="Uniform">
+    <Viewbox Stretch="Uniform"
+             Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+             Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
         <Grid Width="48" Height="30" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform>
                 <ScaleTransform x:Name="WakeScale" ScaleX="1" ScaleY="1"/>
@@ -37,7 +39,7 @@
                             <ScaleTransform x:Name="EyeLBlink"/>
                         </TransformGroup>
                     </Grid.RenderTransform>
-                    <Ellipse x:Name="EyeL" Width="8.4" Height="8.4"
+                    <Ellipse x:Name="EyeL" Width="11" Height="11"
                              Fill="{StaticResource MascotEyeBrush}"/>
                 </Grid>
                 <Grid x:Name="EyeRGroup" Canvas.Left="20" Canvas.Top="-2" Width="24" Height="26"
@@ -49,7 +51,7 @@
                             <ScaleTransform x:Name="EyeRBlink"/>
                         </TransformGroup>
                     </Grid.RenderTransform>
-                    <Ellipse x:Name="EyeR" Width="8.4" Height="8.4"
+                    <Ellipse x:Name="EyeR" Width="11" Height="11"
                              Fill="{StaticResource MascotEyeBrush}"/>
                 </Grid>
 
