@@ -245,7 +245,7 @@
         <!-- ============================ templates ============================ -->
         <DataTemplate DataType="{x:Type ui:RestingView}">
             <!-- Face-only idle per the approved reference: the mascot is the entire
-                 content â€” no clock, no status text, nothing else. -->
+                 content — no clock, no status text, nothing else. -->
             <!-- The whole pill is the click target (the face alone is a small hit area),
                  so the host fills the content box and paints a transparent background.
                  The face keeps its aspect ratio (the mascot's own Viewbox) and is never
@@ -709,7 +709,7 @@
                 </ItemsControl>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="All done â€” add tasks from the tray when the list is empty"
+                           Text="All done — add tasks from the tray when the list is empty"
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
@@ -763,7 +763,7 @@
                 </ItemsControl>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="Drop files on the island to shelve them â€” drag rows back out anytime"/>
+                           Text="Drop files on the island to shelve them — drag rows back out anytime"/>
             </StackPanel>
         </DataTemplate>
 
@@ -914,10 +914,10 @@
             <Grid>
                 <Grid x:Name="GlowRoot" IsHitTestVisible="False" Panel.ZIndex="0">
                     <!-- Signature warmth per the approved reference: a shallow gold band
-                         hugging the INSIDE BOTTOM EDGE of the island â€” brightest at the
+                         hugging the INSIDE BOTTOM EDGE of the island — brightest at the
                          lower center boundary, gone before it reaches the middle. The
                          band height is a fixed DIP value set per state by the code-behind
-                         (GlowLayout.BandHeight) â€” never proportional to the panel â€” so
+                         (GlowLayout.BandHeight) — never proportional to the panel — so
                          expanded cards can never grow a giant center oval. Opacity is a
                          separate, state-driven value. -->
                     <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,0">

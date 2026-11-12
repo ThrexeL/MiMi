@@ -9,7 +9,7 @@ namespace MiMi.App.UI;
 
 /// <summary>
 /// Composes what the island shows. Phase 3.6: full agent awareness via
-/// <see cref="AgentSessionManager"/> â€” sessions are tracked per (provider, session id),
+/// <see cref="AgentSessionManager"/> — sessions are tracked per (provider, session id),
 /// tool/status events update the indicator silently (no island churn), completion and
 /// failure events produce short toasts, and approvals keep their sticky, navigable cards.
 /// All methods run on the UI thread.
@@ -46,7 +46,7 @@ public sealed class IslandPresenter
     private AgentIndicatorViewModel? _agentIndicatorVm;
     private readonly Dictionary<string, AgentCardViewModel> _approvalCards = new();
 
-    // Pending-approval navigation: newest request becomes current; â€¹ â€º cycle through.
+    // Pending-approval navigation: newest request becomes current; ‹ › cycle through.
     private readonly List<string> _approvalQueue = new();
     private int _approvalQueueIndex;
 
@@ -187,7 +187,7 @@ public sealed class IslandPresenter
     // ---- productivity utilities (Phase 4) ---------------------------------------
 
     /// <summary>Tray toggle: opens/closes a utility panel. User-opened panels pin at
-    /// UserPanel priority â€” only approval alerts (and failures) displace them.</summary>
+    /// UserPanel priority — only approval alerts (and failures) displace them.</summary>
     public void ToggleUtility(string kind) => _utilityPins.TogglePin(kind);
 
     /// <summary>Pins a utility panel open without closing it (drag-toward-MiMi).</summary>
@@ -400,7 +400,7 @@ public sealed class IslandPresenter
             _water.GoalFraction,
             _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
 
-        // To-do (max 4 open rows) â€” rebuilt only while the panel is open.
+        // To-do (max 4 open rows) — rebuilt only while the panel is open.
         if (!todoPinned) return;
         _todoVm ??= new TodoViewModel(
             add: title =>
@@ -482,7 +482,7 @@ public sealed class IslandPresenter
         if (_mediaCompact is not null)
             _mediaCompact.AgentBadgeCount = agentsActive ? workingCount : 0;
 
-        // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority â€”
+        // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority —
         // only approval alerts displace them. A merely RUNNING focus timer pins at
         // Utility, below agent status, so agents never lose their pill to the timer.
         UpdateUtilityVms();
@@ -557,12 +557,12 @@ public sealed class IslandPresenter
         {
             var s = sessions.First(IsWorking);
             var provider = AgentCardViewModel.DisplayProvider(s.Provider);
-            _agentIndicatorVm.Update($"{provider} Â· {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
+            _agentIndicatorVm.Update($"{provider} \u00B7 {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
         }
     }
 
-    /// <summary>Persistent mood from confirmed state only. Sleep follows quiet time â€”
-    /// time since MiMi last had an agent event, approval, notice, or media change â€” never
+    /// <summary>Persistent mood from confirmed state only. Sleep follows quiet time —
+    /// time since MiMi last had an agent event, approval, notice, or media change — never
     /// desktop input idleness.</summary>
     private MascotMood ComputePersistentMood(int workingCount, IReadOnlyList<AgentSession> sessions, bool mediaActive)
     {
@@ -638,7 +638,7 @@ public sealed class IslandPresenter
     private static string ThursdayProgress(AgentSession s, string fallback) =>
         (s.Provider == "thursday" || ProviderNames.IsImpressiveBot(s.Provider))
         && !string.IsNullOrWhiteSpace(s.LastSummary)
-            ? (s.LastSummary.Length > 48 ? s.LastSummary[..47] + "â€¦" : s.LastSummary)
+            ? (s.LastSummary.Length > 48 ? s.LastSummary[..47] + "\u2026" : s.LastSummary)
             : fallback;
 
     internal static string StateColor(AgentSession s) => s.Stale ? "#9A9AA0" : s.State switch
@@ -687,7 +687,7 @@ public sealed class IslandPresenter
         {
             Section = heading,
             Provider = AgentCardViewModel.DisplayProvider(s.Provider),
-            Project = string.IsNullOrEmpty(s.Project) ? "â€”" : s.Project,
+            Project = string.IsNullOrEmpty(s.Project) ? "\u2014" : s.Project,
             StatusLabel = StatusLabel(s),
             LastAction = string.IsNullOrEmpty(s.LastSummary) ? StatusLabel(s) : s.LastSummary,
             AgeLabel = AgeLabel(s.LastEventUtc),
@@ -717,7 +717,7 @@ public sealed class IslandPresenter
     public void OnAgentEvent(AgentEvent ev)
     {
         TouchActivity();
-        // Every event updates session tracking first â€” display flows from state.
+        // Every event updates session tracking first — display flows from state.
         if (!string.IsNullOrEmpty(ev.SessionId)) _sessions.Apply(ev);
 
         switch (ev.Type)
@@ -820,7 +820,7 @@ public sealed class IslandPresenter
     // ---- approvals: queue + navigation -------------------------------------------------
 
     /// <summary>Shows the newest (or navigated) pending approval; earlier ones stay
-    /// queued and reachable via the card's â€¹ â€º controls.</summary>
+    /// queued and reachable via the card's ‹ › controls.</summary>
     private void EnqueueApproval(string approvalId, bool isNavigating)
     {
         if (!_approvalQueue.Contains(approvalId)) _approvalQueue.Add(approvalId);
@@ -870,7 +870,7 @@ public sealed class IslandPresenter
             Id = "approval:" + approvalId,
             Priority = IslandPriority.Approval,
             Content = new ApprovalView(card),
-            // Sticky: stays until resolved/expired â€” a song change never displaces it.
+            // Sticky: stays until resolved/expired — a song change never displaces it.
         });
         Logger.Info($"Approval card '{approvalId}' shown ({_approvalQueueIndex + 1} of {_approvalQueue.Count}).");
     }

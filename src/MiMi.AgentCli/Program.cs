@@ -1,10 +1,10 @@
 ﻿using MiMi.AgentCli;
 using MiMi.Agents;
 
-// stdout is a DECISION CHANNEL for hooks â€” never log diagnostics to it. Everything
+// stdout is a DECISION CHANNEL for hooks — never log diagnostics to it. Everything
 // informational goes to stderr, which agents record in their transcripts.
 
-// TEMP DIAGNOSTIC: capture the exact invocation shape Codex uses (argv only â€”
+// TEMP DIAGNOSTIC: capture the exact invocation shape Codex uses (argv only —
 // stdin is consumed by the command handlers below).
 try
 {
@@ -65,7 +65,7 @@ try
         {
             var timeout = ParseOptionInt(args, "--timeout", 260);
             Console.WriteLine(Installers.InstallCodex(timeout));
-            Console.Error.WriteLine("Note: Codex requires a one-time trust review â€” run '/hooks' in the Codex TUI and approve the MiMi hook.");
+            Console.Error.WriteLine("Note: Codex requires a one-time trust review \u2014 run '/hooks' in the Codex TUI and approve the MiMi hook.");
             return 0;
         }
         case "uninstall-codex":
@@ -89,7 +89,7 @@ catch (Exception ex)
     if (isPermissionCommand)
     {
         ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied,
-            "MiMi approval flow failed internally â€” permission denied (fail-closed).");
+            "MiMi approval flow failed internally \u2014 permission denied (fail-closed).");
         return 0;
     }
     return 1;
@@ -104,7 +104,7 @@ static int ParseOptionInt(string[] args, string name, int fallback)
 /// <summary>
 /// Shared PermissionRequest hook flow for Claude Code and Codex: read stdin JSON,
 /// show the approval in MiMi, wait (bounded) for the island decision, and emit the
-/// provider-native decision JSON. Every failure path DENIES â€” never fail open.
+/// provider-native decision JSON. Every failure path DENIES — never fail open.
 /// </summary>
 static async Task<int> PermissionHookAsync(string[] args, string command)
 {
@@ -119,7 +119,7 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
     if (string.IsNullOrWhiteSpace(input))
     {
         // Fail closed but stay compatible: a deny decision the provider understands.
-        ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied, "MiMi hook received no input â€” denied (fail-closed).");
+        ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied, "MiMi hook received no input \u2014 denied (fail-closed).");
         return 0;
     }
 
@@ -131,13 +131,13 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
     catch (Exception ex)
     {
         Console.Error.WriteLine($"MiMi: could not parse hook input ({ex.Message})");
-        ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied, "MiMi could not parse the permission request â€” denied (fail-closed).");
+        ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied, "MiMi could not parse the permission request \u2014 denied (fail-closed).");
         return 0;
     }
 
     if (dryRun)
     {
-        Console.Error.WriteLine($"DRY RUN â€” would send: {request.Event.ToJson()}");
+        Console.Error.WriteLine($"DRY RUN \u2014 would send: {request.Event.ToJson()}");
         ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied, "dry run");
         return 0;
     }
@@ -153,8 +153,8 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
         {
             ApprovalDecision.Approved => (ApprovalDecision.Approved, "Approved via MiMi."),
             ApprovalDecision.Denied => (ApprovalDecision.Denied, "Denied via MiMi."),
-            ApprovalDecision.Expired => (ApprovalDecision.Denied, "MiMi approval request expired unanswered â€” denied."),
-            _ => (ApprovalDecision.Denied, $"MiMi approval timed out after {waitSeconds}s â€” denied (fail-closed)."),
+            ApprovalDecision.Expired => (ApprovalDecision.Denied, "MiMi approval request expired unanswered \u2014 denied."),
+            _ => (ApprovalDecision.Denied, $"MiMi approval timed out after {waitSeconds}s \u2014 denied (fail-closed)."),
         };
         ClaudeHook.WriteDecision(Console.Out, mapped, reason);
         return 0;
@@ -164,13 +164,13 @@ static async Task<int> PermissionHookAsync(string[] args, string command)
         // MiMi not running / bridge disabled: NEVER fail open.
         Console.Error.WriteLine($"MiMi: {ex.Message}");
         ClaudeHook.WriteDecision(Console.Out, ApprovalDecision.Denied,
-            $"MiMi is not reachable â€” permission denied (fail-closed). Start MiMi or remove its hook (MiMi.AgentCli {uninstallHint}).");
+            $"MiMi is not reachable \u2014 permission denied (fail-closed). Start MiMi or remove its hook (MiMi.AgentCli {uninstallHint}).");
         return 0;
     }
 }
 
 /// <summary>
-/// Fire-and-forget lifecycle hook: parse â†’ send over the bridge â†’ exit promptly.
+/// Fire-and-forget lifecycle hook: parse → send over the bridge → exit promptly.
 /// Activity hooks must never block agent execution; a bridge outage is swallowed
 /// (exit 0) so ordinary agent work is unaffected.
 /// </summary>
@@ -249,7 +249,7 @@ static class CodexNotifyInstaller
         {
             if (lines[existing].Contains("MiMi.AgentCli", StringComparison.OrdinalIgnoreCase))
                 return $"ALREADY INSTALLED: {path} already points notify at MiMi.";
-            return $"SKIP: {path} already sets 'notify' for another program â€” leaving it untouched. Backup: {backup}";
+            return $"SKIP: {path} already sets 'notify' for another program \u2014 leaving it untouched. Backup: {backup}";
         }
         lines.Add(NotifyLine());
         File.WriteAllText(path, string.Join('\n', lines));

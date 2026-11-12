@@ -47,7 +47,7 @@ public enum AgentNoticeKind
 
 /// <summary>
 /// A display-ready notification decision. It carries no command text, prompt content,
-/// credentials, or transcript data â€” only provider/session metadata and a short summary.
+/// credentials, or transcript data — only provider/session metadata and a short summary.
 /// Approval notices reference a request id; they can never carry (or perform) a decision.
 /// </summary>
 public sealed record AgentNotice(
@@ -107,7 +107,7 @@ public sealed class AgentNotificationCoordinator
 
     public void Configure(AppSettings settings) => _settings = settings;
 
-    /// <summary>Set only by the explicit Ctrl+Alt+M / tray visibility preference â€” never by
+    /// <summary>Set only by the explicit Ctrl+Alt+M / tray visibility preference — never by
     /// a notification or by fullscreen suppression.</summary>
     public void SetHidden(bool hidden)
     {
@@ -230,7 +230,7 @@ public sealed class AgentNotificationCoordinator
         if (!_settings.AgentNotificationsEnabled || workingCount < 2) return null;
 
         var text = $"{workingCount} agents working"
-                   + (pendingApprovals > 0 ? $" Â· {pendingApprovals} awaiting approval" : "");
+                   + (pendingApprovals > 0 ? $" \u00B7 {pendingApprovals} awaiting approval" : "");
         if (string.Equals(text, _lastAggregateText, StringComparison.Ordinal)) return null;
 
         var now = _clock();

@@ -1,0 +1,2 @@
+[*.{cs,xaml,csproj,props,ps1}]
+charset = utf-8

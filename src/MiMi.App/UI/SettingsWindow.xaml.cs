@@ -76,7 +76,7 @@ public partial class SettingsWindow : Window
         FullscreenToggle.IsChecked = s.FullscreenSuppress;
         HotkeyStatusText.Text = _hotkeyStatus()
             ? "Global toggle shortcut: Ctrl + Alt + M  (registered)"
-            : "Global toggle shortcut: Ctrl + Alt + M  (unavailable â€” another program owns it)";
+            : "Global toggle shortcut: Ctrl + Alt + M  (unavailable \u2014 another program owns it)";
         RefreshLabels();
         _loading = false;
         _ = RefreshProvidersAsync();
@@ -84,11 +84,11 @@ public partial class SettingsWindow : Window
 
     private void RefreshLabels()
     {
-        ScaleLabel.Text = ScaleSlider.Value.ToString("0.00Ã—");
-        SpeedLabel.Text = SpeedSlider.Value.ToString("0.0Ã—");
+        ScaleLabel.Text = ScaleSlider.Value.ToString("0.00\u00D7");
+        SpeedLabel.Text = SpeedSlider.Value.ToString("0.0\u00D7");
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
         GlowLabel.Text = $"{GlowSlider.Value:0}%";
-        FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0Ã—}";
+        FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0\u00D7}";
         NotificationDurationLabel.Text = $"{NotificationDurationSlider.Value / 1000.0:0.0} s";
     }
 
@@ -175,7 +175,7 @@ public partial class SettingsWindow : Window
 
     private async Task RefreshProvidersAsync()
     {
-        ProviderCheckedText.Text = "checkingâ€¦";
+        ProviderCheckedText.Text = "checking\u2026";
         try
         {
             var statuses = await Task.Run(() => _providerInspector.InspectAll(includeVersions: true));
@@ -198,10 +198,10 @@ public partial class SettingsWindow : Window
     private static void ApplyProvider(string displayName, ProviderIntegrationStatus status,
         TextBlock statusText, TextBlock detailText)
     {
-        statusText.Text = $"{displayName} â€” {status.Summary}";
-        var version = string.IsNullOrEmpty(status.Version) ? "" : $" Â· {status.Version}";
+        statusText.Text = $"{displayName} \u2014 {status.Summary}";
+        var version = string.IsNullOrEmpty(status.Version) ? "" : $" \u00B7 {status.Version}";
         var hooks = status.ExpectedHooks > 0
-            ? $" Â· hooks {status.InstalledHooks}/{status.ExpectedHooks}"
+            ? $" \u00B7 hooks {status.InstalledHooks}/{status.ExpectedHooks}"
             : "";
         detailText.Text = status.Detail + version + hooks;
         detailText.ToolTip = $"{status.ConfigPath}\n{status.ExecutablePath}\n{status.Instructions}";

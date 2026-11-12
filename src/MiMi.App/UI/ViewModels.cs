@@ -511,7 +511,7 @@ public sealed class AgentSessionRow
     public required IReadOnlyList<AgentTimelineItem> Timeline { get; init; }
 }
 
-/// <summary>One short timeline line: "14:32 Â· Started".</summary>
+/// <summary>One short timeline line: "14:32 · Started".</summary>
 public sealed class AgentTimelineItem
 {
     public required string TimeLabel { get; init; }
@@ -523,7 +523,7 @@ public sealed class AgentTimelineItem
 public sealed class RunningToGlyphConverter : System.Windows.Data.IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
-        => value is true ? "î©" : "î¨";
+        => value is true ? "\uE769" : "\uE768";
 
     public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
@@ -550,8 +550,8 @@ public sealed class PendingCountToVisibilityConverter : System.Windows.Data.IVal
 }
 
 /// <summary>
-/// Live compact indicator for agent activity: one line ("Codex Â· Working" or
-/// "3 agents active"). The presenter updates it in place â€” status changes never
+/// Live compact indicator for agent activity: one line ("Codex · Working" or
+/// "3 agents active"). The presenter updates it in place — status changes never
 /// re-trigger island animations.
 /// </summary>
 public sealed class AgentIndicatorViewModel : ObservableObject
@@ -712,11 +712,21 @@ public sealed class MediaViewModel : ObservableObject
     private string _lyricNext = "";
     private bool _hasLyricCurrent;
 
-    /// <summary>Idle/loading/instrumental/unavailable â†’ the lyrics block hides.</summary>
-    public bool ShowLyricsBlock { get => _hasLyricCurrent || _lyricsVisible; private set => Set(ref _lyricsVisible, value); }
+    /// <summary>Shows lyrics or their availability status while lyrics are enabled.</summary>
+    public bool ShowLyricsBlock
+    {
+        get => _lyricsVisible;
+        private set
+        {
+            if (_lyricsVisible == value) return;
+            Set(ref _lyricsVisible, value);
+            Raise(nameof(LyricsBlockVisible));
+            Raise(nameof(LyricsBlockHidden));
+        }
+    }
     public bool LyricsBlockVisible => ShowLyricsBlock;
     public bool LyricsBlockHidden => !ShowLyricsBlock;
-    /// <summary>Current line color: gold when a real line is active, dim for â™ª gaps.</summary>
+    /// <summary>Current line color: gold when a real line is active, dim for ♪ gaps.</summary>
     public System.Windows.Media.Color LyricCurrentColor =>
         LyricCurrentIsLine
             ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFF5B84B")
@@ -724,7 +734,16 @@ public sealed class MediaViewModel : ObservableObject
     public string LyricPrev { get => _lyricPrev; private set => Set(ref _lyricPrev, value); }
     public string LyricCurrent { get => _lyricCurrent; private set => Set(ref _lyricCurrent, value); }
     public string LyricNext { get => _lyricNext; private set => Set(ref _lyricNext, value); }
-    public bool LyricCurrentIsLine { get => _hasLyricCurrent; private set => Set(ref _hasLyricCurrent, value); }
+    public bool LyricCurrentIsLine
+    {
+        get => _hasLyricCurrent;
+        private set
+        {
+            if (_hasLyricCurrent == value) return;
+            Set(ref _hasLyricCurrent, value);
+            Raise(nameof(LyricCurrentColor));
+        }
+    }
 
     private bool _userWantsLyrics = true;
 
@@ -748,16 +767,26 @@ public sealed class MediaViewModel : ObservableObject
             ? result.SyncedLines ?? Array.Empty<LrcLine>()
             : Array.Empty<LrcLine>();
         _lyricIndex = -1;
+        LyricPrev = LyricNext = "";
+        LyricCurrentIsLine = false;
+        LyricCurrent = state switch
+        {
+            LyricsState.Loading => "Loading lyrics...",
+            LyricsState.Instrumental => "Instrumental - no lyrics",
+            LyricsState.Unavailable => "No lyrics available",
+            LyricsState.Plain or LyricsState.Synced => "No lyrics available",
+            _ => "",
+        };
 
         // Plain lyrics without timestamps: show the first few lines as a static block.
         if (state == LyricsState.Plain && result is not null)
         {
-            var plainLines = result.PlainLyrics!
-                .Replace("\r", "").Split("\n", StringSplitOptions.RemoveEmptyEntries);
+            var plainLines = (result.PlainLyrics ?? "")
+                .Replace("\r", "").Split("\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             LyricPrev = "";
-            LyricCurrent = plainLines.Length > 0 ? plainLines[0] : "";
+            LyricCurrent = plainLines.Length > 0 ? plainLines[0] : "No lyrics available";
             LyricNext = plainLines.Length > 1 ? plainLines[1] : "";
-            LyricCurrentIsLine = true;
+            LyricCurrentIsLine = plainLines.Length > 0;
             UpdateLyricVisibility();
             return;
         }
@@ -766,10 +795,10 @@ public sealed class MediaViewModel : ObservableObject
         UpdateLyricWindow();
     }
 
-    private void UpdateLyricVisibility() => ShowLyricsBlock = LyricsWanted;
+    private void UpdateLyricVisibility() => ShowLyricsBlock = LyricsWanted && _lyricsState != LyricsState.Idle;
 
     /// <summary>Recomputes the 3-line window (previous / current / next) from the
-    /// playback position. Called by the 1 Hz timeline tick â€” cheap by design.</summary>
+    /// playback position. Called by the 1 Hz timeline tick — cheap by design.</summary>
     public void UpdateLyricWindow()
     {
         if (_lyricLines.Count == 0) return;
@@ -783,7 +812,7 @@ public sealed class MediaViewModel : ObservableObject
         LyricPrev = index > 0 ? _lyricLines[index - 1].Text : "";
         var current = index >= 0 ? _lyricLines[index].Text : "";
         // Instrumental gaps render as a gentle note instead of an empty block.
-        LyricCurrent = current.Length == 0 ? "â™ª" : current;
+        LyricCurrent = current.Length == 0 ? "\u266A" : current;
         LyricCurrentIsLine = current.Length > 0;
         LyricNext = index + 1 < _lyricLines.Count ? _lyricLines[index + 1].Text : "";
         UpdateLyricVisibility();
@@ -794,6 +823,7 @@ public sealed class MediaViewModel : ObservableObject
         _lyricsState = LyricsState.Idle;
         _lyricLines = Array.Empty<LrcLine>();
         _lyricIndex = -1;
+        LyricCurrentIsLine = false;
         UpdateLyricVisibility();
         LyricPrev = LyricCurrent = LyricNext = "";
     }

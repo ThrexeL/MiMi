@@ -66,7 +66,7 @@
                     HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
     <StackPanel Margin="22,18,18,10">
         <TextBlock Style="{StaticResource Label}" FontSize="17" FontWeight="SemiBold" Text="MiMi"/>
-        <TextBlock Style="{StaticResource Sub}" Margin="0,2,0,14" TextWrapping="Wrap" Text="Dynamic Island for Windows 11 â€” local preferences, saved to %LOCALAPPDATA%\MiMi"/>
+        <TextBlock Style="{StaticResource Sub}" Margin="0,2,0,14" TextWrapping="Wrap" Text="Dynamic Island for Windows 11 — local preferences, saved to %LOCALAPPDATA%\MiMi"/>
 
         <Grid>
             <Grid.ColumnDefinitions>
@@ -245,11 +245,11 @@
                        Foreground="#70FFFFFF" Text="{Binding ApprovalNote}"/>
         </StackPanel>
         <TextBlock x:Name="ClaudeProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
-                   Margin="0,7,0,0" Text="Claude Code â€” checkingâ€¦"/>
+                   Margin="0,7,0,0" Text="Claude Code — checking…"/>
         <TextBlock x:Name="ClaudeProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
                    Margin="0,1,0,0"/>
         <TextBlock x:Name="CodexProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
-                   Margin="0,8,0,0" Text="Codex â€” checkingâ€¦"/>
+                   Margin="0,8,0,0" Text="Codex — checking…"/>
         <TextBlock x:Name="CodexProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
                    Margin="0,1,0,0"/>
         <TextBlock x:Name="ProviderHintText" Style="{StaticResource Sub}" TextWrapping="Wrap"
@@ -267,7 +267,7 @@
                   Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
         <TextBlock Style="{StaticResource Sub}" x:Name="HotkeyStatusText" Margin="0,4,0,0" TextWrapping="Wrap"/>
         <TextBlock Style="{StaticResource Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
-                   Text="While hidden, media monitoring and the agent bridge keep running. Approval requests still arrive and expire on schedule â€” they are never approved automatically. Press Ctrl + Alt + M to bring MiMi back."/>
+                   Text="While hidden, media monitoring and the agent bridge keep running. Approval requests still arrive and expire on schedule — they are never approved automatically. Press Ctrl + Alt + M to bring MiMi back."/>
 
     </StackPanel>
       </ScrollViewer>
