@@ -62,7 +62,15 @@ public sealed class AgentSession
 /// </summary>
 public sealed class AgentSessionManager : IDisposable
 {
-    public static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(90);
+    /// <summary>
+    /// How long a working session may stay silent before MiMi stops calling it working.
+    /// ImpressiveBot reports on every turn and tool change, but a single long command (a
+    /// build, a test run, a big read) can legitimately produce no event for several
+    /// minutes; 90 seconds used to flip a genuinely working bot to "status unknown" and
+    /// drop it from the status line. Five minutes covers real work while still letting a
+    /// crashed or closed bot age out on its own.
+    /// </summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(5);
     public const int EndedHistoryLimit = 20;
     public const int TimelineLimit = 12;
     private static readonly TimeSpan ToolEntrySpacing = TimeSpan.FromSeconds(2);
@@ -309,6 +317,17 @@ public sealed class AgentSessionManager : IDisposable
     public void SweepStale(DateTimeOffset asOf)
     {
         if (_disposed) return;
+        // Called from the background sweeper timer and from the UI's 1 Hz tick; the
+        // dictionary is concurrent, but pruning must not interleave with itself.
+        if (Interlocked.Exchange(ref _sweeping, 1) == 1) return;
+        try { SweepStaleCore(asOf); }
+        finally { Interlocked.Exchange(ref _sweeping, 0); }
+    }
+
+    private int _sweeping;
+
+    private void SweepStaleCore(DateTimeOffset asOf)
+    {
         var now = asOf;
         foreach (var session in _sessions.Values)
         {

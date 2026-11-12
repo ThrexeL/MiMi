@@ -9,7 +9,7 @@ namespace MiMi.App.UI;
 
 /// <summary>
 /// Composes what the island shows. Phase 3.6: full agent awareness via
-/// <see cref="AgentSessionManager"/> — sessions are tracked per (provider, session id),
+/// <see cref="AgentSessionManager"/> â€” sessions are tracked per (provider, session id),
 /// tool/status events update the indicator silently (no island churn), completion and
 /// failure events produce short toasts, and approvals keep their sticky, navigable cards.
 /// All methods run on the UI thread.
@@ -46,7 +46,7 @@ public sealed class IslandPresenter
     private AgentIndicatorViewModel? _agentIndicatorVm;
     private readonly Dictionary<string, AgentCardViewModel> _approvalCards = new();
 
-    // Pending-approval navigation: newest request becomes current; ‹ › cycle through.
+    // Pending-approval navigation: newest request becomes current; â€¹ â€º cycle through.
     private readonly List<string> _approvalQueue = new();
     private int _approvalQueueIndex;
 
@@ -187,7 +187,7 @@ public sealed class IslandPresenter
     // ---- productivity utilities (Phase 4) ---------------------------------------
 
     /// <summary>Tray toggle: opens/closes a utility panel. User-opened panels pin at
-    /// UserPanel priority — only approval alerts (and failures) displace them.</summary>
+    /// UserPanel priority â€” only approval alerts (and failures) displace them.</summary>
     public void ToggleUtility(string kind) => _utilityPins.TogglePin(kind);
 
     /// <summary>Pins a utility panel open without closing it (drag-toward-MiMi).</summary>
@@ -243,6 +243,13 @@ public sealed class IslandPresenter
     public void OnSecondTick()
     {
         _pomodoro.Tick();
+
+        // ImpressiveBot's line is live data, not a snapshot: a bot that starts, waits or
+        // finishes between panel rebuilds must show up within a second. This keeps the
+        // session table honest (a silent bot ages out instead of claiming to work) and
+        // asks the open panel to re-read it.
+        _sessions.SweepStale(DateTimeOffset.UtcNow);
+        ImpressiveBotStatusChanged?.Invoke();
 
         var now = DateTimeOffset.Now;
         var utilityActive = _utilityPins.ActiveUtility is not null || _pomodoro.Phase != PomodoroPhase.Idle;
@@ -393,7 +400,7 @@ public sealed class IslandPresenter
             _water.GoalFraction,
             _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
 
-        // To-do (max 4 open rows) — rebuilt only while the panel is open.
+        // To-do (max 4 open rows) â€” rebuilt only while the panel is open.
         if (!todoPinned) return;
         _todoVm ??= new TodoViewModel(
             add: title =>
@@ -475,7 +482,7 @@ public sealed class IslandPresenter
         if (_mediaCompact is not null)
             _mediaCompact.AgentBadgeCount = agentsActive ? workingCount : 0;
 
-        // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority —
+        // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority â€”
         // only approval alerts displace them. A merely RUNNING focus timer pins at
         // Utility, below agent status, so agents never lose their pill to the timer.
         UpdateUtilityVms();
@@ -550,12 +557,12 @@ public sealed class IslandPresenter
         {
             var s = sessions.First(IsWorking);
             var provider = AgentCardViewModel.DisplayProvider(s.Provider);
-            _agentIndicatorVm.Update($"{provider} · {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
+            _agentIndicatorVm.Update($"{provider} Â· {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
         }
     }
 
-    /// <summary>Persistent mood from confirmed state only. Sleep follows quiet time —
-    /// time since MiMi last had an agent event, approval, notice, or media change — never
+    /// <summary>Persistent mood from confirmed state only. Sleep follows quiet time â€”
+    /// time since MiMi last had an agent event, approval, notice, or media change â€” never
     /// desktop input idleness.</summary>
     private MascotMood ComputePersistentMood(int workingCount, IReadOnlyList<AgentSession> sessions, bool mediaActive)
     {
@@ -626,9 +633,12 @@ public sealed class IslandPresenter
         _ => "Status unknown",
     };
 
+    /// <summary>Thursday and ImpressiveBot report a live one-line summary; show it in place
+    /// of the generic state word so the island says what the bot is actually doing.</summary>
     private static string ThursdayProgress(AgentSession s, string fallback) =>
-        s.Provider == "thursday" && !string.IsNullOrWhiteSpace(s.LastSummary)
-            ? (s.LastSummary.Length > 48 ? s.LastSummary[..47] + "…" : s.LastSummary)
+        (s.Provider == "thursday" || ProviderNames.IsImpressiveBot(s.Provider))
+        && !string.IsNullOrWhiteSpace(s.LastSummary)
+            ? (s.LastSummary.Length > 48 ? s.LastSummary[..47] + "â€¦" : s.LastSummary)
             : fallback;
 
     internal static string StateColor(AgentSession s) => s.Stale ? "#9A9AA0" : s.State switch
@@ -640,6 +650,25 @@ public sealed class IslandPresenter
         _ => "#8AB4FF",
     };
 
+    /// <summary>Resolved once and re-checked only when it was missing, so installing the CLI
+    /// later is picked up without a restart.</summary>
+    private string? _impressiveBotCli;
+    private bool _impressiveBotCliChecked;
+
+    /// <summary>Raised once a second while the island runs, so an open activity panel can
+    /// re-read the ImpressiveBot line without a full content rebuild.</summary>
+    public event Action? ImpressiveBotStatusChanged;
+
+    /// <summary>What MiMi can truthfully say about ImpressiveBot right now, from live sessions.</summary>
+    public ImpressiveBotStatus ImpressiveBotStatus()
+    {
+        if (!_impressiveBotCliChecked || _impressiveBotCli is null)
+        {
+            _impressiveBotCli = ImpressiveBotStatusReader.ResolveCli();
+            _impressiveBotCliChecked = true;
+        }
+        return ImpressiveBotStatusReader.Build(_sessions.All, _impressiveBotCli);
+    }
     /// <summary>Rows for the expanded activity panel, built fresh on each hover.</summary>
     public AgentActivityPanelView BuildAgentPanel()
     {
@@ -658,7 +687,7 @@ public sealed class IslandPresenter
         {
             Section = heading,
             Provider = AgentCardViewModel.DisplayProvider(s.Provider),
-            Project = string.IsNullOrEmpty(s.Project) ? "—" : s.Project,
+            Project = string.IsNullOrEmpty(s.Project) ? "â€”" : s.Project,
             StatusLabel = StatusLabel(s),
             LastAction = string.IsNullOrEmpty(s.LastSummary) ? StatusLabel(s) : s.LastSummary,
             AgeLabel = AgeLabel(s.LastEventUtc),
@@ -672,7 +701,7 @@ public sealed class IslandPresenter
                 Kind = h.Kind,
             }).ToList(),
         }; }).ToList();
-        return new AgentActivityPanelView(rows);
+        return new AgentActivityPanelView(rows, ImpressiveBotStatus());
     }
 
     private static string AgeLabel(DateTimeOffset utc)
@@ -688,7 +717,7 @@ public sealed class IslandPresenter
     public void OnAgentEvent(AgentEvent ev)
     {
         TouchActivity();
-        // Every event updates session tracking first — display flows from state.
+        // Every event updates session tracking first â€” display flows from state.
         if (!string.IsNullOrEmpty(ev.SessionId)) _sessions.Apply(ev);
 
         switch (ev.Type)
@@ -791,7 +820,7 @@ public sealed class IslandPresenter
     // ---- approvals: queue + navigation -------------------------------------------------
 
     /// <summary>Shows the newest (or navigated) pending approval; earlier ones stay
-    /// queued and reachable via the card's ‹ › controls.</summary>
+    /// queued and reachable via the card's â€¹ â€º controls.</summary>
     private void EnqueueApproval(string approvalId, bool isNavigating)
     {
         if (!_approvalQueue.Contains(approvalId)) _approvalQueue.Add(approvalId);
@@ -841,7 +870,7 @@ public sealed class IslandPresenter
             Id = "approval:" + approvalId,
             Priority = IslandPriority.Approval,
             Content = new ApprovalView(card),
-            // Sticky: stays until resolved/expired — a song change never displaces it.
+            // Sticky: stays until resolved/expired â€” a song change never displaces it.
         });
         Logger.Info($"Approval card '{approvalId}' shown ({_approvalQueueIndex + 1} of {_approvalQueue.Count}).");
     }

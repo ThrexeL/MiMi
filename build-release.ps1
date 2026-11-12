@@ -1,11 +1,11 @@
-# MiMi release build script
+﻿# MiMi release build script
 # Produces a portable (framework-dependent, single-file) Release build in dist/
 #
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 [-SelfContained]
 #
 # Framework-dependent build (~90 MB runtime not included): requires the .NET 10
-# Desktop Runtime on the target machine — https://dotnet.microsoft.com/download
+# Desktop Runtime on the target machine â€” https://dotnet.microsoft.com/download
 # -SelfContained embeds the runtime (~180 MB) and runs with nothing installed.
 
 param([switch]$SelfContained)
@@ -28,7 +28,11 @@ Pop-Location
 if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED" -ForegroundColor Red; exit 1 }
 
 # Companion CLI next to the app (hook installers + adapters resolve this path)
-Copy-Item "$root\src\MiMi.AgentCli\bin\Release\net10.0-windows\MiMi.AgentCli.exe" "$root\dist\" -Force
+# The CLI is published as a single file: ImpressiveBot runs %LOCALAPPDATA%\MiMi\MiMi.AgentCli.exe
+# on its own, so an exe that needs a sibling .dll would never start.
+dotnet publish "$root\src\MiMi.AgentCli\MiMi.AgentCli.csproj" -c Release -r $rid --self-contained false `
+    -p:PublishSingleFile=true -o "$root\dist" --nologo
+if ($LASTEXITCODE -ne 0) { Write-Host "CLI BUILD FAILED" -ForegroundColor Red; exit 1 }
 
 # Docs
 Copy-Item "$root\README.md" "$root\dist\" -Force

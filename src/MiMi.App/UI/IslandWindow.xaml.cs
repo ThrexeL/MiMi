@@ -192,7 +192,10 @@ public partial class IslandWindow : Window
             _secondTick?.Invoke(); // productivity heartbeat (timer, reminders)
             if (_renderedContent is AgentActivityPanelView activity && IsVisible && !Coordinator.FullscreenSuppressed)
             {
-                activity.Update(_agentPanelProvider().Rows);
+                // Rows AND the live ImpressiveBot line: the panel is fixed-height now, so
+                // this only refreshes text and never resizes the pill.
+                var panel = _agentPanelProvider();
+                activity.Update(panel.Rows, panel.ImpressiveBot);
                 Host.Measure(new Size(activity.TargetWidth, double.PositiveInfinity));
                 var height = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
                 if (Math.Abs(height - Pill.ActualHeight) > 2)

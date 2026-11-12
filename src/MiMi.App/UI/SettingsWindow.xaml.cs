@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using MiMi.Agents;
@@ -17,8 +17,10 @@ public partial class SettingsWindow : Window
 
     private readonly Func<bool> _hotkeyStatus;
 
+    private readonly StatusIndicatorViewModel? _impressiveBot;
+
     public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null,
-        ProviderIntegrationInspector? providerInspector = null)
+        ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
@@ -26,6 +28,18 @@ public partial class SettingsWindow : Window
         _providerInspector = providerInspector ?? new ProviderIntegrationInspector();
         InitializeComponent();
         Load();
+
+        // Live ImpressiveBot tile: same source as the island, so the two always agree.
+        if (presenter is not null)
+        {
+            _impressiveBot = StatusIndicatorViewModel.ForPresenter(presenter);
+            ImpressiveBotStatusPanel.DataContext = _impressiveBot;
+            Closed += (_, _) => _impressiveBot.Stop();
+        }
+        else
+        {
+            ImpressiveBotStatusPanel.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void Load()
@@ -62,7 +76,7 @@ public partial class SettingsWindow : Window
         FullscreenToggle.IsChecked = s.FullscreenSuppress;
         HotkeyStatusText.Text = _hotkeyStatus()
             ? "Global toggle shortcut: Ctrl + Alt + M  (registered)"
-            : "Global toggle shortcut: Ctrl + Alt + M  (unavailable — another program owns it)";
+            : "Global toggle shortcut: Ctrl + Alt + M  (unavailable â€” another program owns it)";
         RefreshLabels();
         _loading = false;
         _ = RefreshProvidersAsync();
@@ -70,11 +84,11 @@ public partial class SettingsWindow : Window
 
     private void RefreshLabels()
     {
-        ScaleLabel.Text = ScaleSlider.Value.ToString("0.00×");
-        SpeedLabel.Text = SpeedSlider.Value.ToString("0.0×");
+        ScaleLabel.Text = ScaleSlider.Value.ToString("0.00Ã—");
+        SpeedLabel.Text = SpeedSlider.Value.ToString("0.0Ã—");
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
         GlowLabel.Text = $"{GlowSlider.Value:0}%";
-        FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0×}";
+        FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0Ã—}";
         NotificationDurationLabel.Text = $"{NotificationDurationSlider.Value / 1000.0:0.0} s";
     }
 
@@ -161,7 +175,7 @@ public partial class SettingsWindow : Window
 
     private async Task RefreshProvidersAsync()
     {
-        ProviderCheckedText.Text = "checking…";
+        ProviderCheckedText.Text = "checkingâ€¦";
         try
         {
             var statuses = await Task.Run(() => _providerInspector.InspectAll(includeVersions: true));
@@ -184,10 +198,10 @@ public partial class SettingsWindow : Window
     private static void ApplyProvider(string displayName, ProviderIntegrationStatus status,
         TextBlock statusText, TextBlock detailText)
     {
-        statusText.Text = $"{displayName} — {status.Summary}";
-        var version = string.IsNullOrEmpty(status.Version) ? "" : $" · {status.Version}";
+        statusText.Text = $"{displayName} â€” {status.Summary}";
+        var version = string.IsNullOrEmpty(status.Version) ? "" : $" Â· {status.Version}";
         var hooks = status.ExpectedHooks > 0
-            ? $" · hooks {status.InstalledHooks}/{status.ExpectedHooks}"
+            ? $" Â· hooks {status.InstalledHooks}/{status.ExpectedHooks}"
             : "";
         detailText.Text = status.Detail + version + hooks;
         detailText.ToolTip = $"{status.ConfigPath}\n{status.ExecutablePath}\n{status.Instructions}";

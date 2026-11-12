@@ -104,8 +104,8 @@ public class AgentSessionManagerTests : IDisposable
     {
         _mgr.Apply(Ev("claude-code", "stale", AgentEventTypes.ToolStarted));
 
-        // Simulate 3 minutes of silence.
-        _mgr.SweepStale(DateTimeOffset.UtcNow.AddMinutes(3));
+        // Simulate silence past the staleness window (a long build can go quiet for minutes).
+        _mgr.SweepStale(DateTimeOffset.UtcNow + AgentSessionManager.StaleAfter + TimeSpan.FromSeconds(10));
         var s = _mgr.Get("claude-code", "stale")!;
         Assert.True(s.Stale);
         Assert.Equal(SessionActivity.Unknown, s.State);

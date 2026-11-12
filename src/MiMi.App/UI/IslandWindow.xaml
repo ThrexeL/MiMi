@@ -13,7 +13,9 @@
         ShowActivated="False"
         Focusable="False"
         Topmost="True"
-        Cursor="Arrow">
+        Cursor="Arrow"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
 
     <Window.Resources>
         <!-- ============================= palette ============================= -->
@@ -26,6 +28,10 @@
         <SolidColorBrush x:Key="AccentInk" Color="#FF1A1A1C"/>
         <SolidColorBrush x:Key="ArtPlaceholder" Color="#FF2A2A2E"/>
         <SolidColorBrush x:Key="EqBar" Color="#CCFFFFFF"/>
+        <!-- Caret brush: the island never shows a text caret. Without this, WPF paints the
+             system caret (an "A" with a "^" above it) on the first focusable text surface,
+             which reads as a stray glyph sitting on top of the face. -->
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="Transparent"/>
 
         <!-- Typography ladder (DynamicResource so the Small/Default/Large setting
              updates live). Sizes are modest step-ups from the previous scale. -->
@@ -68,13 +74,26 @@
             </Setter>
         </Style>
 
-        <Style x:Key="IslandFont" TargetType="TextBlock">
+        <!-- Every label in the island derives from IslandText, so rounding and hinting
+             settings are applied once and cannot drift between templates. -->
+        <!-- Rendering hygiene for every label in the island.
+             UseLayoutRounding + ClearType keep glyphs on whole pixels (no half-pixel
+             smearing), and fixed hinting keeps a label's glyphs identical between frames,
+             so text no longer looks jumbled while a panel is resizing. -->
+        <Style x:Key="IslandText" TargetType="TextBlock">
+            <Setter Property="UseLayoutRounding" Value="True"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+            <Setter Property="TextOptions.TextHintingMode" Value="Fixed"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <Style x:Key="IslandFont" TargetType="TextBlock" BasedOn="{StaticResource IslandText}">
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <Style x:Key="MonoFont" TargetType="TextBlock">
+        <Style x:Key="MonoFont" TargetType="TextBlock" BasedOn="{StaticResource IslandText}">
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
             <Setter Property="FontSize" Value="{DynamicResource FontMono}"/>
@@ -226,8 +245,13 @@
         <!-- ============================ templates ============================ -->
         <DataTemplate DataType="{x:Type ui:RestingView}">
             <!-- Face-only idle per the approved reference: the mascot is the entire
-                 content — no clock, no status text, nothing else. -->
-            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True">
+                 content â€” no clock, no status text, nothing else. -->
+            <!-- The whole pill is the click target (the face alone is a small hit area),
+                 so the host fills the content box and paints a transparent background.
+                 The face keeps its aspect ratio (the mascot's own Viewbox) and is never
+                 squashed or clipped by the pill's rounded clip. -->
+            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True"
+                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
@@ -462,12 +486,43 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentActivityPanelView}">
-            <StackPanel Margin="20,14,20,12">
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
+            <!-- Fixed-height panel: the header and the ImpressiveBot line stay put and only
+                 the session list scrolls, so the panel never resizes while it is open. -->
+            <Grid Margin="20,14,20,12">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
                            Text="Agent activity"/>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                <TextBlock Grid.Row="1" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Summary}" Margin="0,3,0,0"/>
-                <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+
+                <!-- Live ImpressiveBot status: shown whenever ImpressiveBot reports, even with
+                     no bot mid-turn. Approvals are still answered in ImpressiveBot. -->
+                <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="8" Padding="10,7" Margin="0,9,0,0"
+                        Visibility="{Binding HasImpressiveBot, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Ellipse.Fill>
+                                    <SolidColorBrush Color="{Binding ImpressiveBotColor}"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
+                                       FontWeight="SemiBold" Text="{Binding ImpressiveBotLine}"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextTertiary}" Margin="15,2,0,0"
+                                   Text="{Binding ImpressiveBotDetail}" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ImpressiveBotDetail}"
+                                   Visibility="{Binding ImpressiveBotDetail, Converter={StaticResource StringToVis}}"/>
+                    </StackPanel>
+                </Border>
+                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
                 <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0">
                     <ItemsControl.ItemTemplate>
@@ -530,7 +585,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 </ScrollViewer>
-            </StackPanel>
+            </Grid>
         </DataTemplate>
 
 
@@ -654,7 +709,7 @@
                 </ItemsControl>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="All done — add tasks from the tray when the list is empty"
+                           Text="All done â€” add tasks from the tray when the list is empty"
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
@@ -708,7 +763,7 @@
                 </ItemsControl>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="Drop files on the island to shelve them — drag rows back out anytime"/>
+                           Text="Drop files on the island to shelve them â€” drag rows back out anytime"/>
             </StackPanel>
         </DataTemplate>
 
@@ -859,10 +914,10 @@
             <Grid>
                 <Grid x:Name="GlowRoot" IsHitTestVisible="False" Panel.ZIndex="0">
                     <!-- Signature warmth per the approved reference: a shallow gold band
-                         hugging the INSIDE BOTTOM EDGE of the island — brightest at the
+                         hugging the INSIDE BOTTOM EDGE of the island â€” brightest at the
                          lower center boundary, gone before it reaches the middle. The
                          band height is a fixed DIP value set per state by the code-behind
-                         (GlowLayout.BandHeight) — never proportional to the panel — so
+                         (GlowLayout.BandHeight) â€” never proportional to the panel â€” so
                          expanded cards can never grow a giant center oval. Opacity is a
                          separate, state-driven value. -->
                     <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,0">

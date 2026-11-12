@@ -2,10 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MiMi Settings"
-        Width="440" SizeToContent="Height"
+        Width="440" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         Background="#FF141416"
         ResizeMode="NoResize"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         ShowInTaskbar="False">
 
     <Window.Resources>
@@ -52,9 +54,19 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Margin="22,18,22,18">
+    <!-- The body scrolls and the footer stays pinned: the window can never grow past
+         the screen again (it used to size to its content at ~1093 px on a 1080 px
+         display, which pushed the title bar off-screen and clipped the bottom row). -->
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <ScrollViewer x:Name="BodyScroll" VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+    <StackPanel Margin="22,18,18,10">
         <TextBlock Style="{StaticResource Label}" FontSize="17" FontWeight="SemiBold" Text="MiMi"/>
-        <TextBlock Style="{StaticResource Sub}" Margin="0,2,0,14" Text="Dynamic Island for Windows 11 — local preferences, saved to %LOCALAPPDATA%\MiMi"/>
+        <TextBlock Style="{StaticResource Sub}" Margin="0,2,0,14" TextWrapping="Wrap" Text="Dynamic Island for Windows 11 â€” local preferences, saved to %LOCALAPPDATA%\MiMi"/>
 
         <Grid>
             <Grid.ColumnDefinitions>
@@ -197,28 +209,47 @@
 
         <Separator Background="#22FFFFFF" Margin="0,10,0,10"/>
 
-        <Grid>
+        <Grid Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Style="{StaticResource Sub}" Text="Windows app notifications" Margin="0,0,0,4"/>
-        <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,10" TextWrapping="Wrap"
-                   Foreground="#90FFFFFF"
-                   Text="Reading other apps' notifications requires MSIX packaging with the userNotificationListener capability plus explicit user consent. The portable build cannot access them, so this integration is intentionally unavailable rather than simulated."/>
-        <TextBlock Style="{StaticResource Sub}" Text="Agent integrations" VerticalAlignment="Center"/>
+            <TextBlock Style="{StaticResource Sub}" Text="Agent integrations" VerticalAlignment="Center"/>
             <TextBlock x:Name="ProviderCheckedText" Grid.Column="1" Style="{StaticResource Sub}"
                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <Button Grid.Column="2" Style="{StaticResource Btn}" Content="Refresh"
                     Click="RefreshProviders_Click" Padding="9,4"/>
         </Grid>
+        <Separator Background="#22FFFFFF" Margin="0,10,0,10"/>
+
+        <TextBlock Style="{StaticResource Sub}" Text="Windows app notifications" Margin="0,0,0,4"/>
+        <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,10" TextWrapping="Wrap"
+                   Foreground="#90FFFFFF"
+                   Text="Reading other apps' notifications requires MSIX packaging with the userNotificationListener capability plus explicit user consent. The portable build cannot access them, so this integration is intentionally unavailable rather than simulated."/>
+        <!-- Live ImpressiveBot status. Display only: approvals are answered in ImpressiveBot. -->
+        <StackPanel x:Name="ImpressiveBotStatusPanel" Margin="0,10,0,2">
+            <StackPanel Orientation="Horizontal">
+                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Ellipse.Fill>
+                        <SolidColorBrush Color="{Binding Accent}"/>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <TextBlock Style="{StaticResource Label}" FontSize="13.5" Text="{Binding Title}"/>
+                <TextBlock Style="{StaticResource Sub}" Text="{Binding Status}" Margin="8,0,0,0"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="16,2,0,0"
+                       Text="{Binding Detail}"/>
+            <TextBlock Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="16,1,0,0"
+                       Foreground="#70FFFFFF" Text="{Binding ApprovalNote}"/>
+        </StackPanel>
         <TextBlock x:Name="ClaudeProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
-                   Margin="0,7,0,0" Text="Claude Code — checking…"/>
+                   Margin="0,7,0,0" Text="Claude Code â€” checkingâ€¦"/>
         <TextBlock x:Name="ClaudeProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
                    Margin="0,1,0,0"/>
         <TextBlock x:Name="CodexProviderStatus" Style="{StaticResource Label}" FontSize="13.5"
-                   Margin="0,8,0,0" Text="Codex — checking…"/>
+                   Margin="0,8,0,0" Text="Codex â€” checkingâ€¦"/>
         <TextBlock x:Name="CodexProviderDetail" Style="{StaticResource Sub}" TextWrapping="Wrap"
                    Margin="0,1,0,0"/>
         <TextBlock x:Name="ProviderHintText" Style="{StaticResource Sub}" TextWrapping="Wrap"
@@ -236,11 +267,16 @@
                   Checked="Checkbox_Changed2" Unchecked="Checkbox_Changed2"/>
         <TextBlock Style="{StaticResource Sub}" x:Name="HotkeyStatusText" Margin="0,4,0,0" TextWrapping="Wrap"/>
         <TextBlock Style="{StaticResource Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
-                   Text="While hidden, media monitoring and the agent bridge keep running. Approval requests still arrive and expire on schedule — they are never approved automatically. Press Ctrl + Alt + M to bring MiMi back."/>
+                   Text="While hidden, media monitoring and the agent bridge keep running. Approval requests still arrive and expire on schedule â€” they are never approved automatically. Press Ctrl + Alt + M to bring MiMi back."/>
 
-        <StackPanel Orientation="Horizontal" Margin="0,16,0,0" HorizontalAlignment="Right">
+    </StackPanel>
+      </ScrollViewer>
+      <Border Grid.Row="1" Background="#FF18181A" BorderBrush="#22FFFFFF" BorderThickness="0,1,0,0"
+              Padding="22,10,22,12">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Style="{StaticResource Btn}" x:Name="OpenLogsButton" Content="Open log folder" Click="OpenLogs_Click"/>
             <Button Style="{StaticResource Btn}" x:Name="CloseButton" Content="Close" Margin="8,0,0,0" Click="Close_Click"/>
         </StackPanel>
-    </StackPanel>
+      </Border>
+    </Grid>
 </Window>

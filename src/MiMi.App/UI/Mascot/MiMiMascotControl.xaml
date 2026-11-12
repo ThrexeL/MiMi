@@ -20,7 +20,9 @@
          The face per the approved reference: two prominent bright-white ROUND eyes with
          balanced spacing — nothing else. The warm-gold light is a separate island-level
          aurora beneath the eyes (IslandWindow's GlowRoot), not part of this control. -->
-    <Viewbox Stretch="Uniform"
+    <!-- The dozing z's sit near the design box's top edge; the Viewbox keeps them
+         inside it so the pill's rounded clip never cuts them off. -->
+    <Viewbox Stretch="Uniform" ClipToBounds="False"
              Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
              Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
         <Grid Width="48" Height="30" RenderTransformOrigin="0.5,0.5">

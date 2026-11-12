@@ -427,19 +427,72 @@ public sealed class QuickAccessView : IslandContent
 public sealed class AgentActivityPanelView : IslandContent
 {
     private IReadOnlyList<AgentSessionRow> _rows = Array.Empty<AgentSessionRow>();
+    private string _impressiveBotLine = "";
+    private string _impressiveBotDetail = "";
+    private string _impressiveBotColor = "#9A9AA0";
     public IReadOnlyList<AgentSessionRow> Rows => _rows;
+
+    /// <summary>Live ImpressiveBot line, for example "ImpressiveBot - working - Patch"; empty hides it.</summary>
+    public string ImpressiveBotLine => _impressiveBotLine;
+    public string ImpressiveBotDetail => _impressiveBotDetail;
+    public string ImpressiveBotColor => _impressiveBotColor;
+    public bool HasImpressiveBot => _impressiveBotLine.Length > 0;
     public string Summary => Rows.Count == 0 ? "No recent activity" : $"{Rows.Count} recent sessions · approvals first";
-    public AgentActivityPanelView(IReadOnlyList<AgentSessionRow> rows) { _rows = rows; }
-    public void Update(IReadOnlyList<AgentSessionRow> rows)
+
+    /// <summary>The status snapshot this panel was built with, so the 1 Hz tick can
+    /// refresh the line in place instead of rebuilding the whole panel.</summary>
+    public ImpressiveBotStatus? ImpressiveBot { get; private set; }
+
+    public AgentActivityPanelView(IReadOnlyList<AgentSessionRow> rows,
+        ImpressiveBotStatus? impressiveBot = null)
     {
         _rows = rows;
+        SetImpressiveBot(impressiveBot);
+    }
+
+    public void Update(IReadOnlyList<AgentSessionRow> rows) => Update(rows, null);
+
+    public void Update(IReadOnlyList<AgentSessionRow> rows, ImpressiveBotStatus? impressiveBot)
+    {
+        _rows = rows;
+        SetImpressiveBot(impressiveBot);
         Raise(nameof(Rows));
         Raise(nameof(Summary));
     }
+
+    /// <summary>Refreshes only the ImpressiveBot line: the 1 Hz tick uses this cheap path.</summary>
+    public void SetImpressiveBot(ImpressiveBotStatus? status)
+    {
+        var line = status?.Line ?? "";
+        var detail = status?.Detail ?? "";
+        var color = status is null ? "#9A9AA0"
+            : status.FailedCount > 0 ? "#FF6B6B"
+            : status.WaitingCount > 0 ? "#FFB454"
+            : status.IsHealthy ? "#5DD97C"
+            : "#9A9AA0";
+        ImpressiveBot = status;
+        ImpressiveBot = status;
+        if (line == _impressiveBotLine && detail == _impressiveBotDetail && color == _impressiveBotColor) return;
+        _impressiveBotLine = line;
+        _impressiveBotDetail = detail;
+        _impressiveBotColor = color;
+        Raise(nameof(ImpressiveBotLine));
+        Raise(nameof(ImpressiveBotDetail));
+        Raise(nameof(ImpressiveBotColor));
+        Raise(nameof(HasImpressiveBot));
+    }
     public override double TargetWidth => 450;
-    public override double TargetHeight => 200;
+    public override double TargetHeight => PanelHeight;
     public override double TargetCornerRadius => 24;
-    public override bool AutoHeight => true;
+
+    /// <summary>
+    /// The panel keeps ONE height while it is open. It used to hug its content, so a
+    /// session that finished or aged out shrank the pill under the cursor, the pointer
+    /// left the pill, and the panel collapsed mid-read. A fixed height (the list scrolls
+    /// inside it) keeps the panel stable for as long as it is shown.
+    /// </summary>
+    public const double PanelHeight = 300;
+    public override bool AutoHeight => false;
 }
 
 /// <summary>One session row in the activity panel. Snapshot data at build time.</summary>
@@ -458,7 +511,7 @@ public sealed class AgentSessionRow
     public required IReadOnlyList<AgentTimelineItem> Timeline { get; init; }
 }
 
-/// <summary>One short timeline line: "14:32 · Started".</summary>
+/// <summary>One short timeline line: "14:32 Â· Started".</summary>
 public sealed class AgentTimelineItem
 {
     public required string TimeLabel { get; init; }
@@ -470,7 +523,7 @@ public sealed class AgentTimelineItem
 public sealed class RunningToGlyphConverter : System.Windows.Data.IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
-        => value is true ? "" : "";
+        => value is true ? "î©" : "î¨";
 
     public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         => throw new NotSupportedException();
@@ -497,8 +550,8 @@ public sealed class PendingCountToVisibilityConverter : System.Windows.Data.IVal
 }
 
 /// <summary>
-/// Live compact indicator for agent activity: one line ("Codex · Working" or
-/// "3 agents active"). The presenter updates it in place — status changes never
+/// Live compact indicator for agent activity: one line ("Codex Â· Working" or
+/// "3 agents active"). The presenter updates it in place â€” status changes never
 /// re-trigger island animations.
 /// </summary>
 public sealed class AgentIndicatorViewModel : ObservableObject
@@ -659,11 +712,11 @@ public sealed class MediaViewModel : ObservableObject
     private string _lyricNext = "";
     private bool _hasLyricCurrent;
 
-    /// <summary>Idle/loading/instrumental/unavailable → the lyrics block hides.</summary>
+    /// <summary>Idle/loading/instrumental/unavailable â†’ the lyrics block hides.</summary>
     public bool ShowLyricsBlock { get => _hasLyricCurrent || _lyricsVisible; private set => Set(ref _lyricsVisible, value); }
     public bool LyricsBlockVisible => ShowLyricsBlock;
     public bool LyricsBlockHidden => !ShowLyricsBlock;
-    /// <summary>Current line color: gold when a real line is active, dim for ♪ gaps.</summary>
+    /// <summary>Current line color: gold when a real line is active, dim for â™ª gaps.</summary>
     public System.Windows.Media.Color LyricCurrentColor =>
         LyricCurrentIsLine
             ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFF5B84B")
@@ -716,7 +769,7 @@ public sealed class MediaViewModel : ObservableObject
     private void UpdateLyricVisibility() => ShowLyricsBlock = LyricsWanted;
 
     /// <summary>Recomputes the 3-line window (previous / current / next) from the
-    /// playback position. Called by the 1 Hz timeline tick — cheap by design.</summary>
+    /// playback position. Called by the 1 Hz timeline tick â€” cheap by design.</summary>
     public void UpdateLyricWindow()
     {
         if (_lyricLines.Count == 0) return;
@@ -730,7 +783,7 @@ public sealed class MediaViewModel : ObservableObject
         LyricPrev = index > 0 ? _lyricLines[index - 1].Text : "";
         var current = index >= 0 ? _lyricLines[index].Text : "";
         // Instrumental gaps render as a gentle note instead of an empty block.
-        LyricCurrent = current.Length == 0 ? "♪" : current;
+        LyricCurrent = current.Length == 0 ? "â™ª" : current;
         LyricCurrentIsLine = current.Length > 0;
         LyricNext = index + 1 < _lyricLines.Count ? _lyricLines[index + 1].Text : "";
         UpdateLyricVisibility();

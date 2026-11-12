@@ -30,7 +30,12 @@ public class AgentPanelLayoutTests
                     Section = i == 0 ? "NEEDS APPROVAL" : i == 1 ? "ACTIVE" : "",
                     Timeline = new[] { new AgentTimelineItem { TimeLabel = "13:32", Text = "Running read_file", Kind = "tool" } }
                 }).ToList();
-                Render(window, new AgentActivityPanelView(rows), "activity", 470);
+                // Live ImpressiveBot line, exactly as the presenter builds it from a real status.
+                using var mgr = new AgentSessionManager();
+                mgr.Apply(AgentEventFactory.Create("impressivebot:Turnip", "t1", AgentEventTypes.ToolStarted, message: "Researching options"));
+                mgr.Apply(AgentEventFactory.Create("impressivebot:Cove", "c1", AgentEventTypes.WaitingForInput, message: "Which option?"));
+                var status = ImpressiveBotStatusReader.Build(mgr.All, "C:\\x\\MiMi.AgentCli.exe");
+                Render(window, new AgentActivityPanelView(rows, status), "activity", 470);
                 var indicator = new AgentIndicatorViewModel();
                 indicator.Update("Thursday · Thinking", MiMi.App.UI.Mascot.MascotExpression.Focused, 0);
                 Render(window, new AgentCompactView(indicator), "compact", 60);
@@ -60,7 +65,8 @@ public class AgentPanelLayoutTests
     {
         var presenter = new ContentPresenter { Content = content, ContentTemplate =
             (DataTemplate)window.Resources[new DataTemplateKey(content.GetType())] };
-        var root = new Border { Width = content.TargetWidth, MinHeight = content.TargetHeight, Background = new SolidColorBrush(Color.FromRgb(20, 20, 22)),
+        // Exact height, like the real pill: a fixed-height panel must be measured at that height.
+        var root = new Border { Width = content.TargetWidth, Height = content.TargetHeight, Background = new SolidColorBrush(Color.FromRgb(20, 20, 22)),
             CornerRadius = new CornerRadius(24), Child = presenter, Resources = window.Resources };
         root.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
         Assert.InRange(root.DesiredSize.Height, Math.Min(38, content.TargetHeight), maxHeight);

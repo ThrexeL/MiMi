@@ -1,17 +1,39 @@
-using MiMi.Core;
+﻿using MiMi.Core;
 
 namespace MiMi.Agents;
 
 /// <summary>Provider names shown in UI and notifications (one mapping for the whole app).</summary>
 public static class ProviderNames
 {
+    /// <summary>Prefix for ImpressiveBot sessions; the bot's own name follows it, so one
+    /// island row can say which teammate is working (for example "impressivebot:Patch").</summary>
+    public const string ImpressiveBotProvider = "impressivebot";
+
     public static string Display(string provider) => provider switch
     {
         "claude-code" => "Claude Code",
         "codex" => "Codex CLI",
         "thursday" => "Thursday",
+        ImpressiveBotProvider => "ImpressiveBot",
+        var p when p.StartsWith(ImpressiveBotProvider + ":", StringComparison.Ordinal)
+            => ImpressiveBotLabel(p[(ImpressiveBotProvider.Length + 1)..]),
         var p => string.IsNullOrEmpty(p) ? "Agent" : char.ToUpperInvariant(p[0]) + p[1..],
     };
+
+    /// <summary>True for every ImpressiveBot session, named or not.</summary>
+    public static bool IsImpressiveBot(string provider) =>
+        provider == ImpressiveBotProvider
+        || provider.StartsWith(ImpressiveBotProvider + ":", StringComparison.Ordinal);
+
+    /// <summary>The bot's name from a provider key, or "" when the session is unnamed.</summary>
+    public static string BotName(string provider) =>
+        provider.StartsWith(ImpressiveBotProvider + ":", StringComparison.Ordinal)
+            ? provider[(ImpressiveBotProvider.Length + 1)..]
+            : "";
+
+    /// <summary>A named session shows the bot's own name; an unnamed one stays "ImpressiveBot".</summary>
+    private static string ImpressiveBotLabel(string bot) =>
+        string.IsNullOrWhiteSpace(bot) ? "ImpressiveBot" : bot.Trim();
 }
 
 public enum AgentNoticeKind
@@ -25,7 +47,7 @@ public enum AgentNoticeKind
 
 /// <summary>
 /// A display-ready notification decision. It carries no command text, prompt content,
-/// credentials, or transcript data — only provider/session metadata and a short summary.
+/// credentials, or transcript data â€” only provider/session metadata and a short summary.
 /// Approval notices reference a request id; they can never carry (or perform) a decision.
 /// </summary>
 public sealed record AgentNotice(
@@ -85,7 +107,7 @@ public sealed class AgentNotificationCoordinator
 
     public void Configure(AppSettings settings) => _settings = settings;
 
-    /// <summary>Set only by the explicit Ctrl+Alt+M / tray visibility preference — never by
+    /// <summary>Set only by the explicit Ctrl+Alt+M / tray visibility preference â€” never by
     /// a notification or by fullscreen suppression.</summary>
     public void SetHidden(bool hidden)
     {
@@ -208,7 +230,7 @@ public sealed class AgentNotificationCoordinator
         if (!_settings.AgentNotificationsEnabled || workingCount < 2) return null;
 
         var text = $"{workingCount} agents working"
-                   + (pendingApprovals > 0 ? $" · {pendingApprovals} awaiting approval" : "");
+                   + (pendingApprovals > 0 ? $" Â· {pendingApprovals} awaiting approval" : "");
         if (string.Equals(text, _lastAggregateText, StringComparison.Ordinal)) return null;
 
         var now = _clock();

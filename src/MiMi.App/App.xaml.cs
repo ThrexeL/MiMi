@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using MiMi.Agents;
@@ -312,7 +312,7 @@ public partial class App : Application
             return;
         }
         _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable),
-            () => _island.HotkeyRegistered, _providerInspector);
+            () => _island.HotkeyRegistered, _providerInspector, _presenter);
         _settingsWindow.Show();
     }
 
