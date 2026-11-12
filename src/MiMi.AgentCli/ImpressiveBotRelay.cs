@@ -1,0 +1,154 @@
+﻿using System.Text.Json;
+using MiMi.Agents;
+
+namespace MiMi.AgentCli;
+
+/// <summary>
+/// Status mirror for ImpressiveBot. ImpressiveBot runs its own bots and owns every
+/// approval card; this command only lets MiMi *show* what is happening there.
+///
+/// Contract:
+///  - input is one JSON object on stdin, describing one bot's current state;
+///  - the provider key carries the bot's name ("impressivebot:Patch"), so the island
+///    row says which teammate is working;
+///  - MiMi is never asked to decide anything: no approval is created and no decision
+///    is read back. Approvals stay in ImpressiveBot, where the card is authoritative.
+///
+/// Failures are swallowed and exit 0: a MiMi outage must never disturb ImpressiveBot.
+/// </summary>
+public static class ImpressiveBotRelay
+{
+    /// <summary>Longest bot name accepted; the provider field is capped at 40 chars by
+    /// AgentEvent.Normalize, and the prefix costs 14.</summary>
+    public const int MaxBotName = 24;
+
+    private static readonly HashSet<string> AllowedStates = new(StringComparer.Ordinal)
+    {
+        "working", "waiting", "finished", "failed", "stopped",
+    };
+
+    /// <summary>One status update from ImpressiveBot, already validated.</summary>
+    public sealed record StatusUpdate(
+        string Provider,
+        string SessionId,
+        string Type,
+        string Bot,
+        string Message,
+        string Project,
+        IReadOnlyDictionary<string, string> Metadata);
+
+    /// <summary>
+    /// Parses one status line. Returns null for anything malformed, unknown, or trying
+    /// to smuggle an approval through this display-only channel.
+    /// </summary>
+    public static StatusUpdate? Parse(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json.Length > 32_000) return null;
+
+        JsonDocument doc;
+        try { doc = JsonDocument.Parse(json); }
+        catch (JsonException) { return null; }
+
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            // ImpressiveBot always sends a bot name; a payload without one is malformed,
+            // not an unnamed bot, so it is rejected rather than guessed at.
+            var bot = Flatten(Str(root, "bot"), MaxBotName);
+            if (bot.Length == 0) return null;
+
+            var state = Str(root, "state").ToLowerInvariant();
+            if (!AllowedStates.Contains(state)) return null;
+
+            var session = Flatten(Str(root, "session"), 80);
+            if (session.Length == 0) session = bot;
+
+            var message = Flatten(Str(root, "message"), 400);
+            var project = Flatten(Str(root, "project"), 80);
+
+            var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["source"] = "impressivebot",
+                ["bot"] = bot,
+            };
+            if (Str(root, "thread").Length > 0) metadata["thread"] = Flatten(Str(root, "thread"), 80);
+            if (Str(root, "tool").Length > 0) metadata["tool"] = Flatten(Str(root, "tool"), 60);
+
+            return new StatusUpdate(
+                Provider: ProviderNames.ImpressiveBotProvider + ":" + bot,
+                SessionId: session,
+                Type: state switch
+                {
+                    "working" => AgentEventTypes.ToolStarted,
+                    "waiting" => AgentEventTypes.WaitingForInput,
+                    "finished" => AgentEventTypes.TurnFinished,
+                    "failed" => AgentEventTypes.Failed,
+                    _ => AgentEventTypes.Interrupted,
+                },
+                Bot: bot,
+                Message: message,
+                Project: project,
+                Metadata: metadata);
+        }
+    }
+
+    /// <summary>Projects a status update onto the normalized event MiMi already understands.</summary>
+    public static AgentEvent ToEvent(StatusUpdate update) =>
+        AgentEventFactory.Create(
+            update.Provider, update.SessionId, update.Type,
+            title: update.Type switch
+            {
+                AgentEventTypes.ToolStarted => update.Bot + " is working",
+                AgentEventTypes.WaitingForInput => update.Bot + " is waiting",
+                AgentEventTypes.TurnFinished => update.Bot + " finished",
+                AgentEventTypes.Failed => update.Bot + " hit an error",
+                _ => update.Bot + " stopped",
+            },
+            message: update.Message,
+            project: update.Project,
+            metadata: update.Metadata);
+
+    public static async Task<int> RunAsync(TextReader input, Func<Task<BridgeClient>>? connect = null)
+    {
+        var update = Parse(await input.ReadToEndAsync());
+        if (update is null) return 0; // nothing to say; never fail the caller
+
+        try
+        {
+            await using var bridge = await (connect?.Invoke()
+                ?? BridgeClient.ConnectAsync(TimeSpan.FromMilliseconds(500), "impressivebot-status"));
+            await bridge.SendEventAsync(ToEvent(update), TimeSpan.FromSeconds(1))
+                .WaitAsync(TimeSpan.FromSeconds(2));
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            // MiMi closed, disabled, or slow: status is cosmetic, so this is not an error.
+            Console.Error.WriteLine($"MiMi: status not shown ({ex.GetType().Name})");
+            return 0;
+        }
+    }
+
+    private static string Str(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
+
+    /// <summary>Collapses whitespace and strips control characters so a name can never
+    /// break a single-line label or the provider key.</summary>
+    private static string Flatten(string text, int max)
+    {
+        var sb = new System.Text.StringBuilder(text.Length);
+        var space = false;
+        foreach (var ch in text)
+        {
+            if (char.IsControl(ch) || char.IsWhiteSpace(ch)) { space = sb.Length > 0; continue; }
+            if (space) { sb.Append(' '); space = false; }
+            if (sb.Length >= max) break;
+            sb.Append(ch);
+        }
+        return sb.ToString().Trim();
+    }
+}
