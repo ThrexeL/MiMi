@@ -23,7 +23,7 @@
         <SolidColorBrush x:Key="Stroke" Color="#22FFFFFF"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#FFF2F2F4"/>
         <SolidColorBrush x:Key="TextSecondary" Color="#C0FFFFFF"/>
-        <SolidColorBrush x:Key="TextTertiary" Color="#86FFFFFF"/>
+        <SolidColorBrush x:Key="TextTertiary" Color="#A6FFFFFF"/>
         <SolidColorBrush x:Key="AccentAmber" Color="#FFB454"/>
         <SolidColorBrush x:Key="AccentInk" Color="#FF1A1A1C"/>
         <SolidColorBrush x:Key="ArtPlaceholder" Color="#FF2A2A2E"/>
@@ -99,6 +99,29 @@
             <Setter Property="FontSize" Value="{DynamicResource FontMono}"/>
         </Style>
 
+        <Style x:Key="PanelHeading" TargetType="TextBlock" BasedOn="{StaticResource IslandFont}">
+            <Setter Property="FontSize" Value="{DynamicResource FontPrimary}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style x:Key="PanelHint" TargetType="TextBlock" BasedOn="{StaticResource IslandFont}">
+            <Setter Property="FontSize" Value="{DynamicResource FontMicro}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <!-- Keep the overlay non-activating; describe icon-only actions to assistive tools. -->
+        <Style x:Key="IslandFocusCue" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Control">
+                        <Border BorderBrush="{StaticResource AccentAmber}" BorderThickness="1"
+                                CornerRadius="8" Margin="2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ============================ buttons ============================ -->
         <Style x:Key="GhostButton" TargetType="Button">
             <Setter Property="Background" Value="#14FFFFFF"/>
@@ -106,8 +129,12 @@
             <Setter Property="BorderBrush" Value="{StaticResource Stroke}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontCaption}"/>
+            <Setter Property="MinHeight" Value="30"/>
             <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource IslandFocusCue}"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="450"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Command" Value="{Binding}"/>
@@ -134,6 +161,11 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="QuickAccessTile" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Padding" Value="4,10"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
         </Style>
 
         <Style x:Key="ApproveButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
@@ -171,18 +203,33 @@
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource IslandFocusCue}"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="450"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Command" Value="{Binding}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="17">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="17"
+                                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bg" Property="Background" Value="#1CFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#30FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{StaticResource AccentAmber}"/>
+                                <Setter TargetName="Bg" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -206,7 +253,8 @@
         </Style>
 
         <Style x:Key="IslandSlider" TargetType="Slider">
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource IslandFocusCue}"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Minimum" Value="0"/>
@@ -224,7 +272,7 @@
                                 <Track.IncreaseRepeatButton>
                                     <RepeatButton Style="{StaticResource SliderRepeatButton}"
                                                   Command="Slider.IncreaseLarge"
-                                                  Background="Transparent"/>
+                                                  Background="#30FFFFFF"/>
                                 </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Width="10" Height="10" Focusable="False">
@@ -302,7 +350,8 @@
                     <Border Width="58" Height="58" CornerRadius="12" Background="{StaticResource ArtPlaceholder}">
                         <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="58" Height="58"/>
                     </Border>
-                    <Grid Margin="14,0,0,0" Width="300" VerticalAlignment="Center">
+                    <Grid Margin="14,0,0,0" Width="300" VerticalAlignment="Center"
+                                              ToolTip="{Binding Media.Title}">
                         <StackPanel Visibility="{Binding Media.LyricsBlockVisible, Converter={StaticResource BoolToVis}}">
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
                                        Foreground="{StaticResource TextTertiary}"
@@ -332,7 +381,8 @@
                     </Grid>
                 </StackPanel>
 
-                <Slider x:Name="ProgressSlider" Style="{StaticResource IslandSlider}" Margin="0,12,0,0"/>
+                <Slider x:Name="ProgressSlider" Style="{StaticResource IslandSlider}" Margin="0,10,0,0"
+                                        AutomationProperties.Name="Playback position" ToolTip="Seek in the current track"/>
                 <Grid Margin="0,3,0,0">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextSecondary}" Text="{Binding Media.Elapsed}"
@@ -349,15 +399,15 @@
                     <mascot:MiMiMascotControl Width="26" Height="17" Expression="Lively"
                                               VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <Button Style="{StaticResource TransportButton}" Command="{Binding Media.PreviousCommand}"
-                            Content="&#xE892;"/>
+                            Content="&#xE892;" ToolTip="Previous track"/>
                     <Button x:Name="PlayPauseButton" Style="{StaticResource TransportButton}" FontSize="17"
                             Width="40" Height="40" Margin="10,0"
-                            Command="{Binding Media.PlayPauseCommand}">
+                            Command="{Binding Media.PlayPauseCommand}" ToolTip="Play or pause">
                         <TextBlock x:Name="PlayPauseGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                    Text="&#xE769;"/>
                     </Button>
                     <Button Style="{StaticResource TransportButton}" Command="{Binding Media.NextCommand}"
-                            Content="&#xE893;"/>
+                            Content="&#xE893;" ToolTip="Next track"/>
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
@@ -495,8 +545,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontPrimary}" FontWeight="SemiBold"
-                           Text="Agent activity"/>
+                <TextBlock Grid.Row="0" Style="{StaticResource PanelHeading}" Text="Agent activity"/>
                 <TextBlock Grid.Row="1" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Summary}" Margin="0,3,0,0"/>
 
@@ -528,7 +577,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="0,0,0,10">
-                                <TextBlock Text="{Binding Section}" FontSize="9" FontWeight="SemiBold"
+                                <TextBlock Style="{StaticResource IslandFont}" Text="{Binding Section}" FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextTertiary}" Margin="0,6,0,7"
                                            Visibility="{Binding Section, Converter={StaticResource StringToVis}}"/>
                                 <StackPanel Orientation="Horizontal">
@@ -618,12 +667,12 @@
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource TransportButton}" Width="30" Height="30"
-                                Command="{Binding Pomodoro.PlayPauseCommand}">
+                                Command="{Binding Pomodoro.PlayPauseCommand}" ToolTip="Start or pause focus timer">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Text="{Binding Pomodoro.Running, Converter={StaticResource RunningToGlyph}}"/>
                         </Button>
                         <Button Style="{StaticResource TransportButton}" Width="30" Height="30" Margin="8,0,0,0"
-                                Command="{Binding Pomodoro.StopCommand}">
+                                Command="{Binding Pomodoro.StopCommand}" ToolTip="Stop and reset focus timer">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12"
                                        Text="&#xE71A;"/>
                         </Button>
@@ -662,7 +711,7 @@
                                    Text="{Binding Water.TotalLabel}"/>
                     </StackPanel>
                     <Button Grid.Column="3" Style="{StaticResource ApproveButton}" Padding="14,7"
-                            Command="{Binding Water.QuickAddCommand}"
+                            Command="{Binding Water.QuickAddCommand}" ToolTip="Log a drink of water"
                             Content="{Binding Water.QuickAddLabel}"/>
                 </Grid>
                 <ProgressBar Height="4" Minimum="0" Maximum="1" Value="{Binding Water.Progress, Mode=OneWay}"
@@ -680,8 +729,7 @@
                                 ToolTip="Back to island">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
                         </Button>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                                   FontWeight="SemiBold" Text="Today"/>
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Today’s tasks"/>
                     </StackPanel>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
@@ -707,9 +755,8 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                           Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="All done — add tasks from the tray when the list is empty"
+                <TextBlock Style="{StaticResource PanelHint}" Margin="0,6,0,0"
+                           Text="You’re all caught up. Add a task from the tray menu."
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
@@ -724,8 +771,7 @@
                                 ToolTip="Back to island">
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
                         </Button>
-                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                                   FontWeight="SemiBold" Foreground="{StaticResource AccentAmber}" Text="SHELF"/>
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="File shelf"/>
                     </StackPanel>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Right"
@@ -761,9 +807,18 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                           Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
-                           Text="Drop files on the island to shelve them — drag rows back out anytime"/>
+                <TextBlock Margin="0,6,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource PanelHint}">
+                            <Setter Property="Text" Value="Drag a file back out to use it. Originals stay untouched."/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Rows.Count}" Value="0">
+                                    <Setter Property="Text" Value="Your shelf is empty. Drop files onto this panel to keep them handy."/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </DataTemplate>
 
@@ -794,17 +849,16 @@
         <DataTemplate DataType="{x:Type ui:QuickAccessView}">
             <StackPanel Margin="16,12,16,12">
                 <Grid Margin="0,0,0,8">
-                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
-                               FontWeight="SemiBold" Text="Quick access"/>
+                    <TextBlock Style="{StaticResource PanelHeading}" Text="Quick access"/>
                     <Button Style="{StaticResource TransportButton}" Width="22" Height="22"
                             HorizontalAlignment="Right" Command="{Binding QuickAccess.BackCommand}"
-                            ToolTip="Back">
+                            ToolTip="Back to island">
                         <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
                     </Button>
                 </Grid>
                 <UniformGrid Columns="4">
-                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenPomodoroCommand}">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenPomodoroCommand}" ToolTip="Open focus timer">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
                                        Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
@@ -814,8 +868,8 @@
                                        Margin="0,2,0,0" Text="Focus" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenWaterCommand}">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenWaterCommand}" ToolTip="Open water tracker">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
                                        Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
@@ -825,8 +879,8 @@
                                        Margin="0,2,0,0" Text="Water" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource GhostButton}" Padding="4,8" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenTodoCommand}">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenTodoCommand}" ToolTip="Open to-do list">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
                                        Foreground="{StaticResource AccentAmber}" Text="&#xE73A;"
@@ -836,8 +890,8 @@
                                        Margin="0,2,0,0" Text="To-do" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource GhostButton}" Padding="4,8"
-                            Command="{Binding QuickAccess.OpenShelfCommand}">
+                    <Button Style="{StaticResource QuickAccessTile}"
+                            Command="{Binding QuickAccess.OpenShelfCommand}" ToolTip="Open file shelf">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
                                        Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"

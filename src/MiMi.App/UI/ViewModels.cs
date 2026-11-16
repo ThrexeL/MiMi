@@ -758,6 +758,16 @@ public sealed class MediaViewModel : ObservableObject
 
     private bool _lyricsEnabledBySettings = true;
 
+    public void ApplyLyricsSettings(int offsetMs, bool enabled)
+    {
+        if (_lyricOffsetMs == offsetMs && _lyricsEnabledBySettings == enabled) return;
+        _lyricOffsetMs = offsetMs;
+        _lyricsEnabledBySettings = enabled;
+        _lyricIndex = -1;
+        UpdateLyricVisibility();
+        UpdateLyricWindow();
+    }
+
     public void UpdateLyrics(LyricsState state, LyricsResult? result, int offsetMs, bool enabled)
     {
         _lyricsState = state;

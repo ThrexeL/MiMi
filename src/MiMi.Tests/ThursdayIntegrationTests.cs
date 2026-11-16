@@ -51,12 +51,11 @@ public class ThursdayIntegrationTests
     [InlineData(AgentEventTypes.TurnFinished, SessionActivity.TurnFinished)]
     [InlineData(AgentEventTypes.Interrupted, SessionActivity.Interrupted)]
     [InlineData(AgentEventTypes.Failed, SessionActivity.Error)]
-    [InlineData(AgentEventTypes.WaitingForInput, SessionActivity.WaitingForInput)]
-    public void ConfirmedTerminalAndWaitingStates_DoNotBecomeUnknown(string type, SessionActivity state)
+    public void ConfirmedTerminalStates_DoNotBecomeUnknown(string type, SessionActivity state)
     {
         using var manager = new AgentSessionManager();
         manager.Apply(AgentEventFactory.Create("thursday", "s", type));
-        manager.SweepStale(DateTimeOffset.UtcNow.AddMinutes(3));
+        manager.SweepStale(DateTimeOffset.UtcNow + AgentSessionManager.StaleAfter + TimeSpan.FromSeconds(1));
         Assert.False(manager.Get("thursday", "s")!.Stale);
         Assert.Equal(state, manager.Get("thursday", "s")!.State);
     }
@@ -76,7 +75,9 @@ public class ThursdayIntegrationTests
     {
         using var manager = new AgentSessionManager();
         manager.Apply(AgentEventFactory.Create("thursday", "s", AgentEventTypes.ToolStarted));
-        manager.SweepStale(DateTimeOffset.UtcNow.AddMinutes(3));
+        manager.SweepStale(DateTimeOffset.UtcNow + AgentSessionManager.StaleAfter + TimeSpan.FromSeconds(1));
+        Assert.True(manager.Get("thursday", "s")!.Stale);
+        Assert.Equal(SessionActivity.Unknown, manager.Get("thursday", "s")!.State);
         var ev = AgentEventFactory.Create("thursday", "s", AgentEventTypes.Heartbeat,
             metadata: new Dictionary<string, string> { ["activity_type"] = AgentEventTypes.ToolStarted });
         manager.Apply(ev);

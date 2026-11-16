@@ -83,6 +83,8 @@ public partial class App : Application
             next: () => _ = _media?.SendCommandAsync(MediaCommand.Next),
             previous: () => _ = _media?.SendCommandAsync(MediaCommand.Previous),
             seek: pos => _ = _media?.SeekAsync(pos));
+        _config.Changed += _ => Dispatcher.BeginInvoke(() =>
+            mediaVm.ApplyLyricsSettings(_config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled));
 
         var water = new WaterTracker();
         var todos = new TodoStore();

@@ -107,7 +107,42 @@ public class ImpressiveBotStatusTests
 
         var status = Build(manager);
         Assert.Equal(0, status.ActiveCount);
-        Assert.Equal("idle", status.StateLabel);
+        Assert.Equal("status unknown", status.StateLabel);
+        Assert.Equal(ImpressiveBotLink.Stale, status.Link);
+        Assert.False(status.IsHealthy);
+    }
+
+    [Fact]
+    public void Build_AsOfTimeEnforcesFreshnessWithoutWaitingForSweeper()
+    {
+        using var manager = new AgentSessionManager();
+        var session = Session(manager, "impressivebot:Patch", "t1", AgentEventTypes.ToolStarted);
+        var status = ImpressiveBotStatusReader.Build(manager.All, Cli,
+            session.LastEventUtc + AgentSessionManager.StaleAfter + TimeSpan.FromSeconds(1));
+        Assert.Equal(0, status.ActiveCount);
+        Assert.Equal(ImpressiveBotLink.Stale, status.Link);
+        Assert.False(status.IsHealthy);
+        Assert.Contains("unknown", status.Detail);
+    }
+
+    [Fact]
+    public void Build_FreshReceivedStatusProvesLinkDespiteMissingDefaultCli()
+    {
+        using var manager = new AgentSessionManager();
+        Session(manager, "impressivebot:Forge", "t1", AgentEventTypes.ToolStarted);
+        var status = Build(manager, cli: null);
+        Assert.Equal(ImpressiveBotLink.Live, status.Link);
+        Assert.Equal(1, status.ActiveCount);
+    }
+
+    [Fact]
+    public void Build_EndedSessionsNeverCountAsWorking()
+    {
+        using var manager = new AgentSessionManager();
+        Session(manager, "impressivebot:Patch", "t1", AgentEventTypes.SessionEnded);
+        var status = Build(manager);
+        Assert.Equal(0, status.ActiveCount);
+        Assert.False(status.IsHealthy);
     }
 
     [Fact]

@@ -62,6 +62,29 @@ public class MediaLyricsDisplayTests
         Assert.True(vm.LyricsBlockHidden);
     }
 
+    [Fact]
+    public void Settings_RefreshPausedLyricsWithoutNewMediaEvents()
+    {
+        var vm = WithLyrics();
+        Assert.Equal("Current", vm.LyricCurrent);
+        vm.ApplyLyricsSettings(10000, true);
+        Assert.Equal("Next", vm.LyricCurrent);
+        vm.ApplyLyricsSettings(10000, false);
+        Assert.False(vm.LyricsBlockVisible);
+        vm.ApplyLyricsSettings(0, true);
+        Assert.True(vm.LyricsBlockVisible);
+        Assert.Equal("Current", vm.LyricCurrent);
+    }
+
+    [Fact]
+    public void Settings_DoNotOverrideSessionLyricsToggle()
+    {
+        var vm = WithLyrics();
+        vm.ToggleLyrics();
+        vm.ApplyLyricsSettings(500, true);
+        Assert.False(vm.LyricsBlockVisible);
+    }
+
     private static MediaViewModel WithLyrics()
     {
         var vm = new MediaViewModel();

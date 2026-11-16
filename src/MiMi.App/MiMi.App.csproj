@@ -8,6 +8,9 @@
     <RootNamespace>MiMi.App</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Management" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\MiMi.Core\MiMi.Core.csproj" />
     <ProjectReference Include="..\MiMi.Media\MiMi.Media.csproj" />
     <ProjectReference Include="..\MiMi.Lyrics\MiMi.Lyrics.csproj" />

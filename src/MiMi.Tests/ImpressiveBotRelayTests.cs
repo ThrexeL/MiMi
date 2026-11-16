@@ -94,8 +94,10 @@ public class ImpressiveBotRelayTests
         Assert.Equal("Vera finished", ev.Title);
     }
 
-    [Fact]
-    public async Task RunAsync_SendsOneEventOverTheAuthenticatedPipe()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_SendsOneEventOverTheAuthenticatedPipe(bool requireAck)
     {
         var bus = new AgentEventBus();
         using var approvals = new ApprovalStore();
@@ -106,28 +108,92 @@ public class ImpressiveBotRelayTests
         bus.Subscribe(ev => received.TrySetResult(ev));
         server.Start();
 
-        var input = new StringReader("""{"bot":"Patch","state":"working","session":"t1","message":"Reviewing"}""");
+        var input = new StringReader("""{"bot":"Patch","state":"working","session":"t1","message":"Reviewing","sequence":42,"timestamp":"2020-01-01T12:00:00Z"}""");
         var exit = await ImpressiveBotRelay.RunAsync(input,
-            () => BridgeClient.ConnectAsync(TimeSpan.FromSeconds(1), "test", server.PipeName, token));
+            () => BridgeClient.ConnectAsync(TimeSpan.FromSeconds(1), "test", server.PipeName, token),
+                        requireAck: requireAck);
 
         Assert.Equal(0, exit);
         var ev = await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.Equal("impressivebot:Patch", ev.Provider);
         Assert.Equal(AgentEventTypes.ToolStarted, ev.Type);
         Assert.Equal("t1", ev.SessionId);
+        Assert.Equal("42", ev.Metadata["sequence"]);
+        Assert.Equal(new DateTimeOffset(2020, 1, 1, 12, 0, 0, TimeSpan.Zero), ev.TimestampUtc);
+        Assert.Equal("2020-01-01T12:00:00.0000000+00:00", ev.Metadata["sender_timestamp"]);
         // Display-only: no approval may be created by a status update.
         Assert.Empty(approvals.Pending);
     }
 
-    [Fact]
-    public async Task RunAsync_StaysSilentWhenMiMiIsNotReachable()
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public async Task RunAsync_DeliveryOutageFailsOnlyWhenAckRequired(bool requireAck, int expectedExit)
     {
-        // No server: the relay must still exit 0 so ImpressiveBot is never disturbed.
+        // No server: legacy callers stay non-failing; opt-in senders can retry.
         var exit = await ImpressiveBotRelay.RunAsync(
             new StringReader("""{"bot":"Patch","state":"working"}"""),
             () => BridgeClient.ConnectAsync(TimeSpan.FromMilliseconds(200), "test",
-                "mimi-absent-" + Guid.NewGuid().ToString("N"), new string('c', 64)));
-        Assert.Equal(0, exit);
+                "mimi-absent-" + Guid.NewGuid().ToString("N"), new string('c', 64)),
+            requireAck: requireAck);
+        Assert.Equal(expectedExit, exit);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public async Task RunAsync_MissingEventAckFailsOnlyWhenRequired(bool requireAck, int expectedExit)
+    {
+        var bus = new AgentEventBus();
+        using var approvals = new ApprovalStore();
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = bus.Subscribe(_ =>
+        {
+            entered.TrySetResult();
+            try { release.Wait(TimeSpan.FromSeconds(10)); }
+            finally { completed.TrySetResult(); }
+        });
+        var token = new string('d', 64);
+        await using var server = new NamedPipeAgentBridge(bus, approvals, token,
+            pipeName: "mimi-no-event-ack-" + Guid.NewGuid().ToString("N"));
+        server.Start();
+        var diagnostics = new StringWriter();
+        try
+        {
+            var delivery = ImpressiveBotRelay.RunAsync(
+                new StringReader("""{"bot":"Patch","state":"finished"}"""),
+                () => BridgeClient.ConnectAsync(TimeSpan.FromSeconds(1), "test", server.PipeName, token),
+                requireAck: requireAck, diagnostics: diagnostics);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Equal(expectedExit, await delivery.WaitAsync(TimeSpan.FromSeconds(4)));
+            Assert.Contains("status not shown (", diagnostics.ToString());
+            Assert.DoesNotContain("Patch", diagnostics.ToString());
+        }
+        finally
+        {
+            release.Set();
+            if (entered.Task.IsCompleted)
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public async Task RunAsync_InvalidPayloadFailsOnlyWhenAckRequired(bool requireAck, int expectedExit)
+    {
+        var diagnostics = new StringWriter();
+        var connected = false;
+        var exit = await ImpressiveBotRelay.RunAsync(
+            new StringReader("""{"bot":"PRIVATE_BOT","state":"invalid","message":"PRIVATE_MESSAGE"}"""),
+            () => { connected = true; throw new InvalidOperationException(); },
+            requireAck: requireAck, diagnostics: diagnostics);
+        Assert.Equal(expectedExit, exit);
+        Assert.False(connected);
+        Assert.Contains("status rejected (invalid_state)", diagnostics.ToString());
+        Assert.DoesNotContain("PRIVATE", diagnostics.ToString());
     }
 
     [Fact]

@@ -23,7 +23,7 @@ if (args.Length == 0)
     Console.Error.WriteLine("  codex-notify '<json>'                      (Codex notify adapter; turn-complete toasts)");
     Console.Error.WriteLine("  relay                                     (stdin: normalized activity events, one JSON per line)");
     Console.Error.WriteLine("  thursday-permission                       (stdin: sealed-action event; stdout: task decision)");
-    Console.Error.WriteLine("  impressivebot-status                      (stdin: one bot status JSON; display-only, never decides)");
+    Console.Error.WriteLine("  impressivebot-status [--require-ack]      (stdin: one bot status JSON; display-only, never decides)");
     Console.Error.WriteLine("  install-claude [--timeout N] | uninstall-claude   (~/.claude/settings.json)");
     Console.Error.WriteLine("  install-codex  [--timeout N] | uninstall-codex    (~/.codex/hooks.json)");
     Console.Error.WriteLine("  install-codex-notify | uninstall-codex-notify     (~/.codex/config.toml, optional)");
@@ -43,7 +43,8 @@ try
         case "thursday-permission":
             return await ThursdayPermission.RunAsync(Console.In, Console.Out);
         case "impressivebot-status":
-            return await ImpressiveBotRelay.RunAsync(Console.In);
+            return await ImpressiveBotRelay.RunAsync(Console.In,
+                            requireAck: args.Contains("--require-ack", StringComparer.OrdinalIgnoreCase));
         case "claude-permission":
         case "codex-permission":
             return await PermissionHookAsync(args.Skip(1).ToArray(), args[0].ToLowerInvariant());

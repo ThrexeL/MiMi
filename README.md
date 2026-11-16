@@ -39,6 +39,15 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
 - **Multi-agent tracking with multi-approval navigation**: per-session lifecycle states,
   a hover activity panel, and `‹ ›` navigation across pending approval cards.
 
+## UI and usability refresh
+
+- **Categorized settings:** General, Appearance, Notifications, Integrations, and System pages in a resizable window, with independently scrolling content and persistent save feedback. Changes save automatically; failures are displayed instead of reporting success. Escape closes settings, and keyboard focus is visible.
+- **Complete everyday controls:** hover expansion, lyrics and timing offset, all system HUD toggles, typography, mascot, glow, notifications, and provider status are available in settings. Keyboard and pointer slider changes persist without an Apply button.
+- **Island polish:** clearer section headings, higher-contrast secondary text and seek track, consistent action buttons, labeled Quick Access tiles, useful empty states, and descriptive icon tooltips/automation names. The idle face, non-activating overlay, and fixed gold glow geometry are unchanged.
+- **Lyrics availability:** unavailable tracks show **No lyrics available**, instrumental tracks are labeled, and fetching shows **Loading lyrics...**. Switching tracks clears the previous lyrics.
+- **Laptop brightness HUD:** real WMI backlight-change events on supported laptops, with its own settings toggle. No external-monitor control, polling, or simulated readings.
+- **Regression coverage:** settings persistence and layout, island template layouts, Unicode text/icons, lyrics availability, and brightness policy are automated. Offscreen renders help review layouts; live hardware, DPI, and accessibility checks remain manual.
+
 ## Status
 
 Development is phased. State as of the 4.0 release candidate:
@@ -50,11 +59,11 @@ Development is phased. State as of the 4.0 release candidate:
 | 3 — agent integrations | Claude Code / Codex approval hooks via `MiMi.AgentCli`, Codex notify | implemented |
 | 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
 | 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
-| 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language | **implemented in 4.0** |
+| 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language, supported laptop brightness | implemented |
 | 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; app-server embedding deferred | partial |
 | 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
-| 8 — mascot polish | Expressions live (mood policy); final screenshot pass pending | in progress |
-| 9 — release prep | This document, portable build script | in progress |
+| 8 — mascot and UI polish | Expressions, categorized settings, island styling, offscreen template/layout review | implemented; interactive/DPI acceptance remains manual |
+| 9 — release prep | Portable build script, automated tests, selftest, documented acceptance checklist | implemented; release signing/distribution and manual acceptance remain maintainer tasks |
 
 Notes on the intentionally-unsupported features:
 
@@ -64,10 +73,9 @@ Notes on the intentionally-unsupported features:
   cannot access it. This is documented — including an honest disclosure in Settings —
   rather than simulated. A packaged companion app is the supported path if the feature is
   wanted later.
-- **Brightness.** Deferred. WMI (`WmiMonitorBrightnessMethods`) works only on laptop
-  backlights, requires the `System.Management` package, and most desktop monitors have no
-  supported control surface — MiMi renders an honest unsupported state instead of a
-  fake slider.
+- **External-monitor brightness control.** Not implemented. The brightness HUD observes
+  supported laptop backlights through WMI and `System.Management`; desktops without that
+  interface stay silent. MiMi does not change brightness or provide a fake slider.
 
 ## Build and run
 
@@ -152,8 +160,11 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
 - **Caps Lock and input language.** `GetKeyState` / `GetKeyboardLayout` sampled on the
   existing 1 Hz island tick — no keyboard hooks are installed and no keystroke content is
   ever read.
-- **Brightness.** Deferred (see Status): WMI-only, laptop backlights, needs the
-  `System.Management` package — an honest unsupported state elsewhere.
+- **Brightness.** `WmiMonitorBrightnessEvent` on supported active laptop backlights,
+  with a real percentage/progress HUD and no startup toast. Event setup/teardown runs off
+  the UI thread; duplicate values are suppressed and bursts are bounded. Unsupported or
+  denied WMI access stays silent. Toggle with `brightnessHudEnabled`; this does not
+  control brightness or monitor external displays.
 
 ## Synchronized lyrics
 
@@ -431,6 +442,34 @@ hook timeout, makes the final call.
 - **Simulator:** `tools\Invoke-MiMiEvent.ps1` exercises the same bridge/approval pipeline
   without a provider (examples above).
 
+## ImpressiveBot live status
+
+ImpressiveBot's status mirror must report **runtime state**, not notification delivery.
+The coordinated sender in `ImpressiveBot/app/server/mimi-runtime-sender.ts` snapshots
+confirmed live turns every 20 seconds, including quiet thinking and tool execution.
+Quiet-turn preferences and notification routing do not suppress these updates. Updates
+are serialized and coalesced, with bounded pending state; completion/stop comes from
+runtime lifecycle events. No prompt, transcript, or tool output is needed.
+
+The sender invokes `MiMi.AgentCli.exe impressivebot-status --require-ack`. This opt-in
+flag returns nonzero if the bridge does not acknowledge delivery, allowing the sender
+to retry its latest state. Without the flag, the legacy command remains non-failing.
+Payloads retain the existing `bot`, `session`, and `state` contract (`working`, `waiting`,
+`finished`, `failed`, `stopped`), adding optional monotonic numeric `sequence` and UTC ISO
+`timestamp`. Ordering is session-wide, not reset per turn. Old, replayed, expired, and
+excessively future-dated updates cannot overwrite or freshen newer activity.
+
+MiMi keeps its five-minute silence safety lease: a disconnected source becomes
+**status unknown**, never falsely finished or healthy idle. The compact count includes
+working and waiting sessions; the detailed status reports working and waiting counts
+separately. Received fresh status proves the link works even if a custom CLI path is
+not visible to MiMi. Approval decisions remain exclusively in ImpressiveBot.
+
+**Deployment requires both sides.** Replace/restart MiMi and its companion CLI, and
+deploy/restart the updated ImpressiveBot server. Updating MiMi alone cannot manufacture
+missing runtime updates from an old installed ImpressiveBot bundle. Source changes and
+isolated tests do not update an already-running installed app.
+
 ## Agent activity and multi-agent UI (Phase 3.6)
 
 ### How activity events reach MiMi
@@ -532,8 +571,8 @@ Activity hooks carry no timeout override, so they can never gate or delay the pr
 ### Known limitations
 
 - No token-level/"thinking" telemetry; states reflect hook moments only.
-- A session that goes silent flips to `Status unknown` after 90 s; MiMi cannot know whether
-  the agent is still reasoning unless the provider emits another hook.
+- A session that goes silent flips to `Status unknown` after five minutes; MiMi cannot know
+  whether the agent is still reasoning unless the provider sends another confirmed update.
 - Finished session rows are hidden after 2 minutes; ended-session history is capped at 20.
 - Only one approval card is visible at a time; the others are reachable with the arrows.
 - Codex lifecycle hooks require the one-time `/hooks` trust review.
@@ -565,7 +604,7 @@ also include the sealed action input; oversized actions remain in Thursday.
 The activity panel groups approvals, active work and up to three recent results,
 with a bounded scrolling area and live updates while open. Confirmed terminal
 states retain their result instead of becoming "Status unknown". Silent live
-sessions still become unknown after 90 seconds, and heartbeat frames refresh
+sessions still become unknown after five minutes, and heartbeat frames refresh
 Thursday activity without repeating timeline entries.
 
 ## Settings reference
@@ -596,6 +635,7 @@ defaults; values are clamped to the ranges below on every save.
 | `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
 | `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
 | `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
+| `brightnessHudEnabled` | bool | `true` | Brightness-change HUD on WMI-supported laptop backlights |
 | `networkHudEnabled` | bool | `true` | Network HUD |
 | `capsLockHudEnabled` | bool | `true` | Caps Lock / input language HUD |
 | `headphoneHudEnabled` | bool | `true` | Audio device change HUD |
@@ -655,7 +695,7 @@ The clock has no setting in 4.0: the idle state is face-only by design.
 | `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security, per-connection approval correlation |
 | `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest and `activity` lifecycle hooks, Codex notify) and their installers |
 | `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest; mascot (`UI/Mascot`: `MiMiMascotControl`, `MascotExpression`), `GlowLayout`, `SystemHudController` with the Core Audio / power / network / keyboard interop monitors |
-| `MiMi.Tests` | xUnit tests — 211 tests covering all of the above |
+| `MiMi.Tests` | xUnit tests covering core policies, integration contracts, settings persistence, and offscreen island layouts |
 | `docs/` | Research references: Claude Code hooks (`claude-code-hooks.md`), Codex integrations (`codex-integrations.md`) |
 
 Data flow: providers/bridge → `AgentEventBus` → `IslandPresenter` → `IslandStateManager`
@@ -668,8 +708,8 @@ wins, transients expire back to the pinned state), and the window renders it. Vi
 
 ## Testing checklist
 
-Covered by **211/211 automated tests** (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c
-Debug`) and `MiMi.exe --selftest`:
+Automated coverage (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Release`)
+and the separate `MiMi.exe --selftest` pipeline check:
 
 - Settings round-trip and corrupt-file fallback to defaults; value clamping.
 - Dedup store: duplicate ids rejected, capacity eviction, empty id accepted.
@@ -724,16 +764,48 @@ Requires manual verification (not automated, not claimed done):
 - Fullscreen step-aside against real fullscreen apps (games, video players).
 - Startup/shutdown memory behavior over longer sessions.
 
+### Remaining optional integrations
+
+These are separate features, not enabled or represented as complete by the UI refresh:
+
+- **Codex app-server embedding:** the hook-based integration is implemented. A full embedded
+  client still needs a version-pinned protocol, process/session ownership, transcript UI,
+  sandbox/model configuration, and end-to-end approval/cancellation verification. See
+  `docs/codex-integrations.md`; hooks must remain the default until that client is validated.
+- **Windows notification ingestion:** still requires an MSIX package identity, declared
+  `userNotificationListener` capability, explicit/revocable user consent, and packaged
+  deployment testing. The portable build cannot provide this. Notification bodies can be
+  sensitive; an opt-in privacy/filtering policy is needed before exposing them on the island.
+- **Acceptance:** physical brightness events, assistive technology, multi-monitor DPI,
+  long-running performance, real drag/drop, and fullscreen behavior require a live pass.
+  Offscreen render tests do not certify these behaviors.
+
+To save offscreen layout review images without opening windows:
+
+```powershell
+$env:MIMI_QA_DIR = Join-Path $PWD 'artifacts\\ui-review'
+dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Release --filter FullyQualifiedName~IslandVisualLayoutTests
+Remove-Item Env:MIMI_QA_DIR
+```
+
 ## Portable release
 
 `build-release.ps1` produces a portable build in `dist/`:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 -Verify
+
+# Publish separately while the normal dist build is running:
+powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 -Verify -OutputDirectory artifacts\release
 ```
 
+`-Verify` runs the Release test suite before publishing and the published app's headless
+selftest afterward. Failures stop the script. Published files include `SHA256SUMS.txt`
+for the app, companion CLI, and README. Close MiMi before overwriting its executable,
+or select a separate output directory.
+
 - **Output:** `dist\MiMi.exe` (single file, win-x64), `dist\MiMi.AgentCli.exe` next to it
-  (hook installers + adapters resolve this path), plus `README.md` and `PROJECT_STATE.md`.
+  (hook installers + adapters resolve this path), plus `README.md` and `SHA256SUMS.txt`.
 - **Framework-dependent by default:** the target machine needs the
   [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download). Pass `-SelfContained`
   to embed the runtime (~180 MB) so it runs with nothing installed.

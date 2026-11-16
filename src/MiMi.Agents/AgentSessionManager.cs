@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace MiMi.Agents;
 
@@ -63,19 +65,19 @@ public sealed class AgentSession
 public sealed class AgentSessionManager : IDisposable
 {
     /// <summary>
-    /// How long a working session may stay silent before MiMi stops calling it working.
-    /// ImpressiveBot reports on every turn and tool change, but a single long command (a
-    /// build, a test run, a big read) can legitimately produce no event for several
-    /// minutes; 90 seconds used to flip a genuinely working bot to "status unknown" and
-    /// drop it from the status line. Five minutes covers real work while still letting a
-    /// crashed or closed bot age out on its own.
+    /// Five-minute safety lease for confirmed working or external waiting activity.
+    /// Without fresh activity, the session becomes Unknown; silence never means finished.
+    /// Pending local approvals remain governed by their own resolution/expiry flow.
     /// </summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(5);
     public const int EndedHistoryLimit = 20;
     public const int TimelineLimit = 12;
     private static readonly TimeSpan ToolEntrySpacing = TimeSpan.FromSeconds(2);
 
-    private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
+    // ValueTuple's string equality is ordinal; delimiters in either field are data.
+    private readonly ConcurrentDictionary<(string Provider, string SessionId), AgentSession> _sessions = new();
+    private readonly TimeProvider _timeProvider;
+    public static readonly TimeSpan SenderClockSkew = TimeSpan.FromSeconds(30);
     private readonly Timer _sweeper;
     private bool _disposed;
 
@@ -83,12 +85,13 @@ public sealed class AgentSessionManager : IDisposable
     /// changed. Subscribers marshal to their own dispatcher.</summary>
     public event Action<AgentSession>? SessionChanged;
 
-    public AgentSessionManager()
+    public AgentSessionManager(TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _sweeper = new Timer(_ => SweepStale(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
     }
 
-    private static string Key(string provider, string sessionId) => $"{provider}|{sessionId}";
+    private static (string Provider, string SessionId) Key(string provider, string sessionId) => (provider, sessionId);
 
     public AgentSession? Get(string provider, string sessionId) =>
         _sessions.TryGetValue(Key(provider, sessionId), out var s) ? s : null;
@@ -99,7 +102,7 @@ public sealed class AgentSessionManager : IDisposable
     /// <summary>Sessions worth showing in the compact indicator/panel: live ones, plus
     /// recently finished ones (turn finished / error / interrupted) until they age out.</summary>
     public IReadOnlyList<AgentSession> Active => _sessions.Values
-        .Where(s => IsVisible(s, DateTimeOffset.UtcNow))
+        .Where(s => IsVisible(s, _timeProvider.GetUtcNow()))
         .OrderBy(s => s.State == SessionActivity.AwaitingApproval ? 0
             : s.State is SessionActivity.Started or SessionActivity.Working or SessionActivity.ExecutingTool or SessionActivity.WaitingForInput ? 1
             : s.State == SessionActivity.Unknown ? 3 : 2)
@@ -113,7 +116,7 @@ public sealed class AgentSessionManager : IDisposable
     {
         if (session.State == SessionActivity.Ended) return false;
         if (session.State == SessionActivity.Unknown)
-            return asOf - session.LastEventUtc <= TimeSpan.FromMinutes(5);
+            return asOf - session.LastEventUtc <= StaleAfter + FinishedVisibleFor;
         // Finished / failed / interrupted sessions stay visible briefly, then age out.
         if (session.State is SessionActivity.TurnFinished or SessionActivity.Error or SessionActivity.Interrupted)
             return asOf - session.LastEventUtc <= FinishedVisibleFor;
@@ -121,7 +124,7 @@ public sealed class AgentSessionManager : IDisposable
     }
 
     public int WorkingCount =>
-        _sessions.Values.Count(s => !s.Ended && s.State is SessionActivity.Started
+        _sessions.Values.Count(s => !s.Ended && !s.Stale && s.State is SessionActivity.Started
             or SessionActivity.Working or SessionActivity.ExecutingTool or SessionActivity.AwaitingApproval or SessionActivity.WaitingForInput);
 
     public int PendingApprovalCount =>
@@ -131,38 +134,80 @@ public sealed class AgentSessionManager : IDisposable
     /// or after End) never resurrect or rewind a session.</summary>
     public AgentSession Apply(AgentEvent ev)
     {
+        var now = _timeProvider.GetUtcNow();
         var key = Key(ev.Provider, ev.SessionId);
+        var confirmedAt = now;
+        // Explicit sender time is preserved in metadata across bridge normalization.
+        // Legacy events retain receipt-time semantics; approval TTLs remain ApprovalStore-owned.
+        if (ev.Type is not (AgentEventTypes.ApprovalRequested or AgentEventTypes.ApprovalResolved)
+            && ev.Metadata.TryGetValue("sender_timestamp", out var senderTime))
+        {
+            if (!DateTimeOffset.TryParse(senderTime, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var timestamp)
+                || timestamp.Offset != TimeSpan.Zero || timestamp > now + SenderClockSkew)
+                return Reject("invalid_sender_timestamp");
+            if (now - timestamp > StaleAfter)
+                return Reject("expired_snapshot");
+            confirmedAt = timestamp > now ? now : timestamp;
+        }
+
         var session = _sessions.GetOrAdd(key, _ => new AgentSession
         {
             Provider = ev.Provider,
             SessionId = ev.SessionId,
+            State = SessionActivity.Unknown,
+            Stale = true,
+            LastEventUtc = DateTimeOffset.MinValue,
         });
 
         lock (session)
         {
-            // Out-of-order guard: a strictly older sequence for the same turn cannot
-            // overwrite newer state. Events without sequence are always accepted.
-            if (ev.Metadata.TryGetValue("sequence", out var seqRaw)
-                && long.TryParse(seqRaw, out var seq) && seq >= 0)
-            {
-                if (session.LastSequence >= 0 && seq < session.LastSequence)
-                    return session;
-                session.LastSequence = seq;
-            }
+            // Ended is terminal, including for explicit activity heartbeats.
+            if (session.Ended)
+                return Reject("session_ended");
 
-            // Late events after session end: keep the session Ended; record nothing else.
-            if (session.Ended && ev.Type != AgentEventTypes.SessionEnded)
-                return session;
+            // Sequence is monotonic across the session, never reset on turn changes.
+            // Equal sequences (including conflicting replays) cannot freshen a session.
+            long? sequence = null;
+            if (ev.Metadata.TryGetValue("sequence", out var seqRaw))
+            {
+                if (!long.TryParse(seqRaw, NumberStyles.None, CultureInfo.InvariantCulture, out var seq) || seq < 0)
+                    return Reject("invalid_sequence");
+                if (seq <= session.LastSequence)
+                    return Reject("non_increasing_sequence");
+                sequence = seq;
+            }
+            // Sequence orders snapshots even across wall-clock adjustments; sender time
+            // still controls freshness, and orders updates only when no sequence is supplied.
+            if (sequence is null && ev.Metadata.ContainsKey("sender_timestamp") && confirmedAt < session.LastEventUtc
+                && session.LastEventId.Length > 0)
+                return Reject("older_snapshot");
+
+            var activityType = ev.Type;
+            if (ev.Type == AgentEventTypes.Heartbeat)
+            {
+                if (ev.Metadata.TryGetValue("activity_type", out var confirmedType))
+                {
+                    // A heartbeat may confirm activity, never manufacture approvals or end sessions.
+                    if (confirmedType is not (AgentEventTypes.Started or AgentEventTypes.PromptSubmitted
+                        or AgentEventTypes.Status or AgentEventTypes.ToolStarted or AgentEventTypes.ToolFinished
+                        or AgentEventTypes.SubagentStarted or AgentEventTypes.SubagentStopped
+                        or AgentEventTypes.WaitingForInput))
+                        return Reject("invalid_heartbeat_activity");
+                    activityType = confirmedType;
+                }
+                else if (session.Stale || session.State == SessionActivity.Unknown)
+                    return Reject("unconfirmed_heartbeat");
+            }
+            if (sequence is { } acceptedSequence) session.LastSequence = acceptedSequence;
 
             session.Project = ev.Project.Length > 0 ? ev.Project : session.Project;
-            session.LastEventUtc = DateTimeOffset.UtcNow;
+            session.LastEventUtc = confirmedAt;
             session.LastEventId = ev.EventId;
             session.LastSummary = ev.Message;
             session.TurnId = ev.Metadata.TryGetValue("turn_id", out var turn) ? turn : session.TurnId;
             session.SubagentId = ev.Metadata.TryGetValue("subagent_id", out var sub) ? sub : session.SubagentId;
 
-            var activityType = ev.Type == AgentEventTypes.Heartbeat
-                && ev.Metadata.TryGetValue("activity_type", out var confirmedType) ? confirmedType : ev.Type;
             switch (activityType)
             {
                 case AgentEventTypes.Started:
@@ -228,6 +273,16 @@ public sealed class AgentSessionManager : IDisposable
 
         SessionChanged?.Invoke(session);
         return session;
+
+        AgentSession Reject(string reason)
+        {
+            Trace.TraceWarning("MiMi: agent event rejected ({0})", reason);
+            return Get(ev.Provider, ev.SessionId) ?? new AgentSession
+            {
+                Provider = ev.Provider, SessionId = ev.SessionId,
+                State = SessionActivity.Unknown, Stale = true, LastEventUtc = DateTimeOffset.MinValue,
+            };
+        }
     }
 
     /// <summary>Mirrors an approval resolution that did not arrive as an agent event
@@ -242,7 +297,7 @@ public sealed class AgentSessionManager : IDisposable
             if (session._pendingApprovals.Count == 0 && session.State == SessionActivity.AwaitingApproval)
             {
                 session.State = SessionActivity.Working;
-                session.LastEventUtc = DateTimeOffset.UtcNow;
+                session.LastEventUtc = _timeProvider.GetUtcNow();
             }
         }
         SessionChanged?.Invoke(session);
@@ -311,7 +366,7 @@ public sealed class AgentSessionManager : IDisposable
         _ => "lifecycle",
     };
 
-    private void SweepStale() => SweepStale(DateTimeOffset.UtcNow);
+    private void SweepStale() => SweepStale(_timeProvider.GetUtcNow());
 
     /// <summary>Time-injectable staleness sweep (testable without waiting).</summary>
     public void SweepStale(DateTimeOffset asOf)
@@ -334,15 +389,14 @@ public sealed class AgentSessionManager : IDisposable
             var changed = false;
             lock (session)
             {
-                if (session.Ended) continue; // ended is terminal
-                // Long silence while "working" becomes Unknown — never "finished".
+                if (session.Ended || session._pendingApprovals.Count > 0) continue;
+                // Silence expires the activity lease, not a locally owned approval.
                 if (!session.Stale && now - session.LastEventUtc > StaleAfter
-                    && session.State is SessionActivity.Started or SessionActivity.Working or SessionActivity.ExecutingTool)
+                    && session.State is SessionActivity.Started or SessionActivity.Working
+                        or SessionActivity.ExecutingTool or SessionActivity.WaitingForInput)
                 {
                     session.Stale = true;
-                    if (session.State is SessionActivity.Started or SessionActivity.Working
-                        or SessionActivity.ExecutingTool)
-                        session.State = SessionActivity.Unknown;
+                    session.State = SessionActivity.Unknown;
                     changed = true;
                 }
             }
@@ -355,7 +409,7 @@ public sealed class AgentSessionManager : IDisposable
         foreach (var s in ended)
             _sessions.TryRemove(Key(s.Provider, s.SessionId), out _);
         foreach (var s in _sessions.Values.Where(s => s.State != SessionActivity.AwaitingApproval
-                     && !s.Ended && now - s.LastEventUtc > TimeSpan.FromMinutes(15)))
+                     && s._pendingApprovals.Count == 0 && !s.Ended && now - s.LastEventUtc > TimeSpan.FromMinutes(15)))
             _sessions.TryRemove(Key(s.Provider, s.SessionId), out _);
     }
 

@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Text.Json;
 using MiMi.Agents;
 
 namespace MiMi.AgentCli;
@@ -14,7 +15,8 @@ namespace MiMi.AgentCli;
 ///  - MiMi is never asked to decide anything: no approval is created and no decision
 ///    is read back. Approvals stay in ImpressiveBot, where the card is authoritative.
 ///
-/// Failures are swallowed and exit 0: a MiMi outage must never disturb ImpressiveBot.
+/// By default failures exit 0 so a MiMi outage cannot disturb legacy callers.
+/// Opt-in require-ack mode reports delivery failures so senders can retry.
 /// </summary>
 public static class ImpressiveBotRelay
 {
@@ -35,14 +37,18 @@ public static class ImpressiveBotRelay
         string Bot,
         string Message,
         string Project,
-        IReadOnlyDictionary<string, string> Metadata);
+        IReadOnlyDictionary<string, string> Metadata,
+        DateTimeOffset? TimestampUtc = null);
 
     /// <summary>
     /// Parses one status line. Returns null for anything malformed, unknown, or trying
     /// to smuggle an approval through this display-only channel.
     /// </summary>
-    public static StatusUpdate? Parse(string json)
+    public static StatusUpdate? Parse(string json) => Parse(json, out _);
+
+    public static StatusUpdate? Parse(string json, out string? rejection)
     {
+        rejection = "invalid_payload";
         if (string.IsNullOrWhiteSpace(json) || json.Length > 32_000) return null;
 
         JsonDocument doc;
@@ -57,10 +63,18 @@ public static class ImpressiveBotRelay
             // ImpressiveBot always sends a bot name; a payload without one is malformed,
             // not an unnamed bot, so it is rejected rather than guessed at.
             var bot = Flatten(Str(root, "bot"), MaxBotName);
-            if (bot.Length == 0) return null;
+            if (bot.Length == 0)
+            {
+                rejection = "missing_bot";
+                return null;
+            }
 
             var state = Str(root, "state").ToLowerInvariant();
-            if (!AllowedStates.Contains(state)) return null;
+            if (!AllowedStates.Contains(state))
+            {
+                rejection = "invalid_state";
+                return null;
+            }
 
             var session = Flatten(Str(root, "session"), 80);
             if (session.Length == 0) session = bot;
@@ -76,6 +90,33 @@ public static class ImpressiveBotRelay
             if (Str(root, "thread").Length > 0) metadata["thread"] = Flatten(Str(root, "thread"), 80);
             if (Str(root, "tool").Length > 0) metadata["tool"] = Flatten(Str(root, "tool"), 60);
 
+            if (root.TryGetProperty("sequence", out var sequence))
+            {
+                if (sequence.ValueKind != JsonValueKind.Number || !sequence.TryGetInt64(out var value) || value < 0)
+                {
+                    rejection = "invalid_sequence";
+                    return null;
+                }
+                metadata["sequence"] = value.ToString(CultureInfo.InvariantCulture);
+            }
+
+            DateTimeOffset? timestamp = null;
+            if (root.TryGetProperty("timestamp", out var timestampValue))
+            {
+                if (timestampValue.ValueKind != JsonValueKind.String
+                    || !(Str(root, "timestamp").EndsWith("Z", StringComparison.Ordinal)
+                        || Str(root, "timestamp").EndsWith("+00:00", StringComparison.Ordinal))
+                    || !timestampValue.TryGetDateTimeOffset(out var value) || value.Offset != TimeSpan.Zero)
+                {
+                    rejection = "invalid_timestamp";
+                    return null;
+                }
+                timestamp = value;
+                // Survives bridge normalization, which clamps future event timestamps.
+                metadata["sender_timestamp"] = value.ToString("O", CultureInfo.InvariantCulture);
+            }
+
+            rejection = null;
             return new StatusUpdate(
                 Provider: ProviderNames.ImpressiveBotProvider + ":" + bot,
                 SessionId: session,
@@ -90,7 +131,8 @@ public static class ImpressiveBotRelay
                 Bot: bot,
                 Message: message,
                 Project: project,
-                Metadata: metadata);
+                Metadata: metadata,
+                TimestampUtc: timestamp);
         }
     }
 
@@ -108,12 +150,17 @@ public static class ImpressiveBotRelay
             },
             message: update.Message,
             project: update.Project,
-            metadata: update.Metadata);
+            metadata: update.Metadata) with { TimestampUtc = update.TimestampUtc ?? DateTimeOffset.UtcNow };
 
-    public static async Task<int> RunAsync(TextReader input, Func<Task<BridgeClient>>? connect = null)
+    public static async Task<int> RunAsync(TextReader input, Func<Task<BridgeClient>>? connect = null,
+        bool requireAck = false, TextWriter? diagnostics = null)
     {
-        var update = Parse(await input.ReadToEndAsync());
-        if (update is null) return 0; // nothing to say; never fail the caller
+        var update = Parse(await input.ReadToEndAsync(), out var rejection);
+        if (update is null)
+        {
+            (diagnostics ?? Console.Error).WriteLine($"MiMi: status rejected ({rejection})");
+            return requireAck ? 1 : 0;
+        }
 
         try
         {
@@ -125,9 +172,9 @@ public static class ImpressiveBotRelay
         }
         catch (Exception ex)
         {
-            // MiMi closed, disabled, or slow: status is cosmetic, so this is not an error.
-            Console.Error.WriteLine($"MiMi: status not shown ({ex.GetType().Name})");
-            return 0;
+            // Only opt-in callers use failure as a delivery/retry signal.
+            (diagnostics ?? Console.Error).WriteLine($"MiMi: status not shown ({ex.GetType().Name})");
+            return requireAck ? 1 : 0;
         }
     }
 

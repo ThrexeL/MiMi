@@ -18,6 +18,8 @@ public enum ImpressiveBotLink
     Ready,
     /// <summary>Status arrived recently: ImpressiveBot is running and reporting.</summary>
     Live,
+    /// <summary>Previously received status is no longer fresh; current activity is unknown.</summary>
+    Stale,
 }
 
 /// <summary>One bot's live row: who, what it is doing, and how fresh that is.</summary>
@@ -55,6 +57,7 @@ public sealed record ImpressiveBotStatus(
     public string StateLabel => Link switch
     {
         ImpressiveBotLink.NotInstalled => "not installed",
+        ImpressiveBotLink.Stale => "status unknown",
         ImpressiveBotLink.Live when FailedCount > 0 => "needs attention",
         ImpressiveBotLink.Live when WaitingCount > 0 => "waiting for you",
         ImpressiveBotLink.Live when ActiveCount > 0 => "working",
@@ -95,6 +98,8 @@ public sealed record ImpressiveBotStatus(
                     return "MiMi.AgentCli.exe is not in %LOCALAPPDATA%\\MiMi, so ImpressiveBot has nowhere to report. Reinstall MiMi or point MIMI_AGENT_CLI at the CLI.";
                 case ImpressiveBotLink.Ready:
                     return "The status mirror is installed. ImpressiveBot reports here while it runs; no status has arrived yet.";
+                case ImpressiveBotLink.Stale:
+                    return "No recent status from ImpressiveBot. Activity is unknown; check that ImpressiveBot is running with the updated status mirror.";
             }
 
             var parts = new List<string>();
@@ -162,7 +167,7 @@ public static class ImpressiveBotStatusReader
             .Select(s => new ImpressiveBotBotStatus(
                 Bot: ProviderNames.BotName(s.Provider) is { Length: > 0 } name ? name : "ImpressiveBot",
                 State: s.State,
-                Stale: s.Stale,
+                Stale: s.Stale || s.Ended || at - s.LastEventUtc > AgentSessionManager.StaleAfter,
                 Summary: s.LastSummary,
                 Project: s.Project,
                 LastEventUtc: s.LastEventUtc))
@@ -170,8 +175,10 @@ public static class ImpressiveBotStatusReader
             .ThenByDescending(b => b.LastEventUtc)
             .ToList();
 
-        var link = cliPath is null ? ImpressiveBotLink.NotInstalled
-            : bots.Count > 0 ? ImpressiveBotLink.Live
+        // A received fresh status proves the link works even when the sender uses a custom CLI path.
+        var link = bots.Any(b => !b.Stale) ? ImpressiveBotLink.Live
+            : bots.Count > 0 ? ImpressiveBotLink.Stale
+            : cliPath is null ? ImpressiveBotLink.NotInstalled
             : ImpressiveBotLink.Ready;
         return new ImpressiveBotStatus(link, cliPath ?? "", bots);
     }

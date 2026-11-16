@@ -56,6 +56,7 @@ public sealed class AppSettings
 
     // System HUDs (Milestone 6)
     [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
+    [JsonPropertyName("brightnessHudEnabled")] public bool BrightnessHudEnabled { get; set; } = true;
     [JsonPropertyName("batteryHudEnabled")] public bool BatteryHudEnabled { get; set; } = true;
     [JsonPropertyName("networkHudEnabled")] public bool NetworkHudEnabled { get; set; } = true;
     [JsonPropertyName("capsLockHudEnabled")] public bool CapsLockHudEnabled { get; set; } = true;

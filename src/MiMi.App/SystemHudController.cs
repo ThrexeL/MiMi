@@ -8,8 +8,8 @@ namespace MiMi.App;
 
 /// <summary>
 /// Wires the native system monitors (volume, battery, network, audio devices,
-/// keyboard state) to island HUDs. All inputs are event-driven; the keyboard HUD
-/// piggybacks on the island's existing 1 Hz tick. Settings gate each HUD; the same
+/// keyboard state, laptop brightness) to island HUDs. All inputs are event-driven;
+/// the keyboard HUD piggybacks on the island's existing 1 Hz tick. Settings gate each HUD; the same
 /// title coalesces so rapid volume keys update one toast.
 /// </summary>
 public sealed class SystemHudController : IDisposable
@@ -18,6 +18,8 @@ public sealed class SystemHudController : IDisposable
     private readonly IslandPresenter _presenter;
     private readonly Dispatcher _dispatcher;
 
+    private readonly BrightnessMonitorLifetime _brightness;
+    private bool _disposed;
     private readonly MasterVolumeMonitor _volume = new();
     private readonly AudioDeviceMonitor _audioDevices = new();
     private readonly NetworkMonitor _network = new();
@@ -29,6 +31,7 @@ public sealed class SystemHudController : IDisposable
 
     public SystemHudController(ConfigStore config, IslandPresenter presenter, Dispatcher dispatcher)
     {
+        dispatcher.VerifyAccess();
         _config = config;
         _presenter = presenter;
         _dispatcher = dispatcher;
@@ -57,6 +60,32 @@ public sealed class SystemHudController : IDisposable
         });
 
         ReportBatteryOnce(); // startup baseline (no notice), low-battery check
+
+        _brightness = new BrightnessMonitorLifetime(
+            callback => new LaptopBrightnessMonitor(callback),
+            action => _dispatcher.InvokeAsync(action, DispatcherPriority.Background).Task,
+            _dispatcher.VerifyAccess,
+            percent =>
+            {
+                if (_disposed || !_config.Current.BrightnessHudEnabled) return;
+                // A stable title gives all levels one HUD identity (no stacked alerts).
+                _presenter.PushHud("\uE706", "Brightness", $"{percent}%",
+                    progress: percent / 100.0, duration: TimeSpan.FromSeconds(1.2));
+            });
+        _config.Changed += OnBrightnessSettingsChanged;
+        _brightness.SetEnabled(_config.Current.BrightnessHudEnabled);
+    }
+
+    private void OnBrightnessSettingsChanged(AppSettings settings)
+    {
+        // ConfigStore is UI-thread-owned. Marshal defensively and read the latest
+        // preference so a queued notification cannot restore an obsolete value.
+        if (!_dispatcher.CheckAccess())
+        {
+            _dispatcher.BeginInvoke(() => OnBrightnessSettingsChanged(_config.Current));
+            return;
+        }
+        if (!_disposed) _brightness.SetEnabled(_config.Current.BrightnessHudEnabled);
     }
 
     private int _lastShownPercent = -1;
@@ -143,6 +172,11 @@ public sealed class SystemHudController : IDisposable
 
     public void Dispose()
     {
+        _dispatcher.VerifyAccess();
+        if (_disposed) return;
+        _disposed = true;
+        _config.Changed -= OnBrightnessSettingsChanged;
+        _brightness.Dispose();
         _volume.Dispose();
         _audioDevices.Dispose();
         _network.Dispose();
