@@ -89,15 +89,50 @@ public sealed class FileShelfStore
         File.Move(tmp, _path, overwrite: true);
     }
 
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.TryGetProperty(name, out value)) return true;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+            value = property.Value;
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
     private void Load()
     {
         try
         {
             if (!File.Exists(_path)) return;
-            var items = JsonSerializer.Deserialize<List<ShelfItem>>(File.ReadAllText(_path));
-            if (items is not null)
-                _items.AddRange(items.Where(i => i is not null
-                    && !string.IsNullOrWhiteSpace(i.Path) && i.Path.Length <= 500).Take(Capacity));
+            using var doc = JsonDocument.Parse(File.ReadAllText(_path));
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return;
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                if (_items.Count >= Capacity) break;
+                if (element.ValueKind != JsonValueKind.Object
+                    || !TryGetProperty(element, "path", out var pathElement)
+                    || pathElement.ValueKind != JsonValueKind.String)
+                    continue;
+                var path = pathElement.GetString();
+                if (string.IsNullOrWhiteSpace(path) || path.Length > 500) continue;
+
+                long size = 0;
+                if (TryGetProperty(element, "sizeBytes", out var sizeElement)
+                    && sizeElement.ValueKind == JsonValueKind.Number
+                    && sizeElement.TryGetInt64(out var parsedSize) && parsedSize >= 0)
+                    size = parsedSize;
+                var isDirectory = TryGetProperty(element, "isDirectory", out var dirElement)
+                                  && dirElement.ValueKind == JsonValueKind.True;
+                var added = DateTimeOffset.UtcNow;
+                if (TryGetProperty(element, "addedUtc", out var addedElement)
+                    && addedElement.ValueKind == JsonValueKind.String
+                    && addedElement.TryGetDateTimeOffset(out var parsedAdded))
+                    added = parsedAdded;
+                _items.Add(new ShelfItem { Path = path, SizeBytes = size, IsDirectory = isDirectory, AddedUtc = added });
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                                    or JsonException or InvalidOperationException or FormatException)

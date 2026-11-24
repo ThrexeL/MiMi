@@ -95,7 +95,7 @@ public sealed class WaterTracker
     {
         if (ml <= 0) return;
         RollbackIfNewDay((now ?? DateTimeOffset.Now).LocalDateTime.Date);
-        _todayMl += ml;
+        _todayMl = _todayMl > int.MaxValue - ml ? int.MaxValue : _todayMl + ml;
         _todayEntries.Add(((now ?? DateTimeOffset.Now).LocalDateTime, ml));
         if (_todayEntries.Count > 40) _todayEntries.RemoveAt(0); // bounded
     }

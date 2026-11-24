@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MiMi.Core;
 using Xunit;
 
@@ -123,9 +124,10 @@ public class FileShelfStoreTests : IDisposable
     [Fact]
     public void Load_RejectsNullEntries_AndEnforcesCapacity()
     {
-        var rows = Enumerable.Range(0, FileShelfStore.Capacity + 5)
-            .Select(i => $"{{ \"path\": \"C:\\\\tmp\\\\f{i}.txt\" }}");
-        File.WriteAllText(_storePath, "[null," + string.Join(',', rows) + "]");
+        var payload = new List<object?> { null };
+        payload.AddRange(Enumerable.Range(0, FileShelfStore.Capacity + 5)
+            .Select(i => (object)new Dictionary<string, object> { ["path"] = $@"C:\tmp\f{i}.txt" }));
+        File.WriteAllText(_storePath, JsonSerializer.Serialize(payload));
 
         var store = new FileShelfStore(_storePath);
         Assert.Equal(FileShelfStore.Capacity, store.Count);

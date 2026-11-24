@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace MiMi.Core;
 
 /// <summary>
@@ -39,10 +41,16 @@ public sealed class ConfigStore
         AppSettings snapshot;
         lock (_gate)
         {
-            mutate(Current);
-            Current.Clamp();
-            if (persist) Current.Save(_path);
-            snapshot = Current;
+            // Apply to a candidate first. A failed write must leave both durable
+            // settings and ConfigStore.Current unchanged.
+            var json = JsonSerializer.Serialize(Current, AppSettings.JsonOpts);
+            var candidate = JsonSerializer.Deserialize<AppSettings>(json, AppSettings.JsonOpts)
+                            ?? new AppSettings();
+            mutate(candidate);
+            candidate.Clamp();
+            if (persist) candidate.Save(_path);
+            Current = candidate;
+            snapshot = candidate;
         }
         Changed?.Invoke(snapshot);
     }

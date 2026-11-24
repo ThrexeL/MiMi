@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -719,13 +720,6 @@ public partial class IslandWindow : Window
         // input box may activate it so the user can type; nothing steals focus.
         Activate();
         if (sender is TextBox input) input.Focus();
-        e.Handled = true;
-    }
-
-    private void TodoInput_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter || sender is not FrameworkElement { DataContext: TodoViewModel todo }) return;
-        if (todo.AddCommand.CanExecute(null)) todo.AddCommand.Execute(null);
         e.Handled = true;
     }
 

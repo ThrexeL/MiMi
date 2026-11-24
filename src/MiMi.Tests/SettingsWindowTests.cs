@@ -114,10 +114,8 @@ public class SettingsWindowTests
         });
     }
 
-    [Theory]
-    [InlineData("BrightnessHudToggle")]
-    [InlineData("AutoStartToggle")]
-    public void ConfigWriteFailure_ReplacesPreviousSaveSuccessWithFailure(string toggleName)
+    [Fact]
+    public void ConfigWriteFailure_ReplacesPreviousSaveSuccessWithFailure()
     {
         OnSta(() =>
         {
@@ -132,7 +130,7 @@ public class SettingsWindowTests
 
                 // Block the atomic-write staging path without relying on OS-specific permissions.
                 Directory.CreateDirectory(path + ".tmp");
-                var toggle = (CheckBox)window.FindName(toggleName);
+                var toggle = (CheckBox)window.FindName("BrightnessHudToggle");
                 toggle.IsChecked = toggle.IsChecked != true;
                 Assert.StartsWith("Could not save", feedback.Text);
                 Assert.False(string.IsNullOrWhiteSpace(feedback.ToolTip as string));

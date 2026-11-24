@@ -1,6 +1,6 @@
 # Medium reliability fixes — 2026-11-24
 
-Status: **applied, not built or tested**. This change set addresses the Medium-severity
+Status: **verified on 2026-11-24 at 21:08 IST**. This change set addresses the Medium-severity
 findings from the static review of commit `280924b6ccca9526bc97ad1e008f2797829442ac`.
 
 ## Approval boundary and bridge resilience
@@ -75,20 +75,24 @@ to their existing contracts:
 - Existing Thursday and ImpressiveBot integration tests were left in place and remain
   the acceptance checks for these paths.
 
-## Verification still required
+## Verification performed
 
-No build, test suite, self-test, application launch, or desktop interaction was run for
-this change set. Before release, run:
+- Debug build: succeeded with 0 warnings and 0 errors.
+- Release build: succeeded with 0 warnings and 0 errors.
+- Full test suite: **383 passed, 0 failed, 0 skipped**.
+- Release `--selftest`: **ALL PASSED** (configuration, bridge token/hello/event/response,
+  GSMTC availability, and state priority).
+- Desktop smoke: Release process started, remained responding, kept its window visible,
+  registered Ctrl+Alt+M, and displayed live ImpressiveBot activity. Startup logs showed
+  successful `impressivebot-status` bridge connections.
+- Evidence image: `artifacts/verification/desktop-smoke.png` (git-ignored).
 
-```powershell
-$env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"
-$env:Path = "$env:DOTNET_ROOT;$env:Path"
-dotnet build MiMi.slnx -c Debug
-dotnet build MiMi.slnx -c Release
-dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Debug --nologo
-./src/MiMi.App/bin/Release/net10.0-windows10.0.26100.0/MiMi.exe --selftest
-```
+Verification also found and corrected a missing import, a void-return notification helper,
+to-do Enter routing, stale dedup eviction after retry, non-transactional settings updates,
+shelf JSON compatibility, session-cap eviction, and water-total overflow.
 
-Manual acceptance should include Thursday approval round-trip, ImpressiveBot live status,
-shelf drag-away/remove/copy, to-do add, volume/mute coalescing, restart hotkey recovery,
-autostart, startup under fullscreen, and water persistence across restart.
+## Remaining manual acceptance
+
+Thursday approval round-trip, shelf drag-away/remove/copy, volume/mute coalescing, restart
+hotkey recovery, autostart, startup under fullscreen, and water persistence across restart
+still benefit from a human desktop pass.

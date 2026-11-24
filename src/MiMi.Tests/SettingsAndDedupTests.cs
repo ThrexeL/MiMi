@@ -44,6 +44,30 @@ public class SettingsTests
     }
 
     [Fact]
+    public void Update_FailedSaveLeavesCurrentSettingsUnchanged()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"mimi-config-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new ConfigStore(path);
+            store.Update(s => s.Scale = 1.2);
+            Directory.CreateDirectory(path + ".tmp");
+            Assert.True(Record.Exception(() => store.Update(s => s.Scale = 1.4))
+                is IOException or UnauthorizedAccessException);
+            Assert.Equal(1.2, store.Current.Scale);
+
+            Directory.Delete(path + ".tmp");
+            store.Update(s => s.AnimationSpeed = 1.5);
+            Assert.Equal(1.2, AppSettings.Load(path).Scale);
+        }
+        finally
+        {
+            if (Directory.Exists(path + ".tmp")) Directory.Delete(path + ".tmp");
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Clamp_RejectsNonsense()
     {
         var settings = new AppSettings { Scale = 99, AnimationSpeed = 0.001, ApprovalTtlMinutes = -5 };
@@ -74,12 +98,14 @@ public class DedupTests
     }
 
     [Fact]
-    public void Forget_AllowsRejectedDeliveryToBeRetried()
+    public void Forget_AllowsRejectedDeliveryToBeRetriedWithoutStaleEviction()
     {
-        var store = new DedupStore();
+        var store = new DedupStore(capacity: 2);
         Assert.True(store.TryRecord("retry"));
         store.Forget("retry");
         Assert.True(store.TryRecord("retry"));
+        Assert.True(store.TryRecord("newer"));
+        Assert.False(store.TryRecord("retry")); // stale queue entry did not evict the retry
     }
 
     [Fact]

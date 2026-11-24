@@ -86,7 +86,8 @@ public class AgentReceiverTests
             manager.Apply(AgentEventFactory.Create("flood", $"s-{i}", AgentEventTypes.Status));
 
         Assert.Equal(AgentSessionManager.MaxTrackedSessions, manager.All.Count);
-        Assert.Null(manager.Get("flood", $"s-{AgentSessionManager.MaxTrackedSessions}"));
+        Assert.NotNull(manager.Get("flood", $"s-{AgentSessionManager.MaxTrackedSessions}"));
+        Assert.Null(manager.Get("flood", "s-0"));
     }
 
     [Fact]

@@ -95,6 +95,26 @@ public sealed class AgentSessionManager : IDisposable
 
     private static (string Provider, string SessionId) Key(string provider, string sessionId) => (provider, sessionId);
 
+    /// <summary>Makes room under the hard session cap without dropping a session that
+    /// owns a pending approval. Terminal/stale/oldest sessions are preferred.</summary>
+    private bool TryEvictOldestUnprotected()
+    {
+        AgentSession? candidate = null;
+        foreach (var session in _sessions.Values
+                     .OrderBy(s => s.Ended ? 0 : s.Stale ? 1 : 2)
+                     .ThenBy(s => s.LastEventUtc))
+        {
+            lock (session)
+            {
+                if (session._pendingApprovals.Count != 0) continue;
+                candidate = session;
+                break;
+            }
+        }
+        return candidate is not null
+               && _sessions.TryRemove(Key(candidate.Provider, candidate.SessionId), out _);
+    }
+
     public AgentSession? Get(string provider, string sessionId) =>
         _sessions.TryGetValue(Key(provider, sessionId), out var s) ? s : null;
 
@@ -157,7 +177,8 @@ public sealed class AgentSessionManager : IDisposable
         lock (_sessionGate)
         {
             if (!_sessions.TryGetValue(key, out var existing)
-                && _sessions.Count >= MaxTrackedSessions)
+                && _sessions.Count >= MaxTrackedSessions
+                && !TryEvictOldestUnprotected())
                 return Reject("session_capacity");
             session = existing ?? _sessions.GetOrAdd(key, _ => new AgentSession
             {

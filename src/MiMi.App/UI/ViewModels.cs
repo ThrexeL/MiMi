@@ -226,7 +226,9 @@ public sealed class TodoViewModel : ObservableObject
         get => _rows;
         set
         {
-            if (!Set(ref _rows, value)) return;
+            if (EqualityComparer<IReadOnlyList<TodoRowViewModel>>.Default.Equals(_rows, value)) return;
+            _rows = value;
+            Raise(nameof(Rows));
             Raise(nameof(HasNoRows));
         }
     }

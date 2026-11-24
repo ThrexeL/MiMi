@@ -172,6 +172,24 @@ public class WaterTrackerTests
     }
 
     [Fact]
+    public void Add_SaturatesInsteadOfOverflowingLoadedTotal()
+    {
+        var path = TempPath();
+        try
+        {
+            File.WriteAllText(path, $$"""
+            { "day": "{{DateTime.Today:yyyy-MM-dd}}", "ml": 2147483647, "entries": [] }
+            """);
+            var loaded = WaterTracker.Load(path);
+            loaded.Add(250);
+            Assert.Equal(int.MaxValue, loaded.TodayMl);
+            Assert.Equal(1.0, loaded.GoalFraction);
+            Assert.Equal(0, loaded.RemainingMl);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Reminders_RespectInterval_Snooze_AndQuietHours()
     {
         var t = new WaterTracker { ReminderIntervalMinutes = 60 };

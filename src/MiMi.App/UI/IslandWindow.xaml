@@ -759,8 +759,11 @@
                              MaxLength="200" AcceptsReturn="False"
                              Text="{Binding Todo.NewTaskTitle, UpdateSourceTrigger=PropertyChanged}"
                              AutomationProperties.Name="New task title"
-                             PreviewMouseLeftButtonDown="TodoInput_Click"
-                             KeyDown="TodoInput_KeyDown"/>
+                             PreviewMouseLeftButtonDown="TodoInput_Click">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding Todo.AddCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
                     <Button Grid.Column="1" Style="{StaticResource ApproveButton}" Padding="12,6" Margin="7,0,0,0"
                             Command="{Binding Todo.AddCommand}" ToolTip="Add task"
                             Content="Add"/>

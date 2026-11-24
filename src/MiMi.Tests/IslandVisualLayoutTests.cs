@@ -3,6 +3,7 @@ using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
+using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
@@ -165,6 +166,26 @@ public class IslandVisualLayoutTests
                 Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text == " (missing)");
             AssertBackCommand(window, shelfRoot);
             Render(shelfRoot, $"island-shelf-{rowCount}");
+        }));
+    }
+
+    [Fact]
+    public void TodoInput_EnterAddsTaskThroughTheBoundCommand()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var todo = new TodoViewModel(_ => true, () => { });
+            var (root, _, _) = Layout(window, new TodoView(todo), 240);
+            var input = Assert.Single(Descendants<TextBox>(root),
+                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
+            input.Text = "Verify MiMi";
+            var enter = Assert.Single(input.InputBindings.OfType<KeyBinding>(),
+                binding => binding.Key == Key.Enter);
+            Assert.Same(todo.AddCommand, enter.Command);
+            Assert.Equal("Verify MiMi", input.Text);
+            Assert.Equal("Verify MiMi", todo.NewTaskTitle);
+            enter.Command.Execute(null);
+            Assert.Equal("", todo.NewTaskTitle);
         }));
     }
 
