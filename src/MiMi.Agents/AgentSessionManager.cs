@@ -71,11 +71,13 @@ public sealed class AgentSessionManager : IDisposable
     /// </summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(5);
     public const int EndedHistoryLimit = 20;
+    public const int MaxTrackedSessions = 256;
     public const int TimelineLimit = 12;
     private static readonly TimeSpan ToolEntrySpacing = TimeSpan.FromSeconds(2);
 
     // ValueTuple's string equality is ordinal; delimiters in either field are data.
     private readonly ConcurrentDictionary<(string Provider, string SessionId), AgentSession> _sessions = new();
+    private readonly object _sessionGate = new();
     private readonly TimeProvider _timeProvider;
     public static readonly TimeSpan SenderClockSkew = TimeSpan.FromSeconds(30);
     private readonly Timer _sweeper;
@@ -151,14 +153,21 @@ public sealed class AgentSessionManager : IDisposable
             confirmedAt = timestamp > now ? now : timestamp;
         }
 
-        var session = _sessions.GetOrAdd(key, _ => new AgentSession
+        AgentSession session;
+        lock (_sessionGate)
         {
-            Provider = ev.Provider,
-            SessionId = ev.SessionId,
-            State = SessionActivity.Unknown,
-            Stale = true,
-            LastEventUtc = DateTimeOffset.MinValue,
-        });
+            if (!_sessions.TryGetValue(key, out var existing)
+                && _sessions.Count >= MaxTrackedSessions)
+                return Reject("session_capacity");
+            session = existing ?? _sessions.GetOrAdd(key, _ => new AgentSession
+            {
+                Provider = ev.Provider,
+                SessionId = ev.SessionId,
+                State = SessionActivity.Unknown,
+                Stale = true,
+                LastEventUtc = DateTimeOffset.MinValue,
+            });
+        }
 
         lock (session)
         {

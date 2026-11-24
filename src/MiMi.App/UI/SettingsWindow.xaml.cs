@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
     private bool _loading = true;
     private bool _sliderPending;
     private bool _refreshingProviders;
+    private bool _updatingAutoStart;
     private readonly DispatcherTimer _sliderSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
 
     private readonly Func<bool> _hotkeyStatus;
@@ -231,8 +232,16 @@ public partial class SettingsWindow : Window
 
     private void AutoStart_Changed(object sender, RoutedEventArgs e)
     {
-        if (_loading) return;
+        if (_loading || _updatingAutoStart) return;
         var enable = AutoStartToggle.IsChecked == true;
+        if (!AutoStart.Set(enable))
+        {
+            _updatingAutoStart = true;
+            AutoStartToggle.IsChecked = !enable;
+            _updatingAutoStart = false;
+            ShowSaveFailure(new IOException("Windows did not accept the Start with Windows change."));
+            return;
+        }
         try
         {
             _autoStartChanged(enable);
@@ -241,6 +250,11 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
+            AutoStart.Set(!enable);
+            _autoStartChanged(!enable);
+            _updatingAutoStart = true;
+            AutoStartToggle.IsChecked = !enable;
+            _updatingAutoStart = false;
             ShowSaveFailure(ex);
         }
     }

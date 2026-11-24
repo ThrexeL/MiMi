@@ -27,4 +27,11 @@ public sealed class DedupStore
     }
 
     public int Count => _seen.Count;
+
+    /// <summary>Forgets an id when delivery was rejected before publication, so the
+    /// same provider payload can be retried after a transient capacity failure.</summary>
+    public void Forget(string id)
+    {
+        if (!string.IsNullOrEmpty(id)) _seen.TryRemove(id, out _);
+    }
 }

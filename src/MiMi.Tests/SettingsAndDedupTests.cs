@@ -74,6 +74,15 @@ public class DedupTests
     }
 
     [Fact]
+    public void Forget_AllowsRejectedDeliveryToBeRetried()
+    {
+        var store = new DedupStore();
+        Assert.True(store.TryRecord("retry"));
+        store.Forget("retry");
+        Assert.True(store.TryRecord("retry"));
+    }
+
+    [Fact]
     public void EmptyId_AlwaysAccepted()
     {
         var store = new DedupStore();

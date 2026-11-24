@@ -40,6 +40,21 @@ public class IslandStateManagerTests
     }
 
     [Fact]
+    public void UserPanel_OutranksCompletion_ButYieldsToFailure()
+    {
+        using var manager = new IslandStateManager();
+        object? effective = null;
+        manager.EffectiveContentChanged += c => effective = c;
+
+        manager.SetPinned(IslandPriority.UserPanel, "PANEL");
+        manager.Push(new IslandAlert { Id = "done", Priority = IslandPriority.AgentCompletion, Content = "DONE" });
+        Assert.Equal("PANEL", effective);
+
+        manager.Push(new IslandAlert { Id = "failed", Priority = IslandPriority.AgentFailure, Content = "FAILED" });
+        Assert.Equal("FAILED", effective);
+    }
+
+    [Fact]
     public void DuplicatePush_DoesNotFireAgain()
     {
         using var manager = new IslandStateManager();
@@ -245,6 +260,70 @@ public class NamedPipeAgentBridgeTests
             await Task.Delay(50);
 
         Assert.Equal(ApprovalDecision.Dismissed, approvals.Get("ap-drop")?.Decision);
+    }
+
+    [Fact]
+    public async Task CapacityRejectedApproval_CanBeRetriedWithSameEventId()
+    {
+        var bus = new AgentEventBus();
+        using var approvals = new ApprovalStore(maxPendingApprovals: 1);
+        Assert.NotNull(approvals.Register(AgentEventFactory.Create("sim", "s1",
+            AgentEventTypes.ApprovalRequested, approvalRequestId: "existing")));
+        var token = "testtoken" + new string('8', 55);
+        await using var bridge = new NamedPipeAgentBridge(bus, approvals, token, pipeName: $"mimi-test-{Guid.NewGuid():N}");
+        bridge.Start();
+
+        await using var client = new NamedPipeClientStream(".", bridge.PipeName, PipeDirection.InOut);
+        await client.ConnectAsync(5000);
+        await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "hello", Token = token }, CancellationToken.None);
+
+        var approval = AgentEventFactory.Create("sim", "s1", AgentEventTypes.ApprovalRequested,
+            eventId: "retryable", approvalRequestId: "retryable");
+        var rejected = await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "event", Event = approval }, CancellationToken.None);
+        Assert.False(rejected!.Ok);
+        Assert.Equal("approval capacity exceeded", rejected.Error);
+
+        Assert.True(approvals.TryDecide("existing", ApprovalDecision.Denied, "user"));
+        var accepted = await SendAndReceiveAsync(client, new BridgeProtocol { Kind = "event", Event = approval }, CancellationToken.None);
+        Assert.True(accepted!.Ok, accepted.Error);
+        Assert.True(approvals.Get("retryable")!.IsPending);
+    }
+
+    [Fact]
+    public async Task ApprovalResolution_RequiresOwner_AndResponseIsNotBroadcast()
+    {
+        var bus = new AgentEventBus();
+        using var approvals = new ApprovalStore();
+        var token = "testtoken" + new string('7', 55);
+        await using var bridge = new NamedPipeAgentBridge(bus, approvals, token, pipeName: $"mimi-test-{Guid.NewGuid():N}");
+        bridge.Start();
+
+        await using var owner = new NamedPipeClientStream(".", bridge.PipeName, PipeDirection.InOut);
+        await using var other = new NamedPipeClientStream(".", bridge.PipeName, PipeDirection.InOut);
+        await owner.ConnectAsync(5000);
+        await other.ConnectAsync(5000);
+        await SendAndReceiveAsync(owner, new BridgeProtocol { Kind = "hello", Token = token, Client = "owner" }, CancellationToken.None);
+        await SendAndReceiveAsync(other, new BridgeProtocol { Kind = "hello", Token = token, Client = "other" }, CancellationToken.None);
+
+        var approval = AgentEventFactory.Create("sim", "s1", AgentEventTypes.ApprovalRequested, approvalRequestId: "ap-private");
+        var requestAck = await SendAndReceiveAsync(owner, new BridgeProtocol { Kind = "event", Event = approval }, CancellationToken.None);
+        Assert.True(requestAck!.Ok, requestAck.Error);
+
+        var forged = AgentEventFactory.Create("sim", "s1", AgentEventTypes.ApprovalResolved,
+            approvalRequestId: "ap-private", metadata: new Dictionary<string, string> { ["decision"] = "approved" });
+        var forgedAck = await SendAndReceiveAsync(other, new BridgeProtocol { Kind = "event", Event = forged }, CancellationToken.None);
+        Assert.False(forgedAck!.Ok);
+        Assert.Equal("approval owner mismatch", forgedAck.Error);
+        Assert.True(approvals.Get("ap-private")!.IsPending);
+
+        Assert.True(approvals.TryDecide("ap-private", ApprovalDecision.Approved, "user"));
+        var response = BridgeProtocol.Deserialize((await BridgeProtocol.ReadFrameAsync(owner, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5)))!);
+        Assert.Equal("approval_resolved", response!.Kind);
+        Assert.Equal("ap-private", response.ApprovalRequestId);
+
+        using var noFrame = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => BridgeProtocol.ReadFrameAsync(other, noFrame.Token));
     }
 
     [Fact]

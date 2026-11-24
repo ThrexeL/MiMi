@@ -23,6 +23,7 @@ namespace MiMi.Bridge;
 ///   { "kind": "ack",    "ok": true }  |  { "kind": "ack", "ok": false, "error": "..." }
 ///   { "kind": "approval_resolved", "approval_request_id": "...",
 ///     "decision": "approved|denied|expired", "by": "user", "at": "..." }
+///     (sent only to the connection that requested that approval)
 ///
 /// The pipe is created with an ACL granting only the current user and SYSTEM, so another
 /// user's process cannot connect even before the token check.

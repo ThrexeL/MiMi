@@ -36,6 +36,8 @@ public partial class MiMiMascotControl : UserControl
 
     private readonly DispatcherTimer _blinkTimer;
     private readonly DispatcherTimer _dartTimer;
+    private DispatcherTimer? _blinkReopenTimer;
+    private DispatcherTimer? _dartBackTimer;
     private Storyboard? _bobStoryboard;
     private Storyboard? _sleepZStoryboard;
     private readonly Random _random = new();
@@ -214,6 +216,18 @@ public partial class MiMiMascotControl : UserControl
     {
         _blinkTimer.Stop();
         _dartTimer.Stop();
+        _blinkReopenTimer?.Stop();
+        _blinkReopenTimer = null;
+        _dartBackTimer?.Stop();
+        _dartBackTimer = null;
+        EyeLMove.BeginAnimation(TranslateTransform.XProperty, null);
+        EyeRMove.BeginAnimation(TranslateTransform.XProperty, null);
+        EyeLMove.X = 0;
+        EyeRMove.X = 0;
+        EyeLBlink.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        EyeRBlink.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        EyeLBlink.ScaleY = Pose(Expression).Sy;
+        EyeRBlink.ScaleY = Pose(Expression).Sy;
         StopBob();
         StopSleepZs();
     }
@@ -307,10 +321,18 @@ public partial class MiMiMascotControl : UserControl
                 new DoubleAnimation(eye.ScaleY, 0.12, close) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn } });
         }
         _blinkTimer.Stop();
-        var reopen = new DispatcherTimer { Interval = close };
-        reopen.Tick += (_, _) =>
+        _blinkReopenTimer?.Stop();
+        _blinkReopenTimer = new DispatcherTimer { Interval = close };
+        _blinkReopenTimer.Tick += (_, _) =>
         {
-            reopen.Stop();
+            _blinkReopenTimer.Stop();
+            _blinkReopenTimer = null;
+            if (!IsVisible || !IsLoaded || !MascotOptions.FaceEnabled
+                || !MascotOptions.AnimationsEnabled || MascotOptions.ReducedMotion)
+            {
+                ApplyExpression(Expression, animated: false);
+                return;
+            }
             if (Expression == MascotExpression.Sleepy)
             {
                 ApplyExpression(MascotExpression.Sleepy, animated: false);
@@ -325,9 +347,9 @@ public partial class MiMiMascotControl : UserControl
             _blinkTimer.Interval = _random.NextDouble() < 0.2
                 ? TimeSpan.FromMilliseconds(260) // double blink soon
                 : NextBlinkDelay();
-            _blinkTimer.Start();
+            StartLife();
         };
-        reopen.Start();
+        _blinkReopenTimer.Start();
     }
 
     /// <summary>Rare tiny glance to one side, then back. Keeps MiMi feeling aware.</summary>
@@ -340,10 +362,14 @@ public partial class MiMiMascotControl : UserControl
             eye.BeginAnimation(TranslateTransform.XProperty,
                 new DoubleAnimation(0, direction, TimeSpan.FromMilliseconds(240)) { EasingFunction = ease });
         }
+        _dartBackTimer?.Stop();
         var back = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        _dartBackTimer = back;
         back.Tick += (_, _) =>
         {
             back.Stop();
+            _dartBackTimer = null;
+            if (!IsVisible || !IsLoaded) return;
             foreach (var eye in new[] { EyeLMove, EyeRMove })
             {
                 eye.BeginAnimation(TranslateTransform.XProperty,

@@ -24,6 +24,7 @@ public sealed class GsmtcMediaService : IMediaService
     private WindowsMediaControl.GlobalSystemMediaTransportControlsSession? _activeSession;
     private Timer? _debounce;
     private int _dirty;
+    private int _snapshotGeneration;
 
     public event Action<MediaSnapshot?>? Changed;
 
@@ -102,6 +103,7 @@ public sealed class GsmtcMediaService : IMediaService
 
     private async Task RefreshSnapshotAsync()
     {
+        var generation = Interlocked.Increment(ref _snapshotGeneration);
         WindowsMediaControl.GlobalSystemMediaTransportControlsSession? session;
         lock (_gate)
         {
@@ -109,13 +111,16 @@ public sealed class GsmtcMediaService : IMediaService
         }
         if (session is null)
         {
+            if (generation != Volatile.Read(ref _snapshotGeneration)) return;
             _activeSession = null;
             Publish(null);
             return;
         }
 
-        _activeSession = session;
         var snapshot = await BuildSnapshotAsync(session);
+        // A slower older refresh must never overwrite a newer track/artwork snapshot.
+        if (generation != Volatile.Read(ref _snapshotGeneration)) return;
+        _activeSession = session;
         Publish(snapshot);
     }
 
@@ -224,6 +229,7 @@ public sealed class GsmtcMediaService : IMediaService
 
     public async ValueTask DisposeAsync()
     {
+        Interlocked.Increment(ref _snapshotGeneration); // invalidate any in-flight publish
         try
         {
             _cts?.Cancel();

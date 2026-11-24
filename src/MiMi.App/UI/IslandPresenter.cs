@@ -36,6 +36,7 @@ public sealed class IslandPresenter
     private ShelfView? _shelfCachedView;
     private readonly UtilityPinState _utilityPins = new();
     private readonly DragRevertPolicy _shelfDrag = new();
+    private bool _shelfDragAutoOpened;
     private readonly QuickAccessViewModel _quickAccessVm;
     private QuickAccessView? _quickAccessView;
     private readonly AgentNotificationCoordinator _notifications = new();
@@ -51,6 +52,7 @@ public sealed class IslandPresenter
     private int _approvalQueueIndex;
 
     private readonly DispatcherTimer _sessionSweeper;
+    private int _sessionRefreshQueued;
 
     // Living personality: persistent mood + one brief one-shot reaction.
     private readonly DispatcherTimer _reactionTimer;
@@ -96,8 +98,9 @@ public sealed class IslandPresenter
             RefreshPinned();
         });
 
-        // Session-manager changes arrive on worker threads; refresh silently on the UI.
-        _sessions.SessionChanged += _ => _dispatcher.BeginInvoke(RefreshPinned);
+        // Session-manager changes arrive on worker threads; coalesce bursts into one
+        // dispatcher refresh instead of posting work for every telemetry frame.
+        _sessions.SessionChanged += _ => QueueSessionRefresh();
 
         // ApprovalStore.Resolved is wired once by the composition root (App), which also
         // logs decisions. Subscribing here as well would handle every resolution twice.
@@ -124,6 +127,21 @@ public sealed class IslandPresenter
             RefreshPinned();
         };
         _quietTimer.Start();
+    }
+
+    private void QueueSessionRefresh()
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            RefreshPinned();
+            return;
+        }
+        if (Interlocked.Exchange(ref _sessionRefreshQueued, 1) == 1) return;
+        _dispatcher.BeginInvoke(() =>
+        {
+            Interlocked.Exchange(ref _sessionRefreshQueued, 0);
+            RefreshPinned();
+        }, DispatcherPriority.Background);
     }
 
     public AgentSessionManager Sessions => _sessions;
@@ -214,16 +232,35 @@ public sealed class IslandPresenter
     public void ShelfDragEnter()
     {
         _shelfDrag.Enter(DateTimeOffset.UtcNow);
+        if (!_utilityPins.IsPinned(UtilityPinState.Shelf))
+        {
+            _shelfDragAutoOpened = true;
+            _utilityPins.SetPin(UtilityPinState.Shelf, true);
+        }
         RefreshPinned();
     }
 
     /// <summary>The drag left without dropping: revert after the grace period.</summary>
     public void ShelfDragLeave() => _shelfDrag.Leave(DateTimeOffset.UtcNow);
 
+    /// <summary>Closes a shelf that was opened only as a drag preview. A shelf the
+    /// user had already pinned remains open.</summary>
+    public void EndShelfDragPreview()
+    {
+        _shelfDrag.Dropped();
+        if (_shelfDragAutoOpened)
+        {
+            _shelfDragAutoOpened = false;
+            _utilityPins.SetPin(UtilityPinState.Shelf, false);
+        }
+        RefreshPinned();
+    }
+
     /// <summary>The drop landed: shelve the files and keep the shelf open briefly.</summary>
     public void ShelfDrop(IEnumerable<string> paths)
     {
         _shelfDrag.Dropped();
+        _shelfDragAutoOpened = false; // a completed drop intentionally leaves the shelf open
         AddToShelf(paths);
         _dispatcher.BeginInvoke(ShelfDragRevert, DateTimeOffset.Now + TimeSpan.FromSeconds(4));
     }
@@ -287,9 +324,9 @@ public sealed class IslandPresenter
     /// <summary>System HUD: same-title HUDs replace the running alert (rapid volume
     /// keypresses update one toast instead of stacking), auto-expiring shortly after.</summary>
     public void PushHud(string iconGlyph, string title, string subLabel, double? progress = null,
-        TimeSpan? duration = null)
+        TimeSpan? duration = null, string? hudId = null)
     {
-        var id = "hud:" + title;
+        var id = "hud:" + (hudId ?? title);
         _state.Clear(id);
         _state.Push(new IslandAlert
         {
@@ -909,9 +946,16 @@ public sealed class IslandPresenter
         // Session indicator follows the decision (UI decision or provider-side).
         _sessions.MarkApprovalResolved(request.Provider, request.SessionId, request.ApprovalRequestId);
 
+        var selectedId = _approvalQueue.ElementAtOrDefault(_approvalQueueIndex);
+        var removedIndex = _approvalQueue.IndexOf(request.ApprovalRequestId);
         if (_approvalQueue.Remove(request.ApprovalRequestId) && _approvalQueue.Count > 0)
         {
-            _approvalQueueIndex = Math.Clamp(_approvalQueueIndex, 0, _approvalQueue.Count - 1);
+            if (string.Equals(selectedId, request.ApprovalRequestId, StringComparison.Ordinal))
+                _approvalQueueIndex = Math.Clamp(removedIndex, 0, _approvalQueue.Count - 1);
+            else
+                _approvalQueueIndex = Math.Clamp(
+                    _approvalQueueIndex - (removedIndex >= 0 && removedIndex < _approvalQueueIndex ? 1 : 0),
+                    0, _approvalQueue.Count - 1);
             EnqueueApproval(_approvalQueue[_approvalQueueIndex], isNavigating: true);
         }
 

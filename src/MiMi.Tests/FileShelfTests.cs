@@ -121,6 +121,18 @@ public class FileShelfStoreTests : IDisposable
     }
 
     [Fact]
+    public void Load_RejectsNullEntries_AndEnforcesCapacity()
+    {
+        var rows = Enumerable.Range(0, FileShelfStore.Capacity + 5)
+            .Select(i => $"{{ \"path\": \"C:\\\\tmp\\\\f{i}.txt\" }}");
+        File.WriteAllText(_storePath, "[null," + string.Join(',', rows) + "]");
+
+        var store = new FileShelfStore(_storePath);
+        Assert.Equal(FileShelfStore.Capacity, store.Count);
+        Assert.All(store.Items, item => Assert.False(string.IsNullOrWhiteSpace(item.Path)));
+    }
+
+    [Fact]
     public void FormatSize_HumanReadable()
     {
         Assert.Equal("500 B", FileShelfStore.FormatSize(500));

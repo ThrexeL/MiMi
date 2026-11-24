@@ -95,10 +95,14 @@ public sealed class FileShelfStore
         {
             if (!File.Exists(_path)) return;
             var items = JsonSerializer.Deserialize<List<ShelfItem>>(File.ReadAllText(_path));
-            if (items is not null) _items.AddRange(items);
+            if (items is not null)
+                _items.AddRange(items.Where(i => i is not null
+                    && !string.IsNullOrWhiteSpace(i.Path) && i.Path.Length <= 500).Take(Capacity));
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or JsonException or InvalidOperationException or FormatException)
         {
+            Logger.Warn($"Shelf: could not load '{_path}' ({ex.GetType().Name}); starting with an empty shelf.");
             try { File.Copy(_path, _path + ".corrupt", overwrite: true); } catch { /* best effort */ }
         }
     }

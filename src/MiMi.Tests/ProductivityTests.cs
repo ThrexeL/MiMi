@@ -158,6 +158,20 @@ public class WaterTrackerTests
     }
 
     [Fact]
+    public void Load_ValidJsonWithInvalidSchema_StartsFresh()
+    {
+        var path = TempPath();
+        try
+        {
+            File.WriteAllText(path, "{\"day\":42,\"ml\":\"bad\",\"entries\":[null]}");
+            var loaded = WaterTracker.Load(path);
+            Assert.Equal(0, loaded.TodayMl);
+            Assert.Empty(loaded.TodayEntries);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Reminders_RespectInterval_Snooze_AndQuietHours()
     {
         var t = new WaterTracker { ReminderIntervalMinutes = 60 };
@@ -240,6 +254,15 @@ public class TodoStoreTests : IDisposable
         store.Add("still works");
         store.Save();
         Assert.True(File.Exists(_path));
+    }
+
+    [Fact]
+    public void Load_ValidJsonWithInvalidSchema_StartsFresh()
+    {
+        File.WriteAllText(_path, "[null,{\"title\":null},{}]");
+        var store = new TodoStore(_path);
+        Assert.Equal(2, store.Items.Count);
+        Assert.All(store.Items, item => Assert.NotNull(item.Title));
     }
 
     [Fact]

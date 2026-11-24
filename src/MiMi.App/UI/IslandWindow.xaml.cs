@@ -74,6 +74,7 @@ public partial class IslandWindow : Window
     private readonly Action<string[]>? _shelfDrop;
     private readonly Action<string>? _shelfRemove;
     private readonly Action? _shelfOpen;
+    private readonly Action? _shelfClose;
     private readonly Action? _quickAccessOpen;
     private bool _shelfDragActive;
     private DispatcherTimer? _shelfRevertTimer;
@@ -93,7 +94,8 @@ public partial class IslandWindow : Window
         Action<string>? shelfRemove = null,
         Action? shelfOpen = null,
         Action? quickAccessOpen = null,
-        Action? closeUtility = null)
+        Action? closeUtility = null,
+        Action? shelfClose = null)
     {
         CloseUtilityCommand = new RelayCommand(() => closeUtility?.Invoke());
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
@@ -101,6 +103,7 @@ public partial class IslandWindow : Window
         _shelfDrop = shelfDrop;
         _shelfRemove = shelfRemove;
         _shelfOpen = shelfOpen;
+        _shelfClose = shelfClose;
         _quickAccessOpen = quickAccessOpen;
         _config = config;
         _contentProvider = contentProvider;
@@ -119,7 +122,7 @@ public partial class IslandWindow : Window
             RegisterGlobalHotkey();
         };
 
-        Closed += (_, _) => UnregisterGlobalHotkey();
+        Closed += (_, _) => ReleaseGlobalHotkey();
 
         Coordinator.Changed += RecomputeVisibility;
 
@@ -153,7 +156,6 @@ public partial class IslandWindow : Window
             // Dragging toward MiMi auto-opens the shelf so the drop target is visible.
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                _shelfOpen?.Invoke();
                 OnShelfDragSessionStarted();
             }
             e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
@@ -235,6 +237,15 @@ public partial class IslandWindow : Window
 
         var source = System.Windows.Interop.HwndSource.FromHwnd(PillHandle);
         source?.AddHook(WndProcHook);
+    }
+
+    public void ReleaseGlobalHotkey()
+    {
+        UnregisterGlobalHotkey();
+        if (PillHandle == IntPtr.Zero || !_hotkeyHooked) return;
+        var source = System.Windows.Interop.HwndSource.FromHwnd(PillHandle);
+        source?.RemoveHook(WndProcHook);
+        _hotkeyHooked = false;
     }
 
     private void UnregisterGlobalHotkey()
@@ -409,18 +420,19 @@ public partial class IslandWindow : Window
         if (!IsVisible || PillHandle == IntPtr.Zero) return;
 
         var exStyle = Interop.NativeMethods.GetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE).ToInt64();
-        if ((exStyle & Interop.NativeMethods.WS_EX_TOPMOST) == 0)
-        {
-            Interop.NativeMethods.SetWindowPos(PillHandle, Interop.NativeMethods.HwndTopmost, 0, 0, 0, 0,
-                Interop.NativeMethods.SWP_NOMOVE | Interop.NativeMethods.SWP_NOSIZE
-                | Interop.NativeMethods.SWP_NOACTIVATE | Interop.NativeMethods.SWP_NOOWNERZORDER);
-            Logger.Info("Visibility: re-asserted topmost after shell z-order change.");
-        }
-        else if (Interop.NativeMethods.IsIconic(PillHandle))
-        {
+        var hadTopmostStyle = (exStyle & Interop.NativeMethods.WS_EX_TOPMOST) != 0;
+        var wasIconic = Interop.NativeMethods.IsIconic(PillHandle);
+
+        // The style bit can remain set while another topmost window or shell reshuffle
+        // leaves MiMi lower in the actual z-order. Reassert unconditionally on relevant
+        // foreground/shell events; SWP_NOACTIVATE keeps this non-disruptive.
+        Interop.NativeMethods.SetWindowPos(PillHandle, Interop.NativeMethods.HwndTopmost, 0, 0, 0, 0,
+            Interop.NativeMethods.SWP_NOMOVE | Interop.NativeMethods.SWP_NOSIZE
+            | Interop.NativeMethods.SWP_NOACTIVATE | Interop.NativeMethods.SWP_NOOWNERZORDER);
+        if (wasIconic)
             Interop.NativeMethods.ShowWindow(PillHandle, 4 /* SW_SHOWNOACTIVATE */);
-            Logger.Info("Visibility: restored minimized window without activation.");
-        }
+        if (!hadTopmostStyle || wasIconic)
+            Logger.Info("Visibility: restored topmost/minimized state without activation.");
     }
 
     // ---- public surface ------------------------------------------------------
@@ -696,9 +708,25 @@ public partial class IslandWindow : Window
         {
             _shelfRevertTimer.Stop();
             _shelfDragActive = false;
-            _shelfOpen?.Invoke(); // presenter collapses back via SetUtilityPin(false)
+            _shelfClose?.Invoke(); // restore only a shelf MiMi auto-opened for this drag
         };
         _shelfRevertTimer.Start();
+    }
+
+    private void TodoInput_Click(object sender, MouseButtonEventArgs e)
+    {
+        // The overlay is normally non-activating. Only an explicit click on its
+        // input box may activate it so the user can type; nothing steals focus.
+        Activate();
+        if (sender is TextBox input) input.Focus();
+        e.Handled = true;
+    }
+
+    private void TodoInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not FrameworkElement { DataContext: TodoViewModel todo }) return;
+        if (todo.AddCommand.CanExecute(null)) todo.AddCommand.Execute(null);
+        e.Handled = true;
     }
 
     private void IdleFaceClick(object sender, MouseButtonEventArgs e)
@@ -945,14 +973,29 @@ public partial class IslandWindow : Window
         {
             border.PreviewMouseLeftButtonDown += (_, e) =>
             {
-                if (e.ClickCount != 1) return;
+                if (e.ClickCount != 1 || IsInsideButton(e.OriginalSource)) return;
+                if (!File.Exists(path) && !Directory.Exists(path)) return;
                 var data = new DataObject(DataFormats.FileDrop, new[] { path });
-                DragDrop.DoDragDrop(border, data, DragDropEffects.Move | DragDropEffects.Copy);
+                // References only: never advertise Move, which could let a drop target
+                // remove the user's original after MiMi described the shelf as copy-only.
+                DragDrop.DoDragDrop(border, data, DragDropEffects.Copy);
             };
         }
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
             WireShelfDragOutRecursive(VisualTreeHelper.GetChild(root, i));
+    }
+
+    private static bool IsInsideButton(object? source)
+    {
+        for (var current = source as DependencyObject; current is not null;
+             current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(current)
+                 : LogicalTreeHelper.GetParent(current))
+        {
+            if (current is ButtonBase) return true;
+        }
+        return false;
     }
 
     private static FrameworkElement? FindDescendant(DependencyObject root, string name)

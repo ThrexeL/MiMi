@@ -8,14 +8,13 @@ public enum IslandPriority
     Approval = 0,
     CriticalSystem = 1,
     AgentFailure = 2,
-    AgentCompletion = 3,
-    UserPanel = 3,        // explicitly opened utility panel (same rank as completions,
-                          // but pinned content at this level only yields to approvals
-                          // and failures)
-    Utility = 4,          // running utilities (timer counting down)
-    Media = 5,
-    SystemInfo = 6,
-    Idle = 7,
+    UserPanel = 3,        // explicitly opened utility panel; only approvals,
+                          // critical system events, and failures displace it
+    AgentCompletion = 4,
+    Utility = 5,          // running utilities (timer counting down)
+    Media = 6,
+    SystemInfo = 7,
+    Idle = 8,
 }
 
 /// <summary>A transient piece of content the island should show for a limited time.</summary>

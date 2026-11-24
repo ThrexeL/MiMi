@@ -132,7 +132,13 @@ public class IslandVisualLayoutTests
             var emptyHint = Assert.Single(Descendants<TextBlock>(todoRoot),
                 t => BindingPath(t, UIElement.VisibilityProperty) == "Todo.HasNoRows");
             Assert.Equal(rowCount == 0 ? Visibility.Visible : Visibility.Collapsed, emptyHint.Visibility);
-            Assert.Contains("tray menu", emptyHint.Text);
+            Assert.Contains("first task above", emptyHint.Text);
+            var input = Assert.Single(Descendants<TextBox>(todoRoot),
+                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
+            Assert.Equal("New task title", AutomationProperties.GetName(input));
+            var add = Assert.Single(Descendants<Button>(todoRoot),
+                b => BindingPath(b, Button.CommandProperty) == "Todo.AddCommand");
+            Assert.Same(todo.AddCommand, add.Command);
             Assert.Equal(rowCount, Descendants<Button>(todoRoot)
                 .Count(b => BindingPath(b, Button.CommandProperty) == "CompleteCommand"));
             AssertBackCommand(window, todoRoot);

@@ -92,11 +92,19 @@ public sealed class TodoStore
         {
             if (!File.Exists(_path)) return;
             var items = JsonSerializer.Deserialize<List<TodoItem>>(File.ReadAllText(_path));
-            if (items is not null) _items.AddRange(items);
+            if (items is not null)
+            {
+                foreach (var item in items.Where(i => i is not null))
+                {
+                    item.Title ??= "";
+                    _items.Add(item);
+                }
+            }
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or JsonException or InvalidOperationException or FormatException)
         {
-            // Corrupt file: rename it aside and start fresh rather than crashing.
+            Logger.Warn($"To-do: could not load '{_path}' ({ex.GetType().Name}); starting with an empty list.");
             try { File.Copy(_path, _path + ".corrupt", overwrite: true); } catch { /* best effort */ }
         }
     }

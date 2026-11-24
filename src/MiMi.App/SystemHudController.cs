@@ -110,10 +110,10 @@ public sealed class SystemHudController : IDisposable
         _dispatcher.BeginInvoke(() =>
         {
             if (muted)
-                _presenter.PushHud("\uE74F", "Muted", "Sound is off", duration: TimeSpan.FromSeconds(1.2));
+                _presenter.PushHud("\uE74F", "Muted", "Sound is off", duration: TimeSpan.FromSeconds(1.2), hudId: "volume");
             else
-                _presenter.PushHud("\uE767", $"Volume {percent}%", "", progress: level,
-                    duration: TimeSpan.FromSeconds(1.2));
+                _presenter.PushHud("\uE767", "Volume", $"{percent}%", progress: level,
+                    duration: TimeSpan.FromSeconds(1.2), hudId: "volume");
         });
     }
 

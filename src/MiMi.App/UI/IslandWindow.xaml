@@ -122,6 +122,21 @@
             </Setter>
         </Style>
 
+        <Style x:Key="IslandInput" TargetType="TextBox">
+            <Setter Property="Background" Value="#1EFFFFFF"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource AccentAmber}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Stroke}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI"/>
+            <Setter Property="FontSize" Value="{DynamicResource FontBody}"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource IslandFocusCue}"/>
+            <Setter Property="ToolTip" Value="Type a task, then press Enter or Add"/>
+        </Style>
+
         <!-- ============================ buttons ============================ -->
         <Style x:Key="GhostButton" TargetType="Button">
             <Setter Property="Background" Value="#14FFFFFF"/>
@@ -735,6 +750,21 @@
                                Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
                                Text="{Binding Todo.HeaderCount}"/>
                 </Grid>
+                <Grid Margin="0,0,0,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="NewTaskInput" Grid.Column="0" Style="{StaticResource IslandInput}"
+                             MaxLength="200" AcceptsReturn="False"
+                             Text="{Binding Todo.NewTaskTitle, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.Name="New task title"
+                             PreviewMouseLeftButtonDown="TodoInput_Click"
+                             KeyDown="TodoInput_KeyDown"/>
+                    <Button Grid.Column="1" Style="{StaticResource ApproveButton}" Padding="12,6" Margin="7,0,0,0"
+                            Command="{Binding Todo.AddCommand}" ToolTip="Add task"
+                            Content="Add"/>
+                </Grid>
                 <ItemsControl ItemsSource="{Binding Todo.Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -756,7 +786,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <TextBlock Style="{StaticResource PanelHint}" Margin="0,6,0,0"
-                           Text="You’re all caught up. Add a task from the tray menu."
+                           Text="You’re all caught up. Add your first task above."
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>

@@ -221,7 +221,15 @@ public sealed class TodoViewModel : ObservableObject
     private IReadOnlyList<TodoRowViewModel> _rows = Array.Empty<TodoRowViewModel>();
 
     public string HeaderCount { get => _headerCount; set => Set(ref _headerCount, value); }
-    public IReadOnlyList<TodoRowViewModel> Rows { get => _rows; set => Set(ref _rows, value); }
+    public IReadOnlyList<TodoRowViewModel> Rows
+    {
+        get => _rows;
+        set
+        {
+            if (!Set(ref _rows, value)) return;
+            Raise(nameof(HasNoRows));
+        }
+    }
     public bool HasNoRows => _rows.Count == 0;
     public string NewTaskTitle { get => _newTaskTitle; set => Set(ref _newTaskTitle, value); }
 

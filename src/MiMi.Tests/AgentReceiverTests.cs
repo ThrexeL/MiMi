@@ -79,6 +79,17 @@ public class AgentReceiverTests
     }
 
     [Fact]
+    public void SessionTracking_IsBoundedUnderUniqueSessionFlood()
+    {
+        using var manager = new AgentSessionManager();
+        for (var i = 0; i < AgentSessionManager.MaxTrackedSessions + 10; i++)
+            manager.Apply(AgentEventFactory.Create("flood", $"s-{i}", AgentEventTypes.Status));
+
+        Assert.Equal(AgentSessionManager.MaxTrackedSessions, manager.All.Count);
+        Assert.Null(manager.Get("flood", $"s-{AgentSessionManager.MaxTrackedSessions}"));
+    }
+
+    [Fact]
     public void EqualAndOlderSequencesCannotOverwriteOrFreshenAcrossTurns()
     {
         var clock = new Clock();

@@ -36,29 +36,41 @@ public sealed class WaterTracker
 
     public static WaterTracker Load(string path)
     {
-        var tracker = new WaterTracker { };
+        var tracker = new WaterTracker();
         try
         {
             if (!File.Exists(path)) return tracker;
-            var doc = JsonDocument.Parse(File.ReadAllText(path));
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
-            if (root.TryGetProperty("day", out var dayEl)
-                && DateTime.TryParse(dayEl.GetString(), out var day))
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("day", out var dayEl)
+                || dayEl.ValueKind != JsonValueKind.String
+                || !DateTime.TryParse(dayEl.GetString(), out var day))
+                return tracker;
+
+            tracker._day = day.Date;
+            if (root.TryGetProperty("ml", out var ml)
+                && ml.ValueKind == JsonValueKind.Number && ml.TryGetInt32(out var total) && total >= 0)
+                tracker._todayMl = total;
+            if (root.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array)
             {
-                tracker._day = day.Date;
-                tracker._todayMl = root.TryGetProperty("ml", out var ml) ? ml.GetInt32() : 0;
-                if (root.TryGetProperty("entries", out var entries))
+                foreach (var e in entries.EnumerateArray().Take(40))
                 {
-                    foreach (var e in entries.EnumerateArray())
-                    {
-                        if (e.TryGetProperty("t", out var t) && DateTime.TryParse(t.GetString(), out var when)
-                            && e.TryGetProperty("ml", out var m))
-                            tracker._todayEntries.Add((when, m.GetInt32()));
-                    }
+                    if (e.ValueKind != JsonValueKind.Object
+                        || !e.TryGetProperty("t", out var t) || t.ValueKind != JsonValueKind.String
+                        || !DateTime.TryParse(t.GetString(), out var when)
+                        || !e.TryGetProperty("ml", out var m) || m.ValueKind != JsonValueKind.Number
+                        || !m.TryGetInt32(out var amount) || amount <= 0)
+                        continue;
+                    tracker._todayEntries.Add((when, amount));
                 }
             }
         }
-        catch (JsonException) { /* corrupt file: start fresh */ }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or JsonException or InvalidOperationException or FormatException)
+        {
+            Logger.Warn($"Water: could not load '{path}' ({ex.GetType().Name}); starting with an empty tracker.");
+        }
         tracker.RollbackIfNewDay(DateTime.Today);
         return tracker;
     }

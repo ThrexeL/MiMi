@@ -33,6 +33,11 @@ public partial class App : Application
     private ProviderIntegrationInspector _providerInspector = null!;
     private bool _ownsMutex;
 
+    private const int MaxQueuedAgentEvents = 512;
+    private readonly List<AgentEvent> _queuedAgentEvents = new();
+    private readonly object _agentEventGate = new();
+    private bool _agentEventFlushScheduled;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -86,7 +91,7 @@ public partial class App : Application
         _config.Changed += _ => Dispatcher.BeginInvoke(() =>
             mediaVm.ApplyLyricsSettings(_config.Current.LyricsOffsetMs, _config.Current.LyricsEnabled));
 
-        var water = new WaterTracker();
+        var water = WaterTracker.Load(WaterTracker.DefaultPath);
         var todos = new TodoStore();
         var shelf = new FileShelfStore();
         _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos, shelf);
@@ -100,9 +105,10 @@ public partial class App : Application
             mediaVm,
             () => _presenter.BuildAgentPanel(),
             secondTick: () => _presenter.OnSecondTick(),
-            shelfDrop: paths => Dispatcher.BeginInvoke(() => _presenter.AddToShelf(paths)),
+            shelfDrop: paths => _presenter.ShelfDrop(paths),
             shelfRemove: path => Dispatcher.BeginInvoke(() => _presenter.RemoveFromShelf(path)),
-            shelfOpen: () => _presenter.SetUtilityPin("shelf", true),
+            shelfOpen: () => _presenter.ShelfDragEnter(),
+            shelfClose: () => _presenter.EndShelfDragPreview(),
             quickAccessOpen: () => _presenter.OpenQuickAccess(),
             closeUtility: () => _presenter.CloseUtilityPanel());
         _island.Show();
@@ -124,6 +130,7 @@ public partial class App : Application
             }),
             desktopPersistEnabled: () => _config.Current.DesktopPersistVisible);
         _fullscreen.SetSelfWindow(_island.PillHandle);
+        _fullscreen.Refresh(); // autostart may begin while a fullscreen app is already foreground
         _fullscreen.ForegroundChanged += () => Dispatcher.BeginInvoke(() =>
         {
             if (_config.Current.DesktopPersistVisible) _island.ReassertTopmost();
@@ -163,12 +170,21 @@ public partial class App : Application
         // Bridge: secure local named pipe receiver (Phase 2 foundation).
         if (_config.Current.BridgeEnabled)
         {
-            var token = BridgeProtocol.EnsureToken(ConfigStore.DefaultDirectory);
-            _bridge = new NamedPipeAgentBridge(_bus, _approvals, token);
-            _bridge.Start();
+            try
+            {
+                var token = BridgeProtocol.EnsureToken(ConfigStore.DefaultDirectory);
+                _bridge = new NamedPipeAgentBridge(_bus, _approvals, token);
+                _bridge.Start();
+            }
+            catch (Exception ex)
+            {
+                // A locked/permission-denied token path disables only the bridge;
+                // the overlay and local utilities must still start.
+                Logger.Error("Bridge: startup failed; continuing without the agent bridge", ex);
+            }
         }
 
-        _bus.Subscribe(ev => Dispatcher.BeginInvoke(() => _presenter.OnAgentEvent(ev)));
+        _bus.Subscribe(QueueAgentEvent);
 
         _approvals.Resolved += request => Dispatcher.BeginInvoke(() =>
         {
@@ -223,6 +239,49 @@ public partial class App : Application
 
         Logger.Info("MiMi started.");
     }
+
+    private void QueueAgentEvent(AgentEvent ev)
+    {
+        lock (_agentEventGate)
+        {
+            if (_queuedAgentEvents.Count >= MaxQueuedAgentEvents)
+            {
+                // Preserve approvals/failures. Under a telemetry flood, discard the
+                // oldest low-value update rather than growing an unbounded dispatcher queue.
+                var discard = _queuedAgentEvents.FindIndex(item =>
+                    item.Type != AgentEventTypes.ApprovalRequested && !IsCriticalAgentEvent(item));
+                if (discard < 0)
+                    discard = _queuedAgentEvents.FindIndex(item => item.Type != AgentEventTypes.ApprovalRequested);
+                if (discard < 0) discard = 0;
+                _queuedAgentEvents.RemoveAt(discard);
+            }
+            _queuedAgentEvents.Add(ev);
+            if (_agentEventFlushScheduled) return;
+            _agentEventFlushScheduled = true;
+        }
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, FlushAgentEvents);
+    }
+
+    private void FlushAgentEvents()
+    {
+        List<AgentEvent> batch;
+        lock (_agentEventGate)
+        {
+            batch = new List<AgentEvent>(_queuedAgentEvents);
+            _queuedAgentEvents.Clear();
+            _agentEventFlushScheduled = false;
+        }
+        foreach (var ev in batch)
+        {
+            try { _presenter.OnAgentEvent(ev); }
+            catch (Exception ex) { Logger.Error("Agent event handling failed", ex); }
+        }
+    }
+
+    private static bool IsCriticalAgentEvent(AgentEvent ev) => ev.Type is
+        AgentEventTypes.ApprovalRequested or AgentEventTypes.ApprovalResolved
+        or AgentEventTypes.Failed or AgentEventTypes.ToolFailed
+        || ev.Priority == AgentPriority.Critical;
 
     private async Task StartMediaAsync()
     {
@@ -284,11 +343,23 @@ public partial class App : Application
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;
                 case TrayMenuCommand.ToggleAutoStart:
                     var enable = !AutoStart.IsEnabled();
-                    AutoStart.Set(enable);
-                    _config.Update(s => s.StartWithWindows = enable);
+                    if (!AutoStart.Set(enable))
+                    {
+                        Logger.Warn("AutoStart toggle failed; setting was not changed.");
+                        break;
+                    }
+                    try { _config.Update(s => s.StartWithWindows = enable); }
+                    catch (Exception ex)
+                    {
+                        AutoStart.Set(!enable);
+                        Logger.Error("AutoStart setting could not be persisted; registry change rolled back", ex);
+                        break;
+                    }
                     _tray.SetAutoStartIndicator(enable);
                     break;
                 case TrayMenuCommand.Restart:
+                    // Release the old hotkey before the replacement can reach RegisterHotKey.
+                    _island.ReleaseGlobalHotkey();
                     // Release the single-instance mutex immediately so the new instance can acquire it successfully
                     if (_ownsMutex)
                     {

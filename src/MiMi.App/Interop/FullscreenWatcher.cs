@@ -130,16 +130,25 @@ public static class AutoStart
         return key?.GetValue(ValueName) is string;
     }
 
-    public static void Set(bool enabled)
+    public static bool Set(bool enabled)
     {
         try
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey);
             if (enabled)
-                key.SetValue(ValueName, Environment.ProcessPath ?? "", Microsoft.Win32.RegistryValueKind.String);
+            {
+                var executable = Environment.ProcessPath
+                    ?? throw new InvalidOperationException("MiMi executable path is unavailable.");
+                key.SetValue(ValueName, $"\"{executable}\"", Microsoft.Win32.RegistryValueKind.String);
+            }
             else
                 key.DeleteValue(ValueName, throwOnMissingValue: false);
+            return true;
         }
-        catch (Exception ex) { Logger.Error("AutoStart toggle failed", ex); }
+        catch (Exception ex)
+        {
+            Logger.Error("AutoStart toggle failed", ex);
+            return false;
+        }
     }
 }

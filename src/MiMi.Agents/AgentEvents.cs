@@ -56,22 +56,31 @@ public sealed class ApprovalRequest
 /// </summary>
 public sealed class ApprovalStore : IDisposable
 {
+    public const int MaxPendingApprovals = 64;
+    public const int MaxRetainedApprovals = 256;
+
     private readonly ConcurrentDictionary<string, ApprovalRequest> _requests = new();
+    private readonly object _registerGate = new();
     private readonly Timer _sweeper;
     private readonly TimeSpan _defaultTtl;
+    private readonly int _maxPendingApprovals;
 
     public event Action<ApprovalRequest>? Added;
     public event Action<ApprovalRequest>? Resolved;
 
-    public ApprovalStore(TimeSpan? defaultTtl = null)
+    public ApprovalStore(TimeSpan? defaultTtl = null, int maxPendingApprovals = MaxPendingApprovals)
     {
+        if (maxPendingApprovals is <= 0 or > MaxRetainedApprovals)
+            throw new ArgumentOutOfRangeException(nameof(maxPendingApprovals));
         _defaultTtl = defaultTtl ?? TimeSpan.FromMinutes(5);
+        _maxPendingApprovals = maxPendingApprovals;
         _sweeper = new Timer(_ => Sweep(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     public TimeSpan DefaultTtl => _defaultTtl;
 
-    /// <summary>Registers a pending approval from an event. Returns null for duplicates.</summary>
+    /// <summary>Registers a pending approval from an event. Returns null for duplicate
+    /// ids or when the pending-approval cap has been reached.</summary>
     public ApprovalRequest? Register(AgentEvent ev, TimeSpan? ttl = null)
     {
         if (ev.ApprovalRequestId is not { Length: > 0 } id) return null;
@@ -85,11 +94,19 @@ public sealed class ApprovalStore : IDisposable
             ActionKind = ev.Metadata.TryGetValue("action_kind", out var kind) ? kind : "",
             Command = ev.Metadata.TryGetValue("command", out var cmd) ? cmd : "",
             Message = ev.Message,
-            CreatedUtc = ev.TimestampUtc,
+            // Sender clocks are advisory. TTL starts when MiMi receives the request,
+            // never when a remote producer claims it was created.
+            CreatedUtc = DateTimeOffset.UtcNow,
             TimeToLive = ttl ?? _defaultTtl,
         };
 
-        if (!_requests.TryAdd(id, request)) return null; // duplicate request id
+        lock (_registerGate)
+        {
+            TrimResolvedLocked(DateTimeOffset.UtcNow);
+            if (_requests.ContainsKey(id)) return null; // duplicate request id
+            if (_requests.Values.Count(r => r.IsPending) >= _maxPendingApprovals) return null;
+            if (!_requests.TryAdd(id, request)) return null; // concurrent duplicate
+        }
         Added?.Invoke(request);
         return request;
     }
@@ -120,10 +137,31 @@ public sealed class ApprovalStore : IDisposable
         }
         // Keep resolved entries for a while (correlation/debugging), prune old ones.
         var cutoff = DateTimeOffset.UtcNow - TimeSpan.FromHours(1);
+        lock (_registerGate)
+        {
+            foreach (var (id, request) in _requests)
+            {
+                if (request.ResolvedUtc is { } at && at < cutoff) _requests.TryRemove(id, out _);
+            }
+            TrimResolvedLocked(DateTimeOffset.UtcNow);
+        }
+    }
+
+    private void TrimResolvedLocked(DateTimeOffset now)
+    {
+        var cutoff = now - TimeSpan.FromHours(1);
         foreach (var (id, request) in _requests)
         {
             if (request.ResolvedUtc is { } at && at < cutoff) _requests.TryRemove(id, out _);
         }
+
+        var excess = _requests.Count - MaxRetainedApprovals;
+        if (excess <= 0) return;
+        foreach (var (id, _) in _requests
+                     .Where(pair => pair.Value.Decision is not null)
+                     .OrderBy(pair => pair.Value.ResolvedUtc)
+                     .Take(excess))
+            _requests.TryRemove(id, out _);
     }
 
     public void Dispose() => _sweeper.Dispose();

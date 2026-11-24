@@ -177,6 +177,33 @@ public class ApprovalStoreTests
     }
 
     [Fact]
+    public void Register_BackdatedSenderTimestamp_DoesNotShortenApprovalTtl()
+    {
+        using var store = new ApprovalStore(TimeSpan.FromMinutes(5));
+        var before = DateTimeOffset.UtcNow;
+        var request = store.Register(ApprovalEvent() with { TimestampUtc = before.AddHours(-1) })!;
+        var after = DateTimeOffset.UtcNow;
+
+        Assert.InRange(request.CreatedUtc, before, after);
+        Assert.True(request.IsPending);
+        Assert.InRange(request.TimeToLive - (DateTimeOffset.UtcNow - request.CreatedUtc),
+            TimeSpan.FromMinutes(4), TimeSpan.FromMinutes(5));
+    }
+
+    [Fact]
+    public void Register_EnforcesPendingCap_AndAllowsProgressAfterResolution()
+    {
+        using var store = new ApprovalStore(maxPendingApprovals: 2);
+        Assert.NotNull(store.Register(ApprovalEvent("a")));
+        Assert.NotNull(store.Register(ApprovalEvent("b")));
+        Assert.Null(store.Register(ApprovalEvent("c")));
+
+        Assert.True(store.TryDecide("a", ApprovalDecision.Denied, "user"));
+        Assert.NotNull(store.Register(ApprovalEvent("c")));
+        Assert.Equal(2, store.Pending.Count);
+    }
+
+    [Fact]
     public void Pending_OrdersByCreation()
     {
         using var store = new ApprovalStore();
