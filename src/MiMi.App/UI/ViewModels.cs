@@ -25,6 +25,8 @@ public sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) 
     public void Execute(object? parameter) => execute();
 }
 
+public sealed record CodexTranscriptRow(string Id, string Title, string Detail, string Status);
+
 /// <summary>Marker base so the window can pick a DataTemplate per content type.
 /// Inherits change notification so mutable views (resting clock) can update bindings.</summary>
 public abstract class IslandContent : ObservableObject
@@ -41,10 +43,16 @@ public abstract class IslandContent : ObservableObject
 public sealed class RestingView : IslandContent
 {
     private MascotExpression _expression = MascotExpression.Calm;
+    private int _shelfCount;
     public RestingView() { }
     /// <summary>Persistent mood (plus any brief reaction) for the resting face.</summary>
     public MascotExpression Expression { get => _expression; set => Set(ref _expression, value); }
     public bool ShowMascot { get; init; } = true;
+    public int ShelfCount
+    {
+        get => _shelfCount;
+        set => Set(ref _shelfCount, value);
+    }
     // Face-only idle: a slim pill whose width hugs the face with breathing room.
     public override double TargetWidth => 118;
     public override double TargetHeight => 38;
@@ -54,6 +62,7 @@ public sealed class RestingView : IslandContent
 public sealed class MediaCompactView : IslandContent
 {
     private int _agentBadgeCount;
+    private int _shelfCount;
 
     public MediaViewModel Media { get; }
     public MediaCompactView(MediaViewModel media) { Media = media; }
@@ -80,14 +89,19 @@ public sealed class MediaCompactView : IslandContent
 
     public bool HasAgentBadge => AgentBadgeCount > 0;
     public string AgentBadgeLabel => AgentBadgeCount.ToString();
+    public int ShelfCount
+    {
+        get => _shelfCount;
+        set => Set(ref _shelfCount, value);
+    }
 }
 
 public sealed class MediaExpandedView : IslandContent
 {
     public MediaViewModel Media { get; }
     public MediaExpandedView(MediaViewModel media) { Media = media; }
-    public override double TargetWidth => 430;
-    public override double TargetHeight => 190;
+    public override double TargetWidth => 460;
+    public override double TargetHeight => 208;
     public override double TargetCornerRadius => 24;
     public override bool AutoHeight => true;
 }
@@ -112,7 +126,7 @@ public sealed class PomodoroView : IslandContent
     public PomodoroViewModel Pomodoro { get; }
     public PomodoroView(PomodoroViewModel pomodoro) { Pomodoro = pomodoro; }
     public override double TargetWidth => 400;
-    public override double TargetHeight => 74;
+    public override double TargetHeight => 88;
     public override double TargetCornerRadius => 22;
 }
 
@@ -121,7 +135,7 @@ public sealed class WaterView : IslandContent
     public WaterViewModel Water { get; }
     public WaterView(WaterViewModel water) { Water = water; }
     public override double TargetWidth => 380;
-    public override double TargetHeight => 74;
+    public override double TargetHeight => 88;
     public override double TargetCornerRadius => 22;
 }
 
@@ -287,28 +301,36 @@ public sealed class QuickAccessViewModel : ObservableObject
 {
     private IReadOnlyList<QuickAccessButton> _buttons = Array.Empty<QuickAccessButton>();
     private string _timerBadge = "";
+    private string _shelfBadge = "";
 
     public IReadOnlyList<QuickAccessButton> Buttons { get => _buttons; private set => Set(ref _buttons, value); }
     /// <summary>Shown on the Focus tile while a session runs (context retention cue).</summary>
     public string TimerBadge { get => _timerBadge; private set => Set(ref _timerBadge, value); }
+    public string ShelfBadge { get => _shelfBadge; private set => Set(ref _shelfBadge, value); }
 
     public ICommand OpenPomodoroCommand { get; }
     public ICommand OpenWaterCommand { get; }
     public ICommand OpenTodoCommand { get; }
     public ICommand OpenShelfCommand { get; }
+    public ICommand OpenVolumeCommand { get; }
+    public ICommand OpenCodexCommand { get; }
     public ICommand BackCommand { get; }
 
     private readonly Action<string> _openUtility;
     private readonly Action _back;
+    private readonly Action _openCodex;
 
-    public QuickAccessViewModel(Action<string> openUtility, Action back)
+    public QuickAccessViewModel(Action<string> openUtility, Action back, Action? openCodex = null)
     {
         _openUtility = openUtility;
         _back = back;
+        _openCodex = openCodex ?? (() => { });
         OpenPomodoroCommand = new RelayCommand(() => _openUtility(UtilityPinState.Pomodoro));
         OpenWaterCommand = new RelayCommand(() => _openUtility(UtilityPinState.Water));
         OpenTodoCommand = new RelayCommand(() => _openUtility(UtilityPinState.Todo));
         OpenShelfCommand = new RelayCommand(() => _openUtility(UtilityPinState.Shelf));
+        OpenVolumeCommand = new RelayCommand(() => _openUtility(UtilityPinState.Volume));
+        OpenCodexCommand = new RelayCommand(() => _openCodex());
         BackCommand = new RelayCommand(_back);
     }
 
@@ -316,6 +338,8 @@ public sealed class QuickAccessViewModel : ObservableObject
     {
         TimerBadge = running ? "running" : sessions > 0 ? $"{sessions} done" : "";
     }
+
+    public void UpdateShelfBadge(int count) => ShelfBadge = count > 0 ? $"{count} item{(count == 1 ? "" : "s")}" : "";
 }
 
 /// <summary>Hydration reminder with quick-add and snooze actions (Phase 4.1).</summary>
@@ -364,17 +388,21 @@ public sealed class ShelfRowViewModel : ObservableObject
     public string SizeLabel { get; }
     public bool Missing { get; }
     public string MissingLabel { get; }
+    public bool IsDirectory { get; }
 
     public ICommand RemoveCommand { get; }
 
     public ShelfRowViewModel(string path, string sizeLabel, bool missing,
-        Action<string> remove)
+        Action<string> remove, bool isDirectory = false)
     {
         Path = path;
-        Name = System.IO.Path.GetFileName(path);
-        SizeLabel = missing ? "missing" : sizeLabel;
+        Name = isDirectory
+            ? (System.IO.Path.GetFileName(path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)) is { Length: > 0 } name ? name : path)
+            : System.IO.Path.GetFileName(path);
+        SizeLabel = missing ? "" : sizeLabel;
         Missing = missing;
-        MissingLabel = missing ? " (missing)" : "";
+        MissingLabel = missing ? "Missing" : "";
+        IsDirectory = isDirectory;
         RemoveCommand = new RelayCommand(() => remove(path));
     }
 }
@@ -399,6 +427,65 @@ public sealed class ShelfView : IslandContent
 }
 
 // ---- system HUDs (Phase 4 / Milestone 6) ----------------------------------------
+
+/// <summary>Interactive master-volume panel. Writes only through the existing
+/// event-driven Core Audio endpoint and never polls.</summary>
+public sealed class VolumeViewModel : ObservableObject
+{
+    private double _level;
+    private bool _muted;
+    private bool _isAvailable;
+    private readonly Func<float, bool> _setVolume;
+    private readonly Action _toggleMute;
+
+    public VolumeViewModel(Func<(float Level, bool Muted, bool IsAvailable)> snapshot,
+        Func<float, bool> setVolume, Action toggleMute)
+    {
+        _snapshot = snapshot;
+        _setVolume = setVolume;
+        _toggleMute = toggleMute;
+        MuteCommand = new RelayCommand(() => { if (_isAvailable) _toggleMute(); Refresh(); });
+        Refresh();
+    }
+
+    private readonly Func<(float Level, bool Muted, bool IsAvailable)> _snapshot;
+
+    public double Level
+    {
+        get => _level;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 100);
+            if (!_isAvailable || !double.IsFinite(value) || Math.Abs(clamped - _level) < 0.01) return;
+            _setVolume((float)(clamped / 100.0));
+            Refresh();
+        }
+    }
+
+    public bool Muted { get => _muted; private set => Set(ref _muted, value); }
+    public bool IsAvailable { get => _isAvailable; private set => Set(ref _isAvailable, value); }
+    public string StatusLabel => IsAvailable ? (Muted ? "Muted" : $"{_level:0}%") : "Audio unavailable";
+    public ICommand MuteCommand { get; }
+
+    public void Refresh()
+    {
+        var (level, muted, available) = _snapshot();
+        _level = Math.Clamp(level * 100.0, 0, 100);
+        Muted = muted;
+        IsAvailable = available;
+        Raise(nameof(Level));
+        Raise(nameof(StatusLabel));
+    }
+}
+
+public sealed class VolumeView : IslandContent
+{
+    public VolumeViewModel Volume { get; }
+    public VolumeView(VolumeViewModel volume) { Volume = volume; }
+    public override double TargetWidth => 400;
+    public override double TargetHeight => 84;
+    public override double TargetCornerRadius => 24;
+}
 
 /// <summary>Brief system status overlay: icon + title + sub + optional progress.
 /// Rendered for ~2 s via the island's transient alert path.</summary>
@@ -427,8 +514,8 @@ public sealed class QuickAccessView : IslandContent
 {
     public QuickAccessViewModel QuickAccess { get; }
     public QuickAccessView(QuickAccessViewModel vm) { QuickAccess = vm; }
-    public override double TargetWidth => 430;
-    public override double TargetHeight => 92;
+    public override double TargetWidth => 440;
+    public override double TargetHeight => 116;
     public override double TargetCornerRadius => 22;
     public override bool AutoHeight => true;
 }
@@ -447,6 +534,8 @@ public sealed class AgentActivityPanelView : IslandContent
     public string ImpressiveBotDetail => _impressiveBotDetail;
     public string ImpressiveBotColor => _impressiveBotColor;
     public bool HasImpressiveBot => _impressiveBotLine.Length > 0;
+    public bool HasPendingImpressiveBot => ImpressiveBot?.WaitingCount > 0;
+    public string ImpressiveBotApprovalNote => HasPendingImpressiveBot ? ImpressiveBotStatus.ApprovalNote : "";
     public string Summary => Rows.Count == 0 ? "No recent activity" : $"{Rows.Count} recent sessions · approvals first";
 
     /// <summary>The status snapshot this panel was built with, so the 1 Hz tick can
@@ -490,8 +579,10 @@ public sealed class AgentActivityPanelView : IslandContent
         Raise(nameof(ImpressiveBotDetail));
         Raise(nameof(ImpressiveBotColor));
         Raise(nameof(HasImpressiveBot));
+        Raise(nameof(HasPendingImpressiveBot));
+        Raise(nameof(ImpressiveBotApprovalNote));
     }
-    public override double TargetWidth => 450;
+    public override double TargetWidth => 480;
     public override double TargetHeight => PanelHeight;
     public override double TargetCornerRadius => 24;
 
@@ -501,7 +592,7 @@ public sealed class AgentActivityPanelView : IslandContent
     /// left the pill, and the panel collapsed mid-read. A fixed height (the list scrolls
     /// inside it) keeps the panel stable for as long as it is shown.
     /// </summary>
-    public const double PanelHeight = 300;
+    public const double PanelHeight = 320;
     public override bool AutoHeight => false;
 }
 
@@ -596,8 +687,8 @@ public sealed class ApprovalView : IslandContent
 {
     public AgentCardViewModel Agent { get; }
     public ApprovalView(AgentCardViewModel agent) { Agent = agent; }
-    public override double TargetWidth => 440;
-    public override double TargetHeight => 210;
+    public override double TargetWidth => 480;
+    public override double TargetHeight => 236;
     public override double TargetCornerRadius => 24;
     public override bool AutoHeight => true;
 }

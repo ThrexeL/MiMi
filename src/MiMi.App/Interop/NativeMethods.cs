@@ -181,6 +181,8 @@ internal static class NativeMethods
     public const uint WM_HOTKEY = 0x0312;
     public const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_NOREPEAT = 0x4000;
     public const uint WM_SYSCOMMAND = 0x0112;
+    public const uint WM_MOUSEACTIVATE = 0x0021;
+    public const IntPtr MA_NOACTIVATE = (IntPtr)3;
     public const IntPtr SC_MINIMIZE = (IntPtr)0xF020;
     public const long WS_EX_TOPMOST = 0x00000008;
     public const long WS_EX_TRANSPARENT = 0x00000020;

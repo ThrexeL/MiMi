@@ -29,11 +29,13 @@ public sealed class IslandPresenter
     private readonly FileShelfStore _shelf;
     private PomodoroViewModel? _pomodoroVm;
     private WaterViewModel? _waterVm;
+    private VolumeViewModel? _volumeVm;
     private TodoViewModel? _todoVm;
     private PomodoroView? _pomodoroCachedView;
     private WaterView? _waterCachedView;
     private TodoView? _todoCachedView;
     private ShelfView? _shelfCachedView;
+    private VolumeView? _volumeCachedView;
     private readonly UtilityPinState _utilityPins = new();
     private readonly DragRevertPolicy _shelfDrag = new();
     private bool _shelfDragAutoOpened;
@@ -79,7 +81,8 @@ public sealed class IslandPresenter
         // Initialize Quick Access ViewModel with proper callbacks for opening utilities and closing the hub.
         _quickAccessVm = new QuickAccessViewModel(
             openUtility: kind => _utilityPins.OpenUtilityFromHub(kind),
-            back: () => _utilityPins.SetHub(false)
+            back: () => _utilityPins.SetHub(false),
+            openCodex: () => CodexConversationRequested?.Invoke()
         );
         _utilityPins.Changed += () => _dispatcher.BeginInvoke(RefreshPinned);
         _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
@@ -187,13 +190,16 @@ public sealed class IslandPresenter
             i.Path,
             FileShelfStore.FormatSize(i.SizeBytes),
             !_shelf.Exists(i),
-            path => RemoveFromShelf(path))).ToList();
+            path => RemoveFromShelf(path),
+            i.IsDirectory)).ToList();
         return new ShelfView(rows, $"{_shelf.Count} item{(_shelf.Count == 1 ? "" : "s")}");
     }
 
     /// <summary>Notification decisions that should become Windows toasts while hidden.
     /// The composition root owns the tray; the presenter never displays system UI itself.</summary>
     public event Action<AgentNotice>? WindowsNoticeRequested;
+    public event Action? TaskEntryRequested;
+    public event Action? CodexConversationRequested;
 
     public AgentNotificationCoordinator Notifications => _notifications;
 
@@ -203,6 +209,32 @@ public sealed class IslandPresenter
     };
 
     // ---- productivity utilities (Phase 4) ---------------------------------------
+
+    public void ConfigureVolume(Func<(float Level, bool Muted, bool IsAvailable)> snapshot,
+        Func<float, bool> setVolume, Action toggleMute)
+    {
+        _volumeVm = new VolumeViewModel(snapshot, setVolume, toggleMute);
+        RefreshPinned();
+    }
+
+    public void PromptAddTask() => TaskEntryRequested?.Invoke();
+
+    public bool AddTask(string title)
+    {
+        try
+        {
+            _todos.Add(title);
+            _todos.Save();
+            RefreshPinned();
+            return true;
+        }
+        catch (ArgumentException) { return false; }
+        catch (Exception ex)
+        {
+            Logger.Error("Could not add task", ex);
+            return false;
+        }
+    }
 
     /// <summary>Tray toggle: opens/closes a utility panel. User-opened panels pin at
     /// UserPanel priority — only approval alerts (and failures) displace them.</summary>
@@ -437,6 +469,8 @@ public sealed class IslandPresenter
             _water.GoalFraction,
             _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
 
+        _volumeVm?.Refresh();
+
         // To-do (max 4 open rows) — rebuilt only while the panel is open.
         if (!todoPinned) return;
         _todoVm ??= new TodoViewModel(
@@ -502,6 +536,9 @@ public sealed class IslandPresenter
 
         _mascotExpression = ToExpression(_reaction ?? _persistentMood);
         _resting.Expression = _mascotExpression;
+        _resting.ShelfCount = _shelf.Count;
+        _quickAccessVm.UpdateTimerBadge(_pomodoro.IsRunning, _pomodoro.CompletedFocusSessions);
+        _quickAccessVm.UpdateShelfBadge(_shelf.Count);
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.
@@ -517,7 +554,10 @@ public sealed class IslandPresenter
         }
 
         if (_mediaCompact is not null)
+        {
             _mediaCompact.AgentBadgeCount = agentsActive ? workingCount : 0;
+            _mediaCompact.ShelfCount = _shelf.Count;
+        }
 
         // Utility pinning (Phase 4). User-opened panels pin at UserPanel priority —
         // only approval alerts displace them. A merely RUNNING focus timer pins at
@@ -542,7 +582,8 @@ public sealed class IslandPresenter
             UtilityPinState.Water => _waterCachedView ??= new WaterView(_waterVm!),
             UtilityPinState.Todo => _todoCachedView ??= new TodoView(_todoVm!),
             UtilityPinState.Shelf => _shelfCachedView ??= BuildShelfView(),
-            _ => _shelf.Count > 0 && !_shelfDrag.DragActive ? _shelfCachedView ??= BuildShelfView() : null,
+            UtilityPinState.Volume => _volumeCachedView ??= _volumeVm is null ? null : new VolumeView(_volumeVm),
+            _ => null,
         };
         var utilityPriority = activeUtility is not null ? IslandPriority.UserPanel : IslandPriority.Utility;
         if (_shelfDrag.DragActive) utilityPriority = IslandPriority.UserPanel; // drag target stays up
@@ -723,7 +764,11 @@ public sealed class IslandPresenter
             return new AgentSessionRow
         {
             Section = heading,
-            Provider = AgentCardViewModel.DisplayProvider(s.Provider),
+            Provider = ProviderNames.IsImpressiveBot(s.Provider)
+                ? (ProviderNames.BotName(s.Provider) is { Length: > 0 } bot
+                    ? "ImpressiveBot · " + bot
+                    : "ImpressiveBot")
+                : AgentCardViewModel.DisplayProvider(s.Provider),
             Project = string.IsNullOrEmpty(s.Project) ? "\u2014" : s.Project,
             StatusLabel = StatusLabel(s),
             LastAction = string.IsNullOrEmpty(s.LastSummary) ? StatusLabel(s) : s.LastSummary,

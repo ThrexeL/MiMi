@@ -72,19 +72,23 @@ public partial class MiMiMascotControl : UserControl
 
         Loaded += (_, _) =>
         {
+            MascotOptions.Changed -= OnOptionsChanged;
+            MascotOptions.Changed += OnOptionsChanged;
             _templateReady = true;
             PlayWake();
             ApplyExpression(Expression, animated: false);
             StartLife();
         };
-        Unloaded += (_, _) => StopLife();
+        Unloaded += (_, _) =>
+        {
+            MascotOptions.Changed -= OnOptionsChanged;
+            StopLife();
+        };
         IsVisibleChanged += (_, e) =>
         {
             if ((bool)e.NewValue) StartLife(); else StopLife();
         };
 
-        MascotOptions.Changed += OnOptionsChanged;
-        Unloaded += (_, _) => MascotOptions.Changed -= OnOptionsChanged;
     }
 
     private static void OnExpressionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -170,14 +174,26 @@ public partial class MiMiMascotControl : UserControl
 
     private static void AnimateScale(ScaleTransform t, double sx, double sy, TimeSpan d, IEasingFunction ease, bool animate)
     {
-        if (!animate) { t.ScaleX = sx; t.ScaleY = sy; return; }
+        if (!animate)
+        {
+            t.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            t.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            t.ScaleX = sx;
+            t.ScaleY = sy;
+            return;
+        }
         t.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(sx, d) { EasingFunction = ease });
         t.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(sy, d) { EasingFunction = ease });
     }
 
     private static void AnimateAngle(RotateTransform t, double degrees, TimeSpan d, IEasingFunction ease, bool animate)
     {
-        if (!animate) { t.Angle = degrees; return; }
+        if (!animate)
+        {
+            t.BeginAnimation(RotateTransform.AngleProperty, null);
+            t.Angle = degrees;
+            return;
+        }
         t.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(degrees, d) { EasingFunction = ease });
     }
 
@@ -382,6 +398,7 @@ public partial class MiMiMascotControl : UserControl
     /// <summary>Wake-up: a soft pop as the face appears — MiMi "notices" you.</summary>
     private void PlayWake()
     {
+        if (MascotOptions.ReducedMotion) return;
         WakeScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(320))
         {
             EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 },

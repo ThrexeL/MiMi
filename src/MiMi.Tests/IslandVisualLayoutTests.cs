@@ -91,15 +91,17 @@ public class IslandVisualLayoutTests
         OnSta(() => WithIsland(window =>
         {
             var vm = new QuickAccessViewModel(_ => UnexpectedCommand(), UnexpectedCommand);
-            var (root, _, _) = Layout(window, new QuickAccessView(vm), 140);
+            var (root, _, _) = Layout(window, new QuickAccessView(vm), 190);
             var buttons = Descendants<Button>(root).ToList();
-            Assert.Equal(5, buttons.Count);
+            Assert.Equal(7, buttons.Count);
             foreach (var (path, command) in new[]
             {
                 ("QuickAccess.OpenPomodoroCommand", vm.OpenPomodoroCommand),
                 ("QuickAccess.OpenWaterCommand", vm.OpenWaterCommand),
                 ("QuickAccess.OpenTodoCommand", vm.OpenTodoCommand),
                 ("QuickAccess.OpenShelfCommand", vm.OpenShelfCommand),
+                ("QuickAccess.OpenVolumeCommand", vm.OpenVolumeCommand),
+                ("QuickAccess.OpenCodexCommand", vm.OpenCodexCommand),
                 ("QuickAccess.BackCommand", vm.BackCommand)
             })
             {
@@ -133,13 +135,10 @@ public class IslandVisualLayoutTests
             var emptyHint = Assert.Single(Descendants<TextBlock>(todoRoot),
                 t => BindingPath(t, UIElement.VisibilityProperty) == "Todo.HasNoRows");
             Assert.Equal(rowCount == 0 ? Visibility.Visible : Visibility.Collapsed, emptyHint.Visibility);
-            Assert.Contains("first task above", emptyHint.Text);
-            var input = Assert.Single(Descendants<TextBox>(todoRoot),
-                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
-            Assert.Equal("New task title", AutomationProperties.GetName(input));
+            Assert.Contains("Add a task", emptyHint.Text);
             var add = Assert.Single(Descendants<Button>(todoRoot),
-                b => BindingPath(b, Button.CommandProperty) == "Todo.AddCommand");
-            Assert.Same(todo.AddCommand, add.Command);
+                b => BindingPath(b, Button.CommandProperty) == "AddTaskCommand");
+            Assert.Same(window.AddTaskCommand, add.Command);
             Assert.Equal(rowCount, Descendants<Button>(todoRoot)
                 .Count(b => BindingPath(b, Button.CommandProperty) == "CompleteCommand"));
             AssertBackCommand(window, todoRoot);
@@ -163,29 +162,24 @@ public class IslandVisualLayoutTests
             Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text.Contains(
                 rowCount == 0 ? "Your shelf is empty" : "Originals stay untouched"));
             if (rowCount > 0)
-                Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text == " (missing)");
+                Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text == "Missing");
             AssertBackCommand(window, shelfRoot);
             Render(shelfRoot, $"island-shelf-{rowCount}");
         }));
     }
 
     [Fact]
-    public void TodoInput_EnterAddsTaskThroughTheBoundCommand()
+    public void TodoPanel_ExposesExplicitEditorCommandWithoutActivatingIsland()
     {
         OnSta(() => WithIsland(window =>
         {
             var todo = new TodoViewModel(_ => true, () => { });
             var (root, _, _) = Layout(window, new TodoView(todo), 240);
-            var input = Assert.Single(Descendants<TextBox>(root),
-                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
-            input.Text = "Verify MiMi";
-            var enter = Assert.Single(input.InputBindings.OfType<KeyBinding>(),
-                binding => binding.Key == Key.Enter);
-            Assert.Same(todo.AddCommand, enter.Command);
-            Assert.Equal("Verify MiMi", input.Text);
-            Assert.Equal("Verify MiMi", todo.NewTaskTitle);
-            enter.Command.Execute(null);
-            Assert.Equal("", todo.NewTaskTitle);
+            var add = Assert.Single(Descendants<Button>(root),
+                b => BindingPath(b, Button.CommandProperty) == "AddTaskCommand");
+            Assert.Same(window.AddTaskCommand, add.Command);
+            Assert.False(window.ShowActivated);
+            Assert.False(window.Focusable);
         }));
     }
 
@@ -201,7 +195,7 @@ public class IslandVisualLayoutTests
             Assert.Equal(8, ((FrameworkElement)window.FindName("GlowBand")).Height);
             var (idle, presenter, template) = Layout(window, new RestingView(), 38);
             var idleHost = Assert.IsType<Grid>(template.FindName("IdleFaceHost", presenter));
-            Assert.Single(idleHost.Children.Cast<UIElement>());
+            Assert.Single(idleHost.Children.OfType<MiMiMascotControl>());
             Assert.IsType<MiMiMascotControl>(idleHost.Children[0]);
             Assert.Single(Descendants<MiMiMascotControl>(idle));
             var (compact, compactPresenter, compactTemplate) = Layout(window,
@@ -214,7 +208,7 @@ public class IslandVisualLayoutTests
                 new WaterView(new WaterViewModel(UnexpectedCommand))
             })
             {
-                var (root, _, _) = Layout(window, content, 74);
+                var (root, _, _) = Layout(window, content, 92);
                 Assert.Equal(content.TargetHeight, root.ActualHeight);
                 Assert.Single(Descendants<ProgressBar>(root));
                 AssertBackCommand(window, root);

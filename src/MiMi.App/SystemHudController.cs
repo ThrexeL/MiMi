@@ -42,6 +42,7 @@ public sealed class SystemHudController : IDisposable
         _audioDevices.Start();
         _audioDevices.DefaultDeviceChanged += (_, friendly) => _dispatcher.BeginInvoke(() =>
         {
+            _volume.Restart();
             if (!_config.Current.HeadphoneHudEnabled) return;
             var name = string.IsNullOrWhiteSpace(friendly) ? "Audio device" : friendly!;
             _presenter.PushHud("\uE7F4", "Audio device changed", name, duration: TimeSpan.FromSeconds(2.2));
@@ -95,6 +96,12 @@ public sealed class SystemHudController : IDisposable
     /// <summary>Volume/mute changes: the HUD re-pushes only when the shown value
     /// changes (same-value callbacks are absorbed; the alert's own expiry removes it
     /// 1.2 s after the last change). Rapid keypresses update one toast, no stacking.</summary>
+    public (float Level, bool Muted, bool IsAvailable) GetVolumeState() =>
+        (_volume.Volume, _volume.Muted, _volume.IsAvailable);
+
+    public bool SetVolume(float level) => _volume.SetVolume(Math.Clamp(level, 0f, 1f));
+    public bool ToggleMute() => _volume.ToggleMute();
+
     private void OnVolumeChanged(float level, bool muted)
     {
         if (!_config.Current.VolumeHudEnabled) return;

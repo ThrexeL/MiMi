@@ -13,6 +13,7 @@ public static class ProviderNames
     {
         "claude-code" => "Claude Code",
         "codex" => "Codex CLI",
+        "codex-app" => "Codex",
         "thursday" => "Thursday",
         ImpressiveBotProvider => "ImpressiveBot",
         var p when p.StartsWith(ImpressiveBotProvider + ":", StringComparison.Ordinal)

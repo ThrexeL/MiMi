@@ -30,6 +30,8 @@ public partial class App : Application
     private SystemHudController _hudController = null!;
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
+    private TodoEntryWindow? _todoEntryWindow;
+    private CodexConversationWindow? _codexWindow;
     private ProviderIntegrationInspector _providerInspector = null!;
     private bool _ownsMutex;
 
@@ -95,6 +97,8 @@ public partial class App : Application
         var todos = new TodoStore();
         var shelf = new FileShelfStore();
         _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos, shelf);
+        _presenter.TaskEntryRequested += ShowTaskEntry;
+        _presenter.CodexConversationRequested += ShowCodexConversation;
 
         _island = new IslandWindow(
             _config,
@@ -110,7 +114,8 @@ public partial class App : Application
             shelfOpen: () => _presenter.ShelfDragEnter(),
             shelfClose: () => _presenter.EndShelfDragPreview(),
             quickAccessOpen: () => _presenter.OpenQuickAccess(),
-            closeUtility: () => _presenter.CloseUtilityPanel());
+            closeUtility: () => _presenter.CloseUtilityPanel(),
+            addTask: () => _presenter.PromptAddTask());
         _island.Show();
 
         _stateManager.EffectiveContentChanged += content =>
@@ -209,6 +214,8 @@ public partial class App : Application
                 _presenter.UtilityPins.Contains("shelf"));
         });
         _hudController = new SystemHudController(_config, _presenter, Dispatcher);
+        _presenter.ConfigureVolume(_hudController.GetVolumeState,
+            _hudController.SetVolume, () => _hudController.ToggleMute());
         _tray.CommandSelected += OnTrayCommand;
         _island.KeyboardTick += () => _hudController.OnKeyboardTick();
         _island.PowerStatusChanged += () => _hudController.OnPowerStatusChanged();
@@ -238,6 +245,8 @@ public partial class App : Application
         _island.Closed += (_, _) => Shutdown();
 
         Logger.Info("MiMi started.");
+        if (e.Args.Contains("--codex", StringComparer.OrdinalIgnoreCase))
+            Dispatcher.BeginInvoke(ShowCodexConversation);
     }
 
     private void QueueAgentEvent(AgentEvent ev)
@@ -340,6 +349,7 @@ public partial class App : Application
                     _presenter.ToggleUtility("shelf");
                     break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
+                case TrayMenuCommand.CodexConversation: ShowCodexConversation(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;
                 case TrayMenuCommand.ToggleAutoStart:
                     var enable = !AutoStart.IsEnabled();
@@ -377,6 +387,43 @@ public partial class App : Application
         });
     }
 
+    private void ShowCodexConversation()
+    {
+        if (_codexWindow is { IsLoaded: true })
+        {
+            _codexWindow.Activate();
+            return;
+        }
+        _codexWindow = new CodexConversationWindow(_approvals, _bus, ResolveCodexWorkspace());
+        _codexWindow.Closed += (_, _) => _codexWindow = null;
+        _codexWindow.Show();
+    }
+
+    private static string ResolveCodexWorkspace()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MiMi.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        return Environment.CurrentDirectory;
+    }
+
+    private void ShowTaskEntry()
+    {
+        if (_todoEntryWindow is { IsLoaded: true })
+        {
+            _todoEntryWindow.Activate();
+            return;
+        }
+        _todoEntryWindow = new TodoEntryWindow(_island) { Owner = _island };
+        if (_todoEntryWindow.ShowDialog() == true)
+            _presenter.AddTask(_todoEntryWindow.TaskTitle);
+        _todoEntryWindow = null;
+    }
+
     private void ShowSettings()
     {
         if (_settingsWindow is { IsLoaded: true })
@@ -396,6 +443,7 @@ public partial class App : Application
         try { _fullscreen?.Dispose(); } catch { }
         try { _hudController?.Dispose(); } catch { }
         try { _stateManager?.Dispose(); } catch { }
+        try { _codexWindow?.EnsureDisposedAsync().Wait(3000); } catch { }
         try { _approvals?.Dispose(); } catch { }
         try { _bridge?.DisposeAsync().AsTask().Wait(2000); } catch { }
         try { _media?.DisposeAsync().AsTask().Wait(2000); } catch { }

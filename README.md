@@ -38,6 +38,12 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
   panel.
 - **Multi-agent tracking with multi-approval navigation**: per-session lifecycle states,
   a hover activity panel, and `‹ ›` navigation across pending approval cards.
+- **Refresh 2026-11-24:** morphing pill geometry, clickable compact states, six-tile Quick
+  Access, fixed-height activity panel, dismissible shelf with count badges, larger type,
+  and a non-activating task editor.
+- **New controls:** interactive volume/mute panel and an experimental embedded Codex
+  conversation window with read-only sandbox and one-shot approvals. See
+  `docs/ui-refresh-and-codex.md`.
 
 ## UI and usability refresh
 
@@ -60,7 +66,7 @@ Development is phased. State as of the 4.0 release candidate:
 | 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
 | 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
 | 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language, supported laptop brightness | implemented |
-| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; app-server embedding deferred | partial |
+| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; experimental read-only Codex conversation client implemented | partial / experimental |
 | 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
 | 8 — mascot and UI polish | Expressions, categorized settings, island styling, offscreen template/layout review | implemented; interactive/DPI acceptance remains manual |
 | 9 — release prep | Portable build script, automated tests, selftest, documented acceptance checklist | implemented; release signing/distribution and manual acceptance remain maintainer tasks |
@@ -420,9 +426,11 @@ hook timeout, makes the final call.
 
 ### What is NOT supported
 
-- **Codex app-server embedding.** MiMi does not drive the Codex session; hook decisions
-  only fire for approval prompts Codex itself would raise. Full embedding (MiMi as the
-  app-server client) remains future work — see `docs/codex-integrations.md`.
+- **Full Codex app-server embedding.** MiMi now includes an experimental, read-only
+  conversation client for `codex-cli 0.160.x`. It supports text turns, streamed items,
+  interruption, and one-shot command approvals. Thread resume/history, model pickers,
+  session-wide grants, MCP elicitation, and file-change approvals are not supported;
+  hooks remain the default integration.
 - **Claude Code `permission_suggestions` / `updatedInput`.** These stdin fields are
   ignored: MiMi always returns the original tool input unchanged. The emitted decision JSON
   contains only `behavior` (`allow`/`deny`) and `message` — never `updatedInput`,

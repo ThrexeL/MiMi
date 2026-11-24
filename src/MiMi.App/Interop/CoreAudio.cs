@@ -173,6 +173,7 @@ public sealed class MasterVolumeMonitor : IAudioEndpointVolumeCallback, IDisposa
         }
         catch (COMException)
         {
+            _volume = null;
             IsAvailable = false;
         }
     }
@@ -191,16 +192,22 @@ public sealed class MasterVolumeMonitor : IAudioEndpointVolumeCallback, IDisposa
         return 0;
     }
 
+    public void Restart()
+    {
+        Dispose();
+        Start();
+    }
+
     public bool SetVolume(float level)
     {
-        if (_volume is null || level is < 0f or > 1f) return false;
+        if (!IsAvailable || _volume is null || !float.IsFinite(level) || level is < 0f or > 1f) return false;
         var ctx = Guid.Empty;
         return _volume.SetMasterVolumeLevelScalar(level, ref ctx) == 0;
     }
 
     public bool ToggleMute()
     {
-        if (_volume is null) return false;
+        if (!IsAvailable || _volume is null) return false;
         var ctx = Guid.Empty;
         return _volume.SetMute(!Muted, ref ctx) == 0;
     }
@@ -208,6 +215,12 @@ public sealed class MasterVolumeMonitor : IAudioEndpointVolumeCallback, IDisposa
     public void Dispose()
     {
         try { _volume?.UnregisterControlChangeNotify(this); } catch { }
+        if (_volume is not null)
+        {
+            try { Marshal.ReleaseComObject(_volume); } catch { }
+            _volume = null;
+        }
+        IsAvailable = false;
     }
 }
 

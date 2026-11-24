@@ -35,6 +35,8 @@ public partial class IslandWindow : Window
     private readonly Random _random = new();
 
     private Storyboard? _sizeStoryboard;
+    private int _geometryGeneration;
+    private int _contentGeneration;
     private Panel? _eqHost;
     private Storyboard? _eqStoryboard;
     private Slider? _progressSlider;
@@ -84,6 +86,8 @@ public partial class IslandWindow : Window
     private bool _proximityAwake;
 
     public ICommand CloseUtilityCommand { get; }
+    public ICommand AddTaskCommand { get; }
+    public ICommand OpenQuickAccessCommand { get; }
 
     public IslandWindow(ConfigStore config,
         Func<IslandContent?> contentProvider,
@@ -96,9 +100,12 @@ public partial class IslandWindow : Window
         Action? shelfOpen = null,
         Action? quickAccessOpen = null,
         Action? closeUtility = null,
-        Action? shelfClose = null)
+        Action? shelfClose = null,
+        Action? addTask = null)
     {
         CloseUtilityCommand = new RelayCommand(() => closeUtility?.Invoke());
+        AddTaskCommand = new RelayCommand(() => addTask?.Invoke());
+        OpenQuickAccessCommand = new RelayCommand(() => _quickAccessOpen?.Invoke());
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
         _secondTick = secondTick;
         _shelfDrop = shelfDrop;
@@ -199,10 +206,6 @@ public partial class IslandWindow : Window
                 // this only refreshes text and never resizes the pill.
                 var panel = _agentPanelProvider();
                 activity.Update(panel.Rows, panel.ImpressiveBot);
-                Host.Measure(new Size(activity.TargetWidth, double.PositiveInfinity));
-                var height = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
-                if (Math.Abs(height - Pill.ActualHeight) > 2)
-                    AnimatePillSize(activity.TargetWidth, height, TimeSpan.FromMilliseconds(140));
             }
             if (IsVisible && !Coordinator.FullscreenSuppressed) KeyboardTick?.Invoke();
 
@@ -271,6 +274,14 @@ public partial class IslandWindow : Window
             return IntPtr.Zero;
         }
 
+        // Mouse interaction never activates the overlay. Typing happens only in an
+        // explicitly opened companion editor.
+        if (msg == Interop.NativeMethods.WM_MOUSEACTIVATE)
+        {
+            handled = true;
+            return Interop.NativeMethods.MA_NOACTIVATE;
+        }
+
         // Show Desktop must never minimize MiMi (belt: toolwindows are normally exempt).
         if (msg == Interop.NativeMethods.WM_SYSCOMMAND && wParam == Interop.NativeMethods.SC_MINIMIZE)
         {
@@ -309,9 +320,10 @@ public partial class IslandWindow : Window
         // Only user-initiated hides fade out; fullscreen/session restrictions stay instant.
         var userInitiatedHide = !visible && Coordinator.Preference == VisibilityPreference.HiddenByUser;
         var plan = VisibilityTransitionPlanner.Plan(_windowShown && IsVisible, Opacity, visible,
-            userInitiatedHide, reducedMotion: false, _fadeInFlight);
+            userInitiatedHide, reducedMotion: MascotOptions.ReducedMotion, _fadeInFlight);
         ExecuteFadePlan(plan);
         if (visible) ReassertTopmost();
+        SyncProximityTimer();
         Logger.Info($"Visibility: effective={(visible ? "visible" : "hidden")} " +
                     $"(preference={Coordinator.Preference}, fullscreen={Coordinator.FullscreenSuppressed}, " +
                     $"transition={plan.Action}).");
@@ -482,16 +494,24 @@ public partial class IslandWindow : Window
     private void UpdateGlow(IslandContent content)
     {
         _glowLevel = MascotOptions.GlowEnabled ? GlowLevelFor(content) * Math.Clamp(MascotOptions.GlowIntensity * 2, 0, 1.4) : 0;
-        var glowFade = new DoubleAnimation(Math.Min(_glowLevel, 1), TimeSpan.FromMilliseconds(300))
-        {
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-        };
-        glowFade.Completed += (_, _) =>
+        if (MascotOptions.ReducedMotion)
         {
             GlowRoot.BeginAnimation(OpacityProperty, null);
             GlowRoot.Opacity = Math.Min(_glowLevel, 1);
-        };
-        GlowRoot.BeginAnimation(OpacityProperty, glowFade);
+        }
+        else
+        {
+            var glowFade = new DoubleAnimation(Math.Min(_glowLevel, 1), TimeSpan.FromMilliseconds(300))
+            {
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            glowFade.Completed += (_, _) =>
+            {
+                GlowRoot.BeginAnimation(OpacityProperty, null);
+                GlowRoot.Opacity = Math.Min(_glowLevel, 1);
+            };
+            GlowRoot.BeginAnimation(OpacityProperty, glowFade);
+        }
 
         // Geometry is state-aware but FIXED in DIPs: a thin band on the idle pill,
         // a restrained 20 DIP falloff on expanded panels — never proportional to
@@ -513,7 +533,11 @@ public partial class IslandWindow : Window
     private void OnGlowContentChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(RestingView.Expression)) return;
-        if (sender is IslandContent content) UpdateGlow(content);
+        if (sender is IslandContent content)
+        {
+            UpdateGlow(content);
+            SyncProximityTimer();
+        }
     }
 
     // ---- content application ---------------------------------------------------
@@ -531,9 +555,10 @@ public partial class IslandWindow : Window
         if (ReferenceEquals(content, _renderedContent))
         {
             if (content is AgentCompactView && Math.Abs(Pill.ActualWidth - content.TargetWidth) > 2)
-                AnimatePillSize(content.TargetWidth, content.TargetHeight, TimeSpan.FromMilliseconds(180));
+                AnimatePillSize(content.TargetWidth, content.TargetHeight, TimeSpan.FromMilliseconds(180), content.TargetCornerRadius);
             return;
         }
+        var generation = ++_contentGeneration;
         _renderedContent = content;
 
         var speed = _config.Current.AnimationSpeed;
@@ -545,6 +570,7 @@ public partial class IslandWindow : Window
 
         fadeOut.Completed += (_, _) =>
         {
+            if (generation != _contentGeneration) return;
             Host.Content = content;
             Host.ApplyTemplate();
 
@@ -564,7 +590,7 @@ public partial class IslandWindow : Window
                 targetHeight = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
                 Logger.Info($"Island: '{content.GetType().Name}' measured {Host.DesiredSize.Height:0.#} → height {targetHeight:0.#}");
             }
-            AnimatePillSize(content.TargetWidth, targetHeight, duration - swapAt);
+            AnimatePillSize(content.TargetWidth, targetHeight, duration - swapAt, content.TargetCornerRadius);
 
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => HookTemplate(content));
             var fadeIn = new DoubleAnimation(0, 1, duration - swapAt);
@@ -584,14 +610,31 @@ public partial class IslandWindow : Window
                 if (Math.Abs(corrected - Pill.ActualHeight) > 2)
                 {
                     Logger.Info($"Island: correcting '{content.GetType().Name}' height {Pill.ActualHeight:0.#} → {corrected:0.#}");
-                    AnimatePillSize(content.TargetWidth, corrected, TimeSpan.FromMilliseconds(140));
+                    AnimatePillSize(content.TargetWidth, corrected, TimeSpan.FromMilliseconds(140), content.TargetCornerRadius);
                 }
             });
         }
     }
 
-    private void AnimatePillSize(double width, double height, TimeSpan duration)
+    private void AnimatePillSize(double width, double height, TimeSpan duration, double radius)
     {
+        var targetRadius = Math.Min(radius, height / 2);
+        if (MascotOptions.ReducedMotion || duration <= TimeSpan.Zero)
+        {
+            ++_geometryGeneration;
+            _sizeStoryboard?.Remove(Pill);
+            _sizeStoryboard = null;
+            Pill.BeginAnimation(WidthProperty, null);
+            Pill.BeginAnimation(HeightProperty, null);
+            Pill.BeginAnimation(Border.CornerRadiusProperty, null);
+            Pill.Width = width;
+            Pill.Height = height;
+            Pill.CornerRadius = new CornerRadius(targetRadius);
+            UpdateClip();
+            return;
+        }
+
+        var generation = ++_geometryGeneration;
         _sizeStoryboard?.Remove(Pill);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         _sizeStoryboard = new Storyboard
@@ -600,24 +643,50 @@ public partial class IslandWindow : Window
             {
                 new DoubleAnimation(Pill.ActualWidth, width, duration) { EasingFunction = ease },
                 new DoubleAnimation(Pill.ActualHeight, height, duration) { EasingFunction = ease },
+                new CornerRadiusAnimation(Pill.CornerRadius, new CornerRadius(targetRadius), duration) { EasingFunction = ease },
             },
         };
         Storyboard.SetTarget(_sizeStoryboard.Children[0], Pill);
         Storyboard.SetTargetProperty(_sizeStoryboard.Children[0], new PropertyPath(WidthProperty));
         Storyboard.SetTarget(_sizeStoryboard.Children[1], Pill);
         Storyboard.SetTargetProperty(_sizeStoryboard.Children[1], new PropertyPath(HeightProperty));
+        Storyboard.SetTarget(_sizeStoryboard.Children[2], Pill);
+        Storyboard.SetTargetProperty(_sizeStoryboard.Children[2], new PropertyPath(Border.CornerRadiusProperty));
         // Held animation clocks force WPF to compose every frame (idle CPU leak):
         // detach on completion and pin the final values.
         _sizeStoryboard.Completed += (_, _) =>
         {
+            if (generation != _geometryGeneration) return;
             _sizeStoryboard.Remove(Pill);
             Pill.BeginAnimation(WidthProperty, null);
             Pill.BeginAnimation(HeightProperty, null);
+            Pill.BeginAnimation(Border.CornerRadiusProperty, null);
             Pill.Width = width;
             Pill.Height = height;
+            Pill.CornerRadius = new CornerRadius(targetRadius);
             UpdateClip();
         };
         _sizeStoryboard.Begin(Pill, isControllable: false);
+    }
+
+    private void SyncProximityTimer()
+    {
+        var resting = _pinnedContent is RestingView;
+        var sleepy = _pinnedContent is RestingView { Expression: MascotExpression.Sleepy }
+                     && MascotOptions.SleepyEnabled && MascotOptions.FaceEnabled;
+        var shouldRun = IsVisible && !Coordinator.FullscreenSuppressed
+                        && resting && (sleepy || _proximityAwake);
+        if (shouldRun)
+        {
+            if (!_proximityTimer.IsEnabled) _proximityTimer.Start();
+            return;
+        }
+        _proximityTimer.Stop();
+        if (_proximityAwake)
+        {
+            _proximityAwake = false;
+            _proximityPolicy.Reset();
+        }
     }
 
     /// <summary>Throttled cursor sampling while sleepy. The wake decision comes from
@@ -626,20 +695,17 @@ public partial class IslandWindow : Window
     private void SampleProximity()
     {
         if (!IsVisible || Coordinator.FullscreenSuppressed
-            || _pinnedContent is not RestingView { Expression: MascotExpression.Sleepy })
+            || _pinnedContent is not RestingView
+            || (_pinnedContent is not RestingView { Expression: MascotExpression.Sleepy } && !_proximityAwake))
         {
             _proximityTimer.Stop();
             return;
         }
 
         if (!Interop.NativeMethods.GetCursorPos(out var cursorPx)) return;
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var cursorDipX = cursorPx.X / dpi;
-        var cursorDipY = cursorPx.Y / dpi;
-
-        var rect = GetPillScreenRectDip(dpi);
-        var dx = Math.Max(rect.Left - cursorDipX, 0) + Math.Max(cursorDipX - rect.Right, 0);
-        var dy = Math.Max(rect.Top - cursorDipY, 0) + Math.Max(cursorDipY - rect.Bottom, 0);
+        var rect = GetPillScreenRectPixels();
+        var dx = Math.Max(rect.Left - cursorPx.X, 0) + Math.Max(cursorPx.X - rect.Right, 0);
+        var dy = Math.Max(rect.Top - cursorPx.Y, 0) + Math.Max(cursorPx.Y - rect.Bottom, 0);
         var distance = Math.Sqrt(dx * dx + dy * dy);
 
         var decision = _proximityPolicy.Evaluate(distance, DateTimeOffset.UtcNow);
@@ -652,13 +718,14 @@ public partial class IslandWindow : Window
 
     /// <summary>Pill bounds in screen DIPs (the window is a fixed canvas; the pill is
     /// centered horizontally at the top).</summary>
-    private Rect GetPillScreenRectDip(double dpi)
+    private Rect GetPillScreenRectPixels()
     {
-        // Window Left/Top/Width are screen DIPs already; the pill is horizontally
-        // centered in the canvas at the top. The +14 extends wake coverage just below.
-        _ = dpi;
-        var pillLeft = Left + (Width - Pill.ActualWidth) / 2;
-        return new Rect(pillLeft, Top, Pill.ActualWidth, Pill.ActualHeight + 14);
+        var transform = Pill.TransformToAncestor(this);
+        var topLeft = PointToScreen(transform.Transform(new Point(0, 0)));
+        var bottomRight = PointToScreen(transform.Transform(new Point(Pill.ActualWidth, Pill.ActualHeight)));
+        // Extend wake coverage slightly below the pill, in physical pixels.
+        return new Rect(topLeft, new Size(Math.Max(1, bottomRight.X - topLeft.X),
+            Math.Max(1, bottomRight.Y - topLeft.Y) + 14));
     }
 
     /// <summary>Diagnostics: lists elements carrying live animation clocks.</summary>
@@ -714,12 +781,39 @@ public partial class IslandWindow : Window
         _shelfRevertTimer.Start();
     }
 
-    private void TodoInput_Click(object sender, MouseButtonEventArgs e)
+    private void CompactMedia_Click(object sender, MouseButtonEventArgs e)
     {
-        // The overlay is normally non-activating. Only an explicit click on its
-        // input box may activate it so the user can type; nothing steals focus.
-        Activate();
-        if (sender is TextBox input) input.Focus();
+        if (_pinnedContent is not MediaCompactView media) return;
+        if (_hoverExpanded) CollapseHover();
+        else
+        {
+            _hoverExpanded = true;
+            ApplyContent(new MediaExpandedView(media.Media));
+        }
+        e.Handled = true;
+    }
+
+    private void CompactAgent_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_pinnedContent is not AgentCompactView) return;
+        if (_hoverExpanded) CollapseHover();
+        else
+        {
+            _hoverExpanded = true;
+            ApplyContent(_agentPanelProvider());
+        }
+        e.Handled = true;
+    }
+
+    private void AgentBadge_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_pinnedContent is not MediaCompactView) return;
+        if (_hoverExpanded) CollapseHover();
+        else
+        {
+            _hoverExpanded = true;
+            ApplyContent(_agentPanelProvider());
+        }
         e.Handled = true;
     }
 
@@ -743,19 +837,7 @@ public partial class IslandWindow : Window
     {
         // AllowDrop stays true in every state: a drop on any panel shelves the file.
 
-        // Proximity wake is active only while the sleepy face is on screen.
-        var sleepy = content is RestingView { Expression: MascotExpression.Sleepy }
-                     && MascotOptions.SleepyEnabled && MascotOptions.FaceEnabled;
-        if (sleepy && !_proximityTimer.IsEnabled) _proximityTimer.Start();
-        else if (!sleepy && _proximityTimer.IsEnabled)
-        {
-            _proximityTimer.Stop();
-            if (_proximityAwake)
-            {
-                _proximityAwake = false;
-                _proximityPolicy.Reset();
-            }
-        }
+        SyncProximityTimer();
 
         StopEq();
         _eqHost = null;
@@ -831,7 +913,7 @@ public partial class IslandWindow : Window
 
     private void StartEq()
     {
-        if (_eqHost is null) return;
+        if (_eqHost is null || MascotOptions.ReducedMotion || !MascotOptions.AnimationsEnabled) return;
         StopEq();
         var speed = _config.Current.AnimationSpeed;
         _eqStoryboard = new Storyboard();
@@ -932,12 +1014,12 @@ public partial class IslandWindow : Window
         void Set(string key, double baseSize) =>
             Resources[key] = Math.Round(baseSize * scale * 2, MidpointRounding.AwayFromZero) / 2;
 
-        Set("FontMicro", 11);
-        Set("FontCaption", 12);
-        Set("FontBody", 13);
-        Set("FontPrimary", 14);
-        Set("FontTitle", 15.5);
-        Set("FontMono", 12);
+        Set("FontMicro", 12);
+        Set("FontCaption", 13);
+        Set("FontBody", 14);
+        Set("FontPrimary", 15);
+        Set("FontTitle", 16.5);
+        Set("FontMono", 13);
     }
 
     public void PositionWindow()

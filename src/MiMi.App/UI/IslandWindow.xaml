@@ -35,12 +35,12 @@
 
         <!-- Typography ladder (DynamicResource so the Small/Default/Large setting
              updates live). Sizes are modest step-ups from the previous scale. -->
-        <sys:Double x:Key="FontMicro">11</sys:Double>
-        <sys:Double x:Key="FontCaption">12</sys:Double>
-        <sys:Double x:Key="FontBody">13</sys:Double>
-        <sys:Double x:Key="FontPrimary">14</sys:Double>
-        <sys:Double x:Key="FontTitle">15.5</sys:Double>
-        <sys:Double x:Key="FontMono">12</sys:Double>
+        <sys:Double x:Key="FontMicro">12</sys:Double>
+        <sys:Double x:Key="FontCaption">13</sys:Double>
+        <sys:Double x:Key="FontBody">14</sys:Double>
+        <sys:Double x:Key="FontPrimary">15</sys:Double>
+        <sys:Double x:Key="FontTitle">16.5</sys:Double>
+        <sys:Double x:Key="FontMono">13</sys:Double>
 
         <DropShadowEffect x:Key="PillShadow" BlurRadius="34" ShadowDepth="1" Direction="270"
                           Opacity="0.55" Color="#C8000000"/>
@@ -313,16 +313,42 @@
                  so the host fills the content box and paints a transparent background.
                  The face keeps its aspect ratio (the mascot's own Viewbox) and is never
                  squashed or clipped by the pill's rounded clip. -->
-            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True"
+            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True" Cursor="Hand"
+                  ToolTip="Open Quick Access"
                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
+                <Ellipse Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Fill="{StaticResource AccentAmber}">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowMascot}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
+                <Border Background="#22F5B84B" CornerRadius="9" Padding="5,2"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                        Visibility="{Binding ShelfCount, Converter={StaticResource PendingToVis}}"
+                        ToolTip="Files on the shelf">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                   Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource AccentAmber}" Margin="4,0,0,0" Text="{Binding ShelfCount}"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:MediaCompactView}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Cursor="Hand" MouseLeftButtonDown="CompactMedia_Click">
                 <Border Width="28" Height="28" CornerRadius="7" Background="{StaticResource ArtPlaceholder}">
                     <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="28" Height="28"/>
                 </Border>
@@ -350,7 +376,9 @@
                 </StackPanel>
                 <!-- Tiny agent-count badge: both worlds stay discoverable while music plays. -->
                 <Border Background="#22FFB454" CornerRadius="9" Padding="6,2" Margin="4,0,2,0"
-                        VerticalAlignment="Center"
+                        VerticalAlignment="Center" Cursor="Hand"
+                        MouseLeftButtonDown="AgentBadge_Click"
+                        ToolTip="Open agent activity"
                         Visibility="{Binding HasAgentBadge, Converter={StaticResource BoolToVis}}">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
                                Foreground="{StaticResource AccentAmber}"
@@ -363,7 +391,23 @@
             <StackPanel Margin="20,14,20,12">
                 <StackPanel Orientation="Horizontal">
                     <Border Width="58" Height="58" CornerRadius="12" Background="{StaticResource ArtPlaceholder}">
+                        <Grid>
                         <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="58" Height="58"/>
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="24"
+                               Foreground="{StaticResource TextTertiary}" Text="&#xE8D6;"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Media.Art}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                        </Grid>
                     </Border>
                     <Grid Margin="14,0,0,0" Width="300" VerticalAlignment="Center"
                                               ToolTip="{Binding Media.Title}">
@@ -372,7 +416,7 @@
                                        Foreground="{StaticResource TextTertiary}"
                                        Text="{Binding Media.LyricPrev}" TextTrimming="CharacterEllipsis"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="14" FontWeight="SemiBold"
-                                       Margin="0,2,0,2">
+                                       Margin="0,2,0,2" TextTrimming="CharacterEllipsis" ToolTip="{Binding Media.LyricCurrent}">
                                 <TextBlock.Foreground>
                                     <SolidColorBrush Color="{Binding Media.LyricCurrentColor}"/>
                                 </TextBlock.Foreground>
@@ -408,6 +452,9 @@
                 </Grid>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                    <Button Style="{StaticResource TransportButton}" Width="30" Height="30" Margin="0,0,12,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenQuickAccessCommand}"
+                            Content="&#xE7C4;" ToolTip="Open Quick Access"/>
                     <Button x:Name="LyricsToggle" Style="{StaticResource TransportButton}" FontSize="12"
                             Width="30" Height="30" Margin="0,0,12,0"
                             Content="&#xE7C3;" ToolTip="Toggle synchronized lyrics"/>
@@ -428,7 +475,8 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentCompactView}">
-            <Grid Margin="18,0" VerticalAlignment="Center">
+            <Grid Margin="18,0" VerticalAlignment="Center" Cursor="Hand"
+                  MouseLeftButtonDown="CompactAgent_Click">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="38"/>
                     <ColumnDefinition Width="*"/>
@@ -543,7 +591,7 @@
                             ToolTip="Deny this request"
                             Content="Deny" Margin="8,0,0,0"/>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.OpenCommand}"
-                            AutomationProperties.Name="Open in agent"
+                            AutomationProperties.Name="Copy session reference"
                             ToolTip="Copy a safe session reference to the clipboard"
                             Content="Copy session" Margin="8,0,0,0"/>
                 </StackPanel>
@@ -560,7 +608,13 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Style="{StaticResource PanelHeading}" Text="Agent activity"/>
+                <Grid Grid.Row="0">
+                    <TextBlock Style="{StaticResource PanelHeading}" Text="Agent activity"/>
+                    <Button Style="{StaticResource TransportButton}" Width="28" Height="28"
+                            HorizontalAlignment="Right"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenQuickAccessCommand}"
+                            Content="&#xE7C4;" ToolTip="Open Quick Access"/>
+                </Grid>
                 <TextBlock Grid.Row="1" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Summary}" Margin="0,3,0,0"/>
 
@@ -584,6 +638,10 @@
                                    Text="{Binding ImpressiveBotDetail}" TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding ImpressiveBotDetail}"
                                    Visibility="{Binding ImpressiveBotDetail, Converter={StaticResource StringToVis}}"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource AccentAmber}" Margin="15,3,0,0"
+                                   Text="{Binding ImpressiveBotApprovalNote}"
+                                   Visibility="{Binding ImpressiveBotApprovalNote, Converter={StaticResource StringToVis}}"/>
                     </StackPanel>
                 </Border>
                 <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -601,14 +659,14 @@
                                             <SolidColorBrush Color="{Binding StateBrush.Color}"/>
                                         </Ellipse.Fill>
                                     </Ellipse>
-                                    <StackPanel Width="118" VerticalAlignment="Center">
+                                    <StackPanel Width="150" VerticalAlignment="Center">
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" FontWeight="SemiBold"
-                                                   Text="{Binding Provider}" TextTrimming="CharacterEllipsis"/>
+                                                   Text="{Binding Provider}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Provider}"/>
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                                    Foreground="{StaticResource TextTertiary}"
                                                    Text="{Binding Project}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                    <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="150">
+                                    <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="130">
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
                                                    Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
@@ -679,6 +737,8 @@
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    Foreground="{StaticResource AccentAmber}"
                                    Text="{Binding Pomodoro.Remaining, StringFormat='{}{0} remaining'}"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextTertiary}" Text="{Binding Pomodoro.SubLabel}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource TransportButton}" Width="30" Height="30"
@@ -735,6 +795,37 @@
             </StackPanel>
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type ui:VolumeView}">
+            <StackPanel Margin="18,12,18,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TransportButton}" Width="28" Height="28" Margin="0,0,10,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE72B;"/>
+                    </Button>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Volume"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextSecondary}" Text="{Binding Volume.StatusLabel}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource TransportButton}" Width="34" Height="34"
+                            IsEnabled="{Binding Volume.IsAvailable}"
+                            Command="{Binding Volume.MuteCommand}" ToolTip="Mute or unmute">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" Text="&#xE74F;"/>
+                    </Button>
+                </Grid>
+                <Slider Style="{StaticResource IslandSlider}" Margin="0,10,0,0"
+                        Minimum="0" Maximum="100" Value="{Binding Volume.Level, Mode=TwoWay}"
+                        AutomationProperties.Name="Master volume" ToolTip="Adjust master volume"
+                        IsEnabled="{Binding Volume.IsAvailable}"/>
+            </StackPanel>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type ui:TodoView}">
             <StackPanel Margin="16,10,14,10">
                 <Grid Margin="0,0,0,6">
@@ -750,24 +841,9 @@
                                Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
                                Text="{Binding Todo.HeaderCount}"/>
                 </Grid>
-                <Grid Margin="0,0,0,7">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="NewTaskInput" Grid.Column="0" Style="{StaticResource IslandInput}"
-                             MaxLength="200" AcceptsReturn="False"
-                             Text="{Binding Todo.NewTaskTitle, UpdateSourceTrigger=PropertyChanged}"
-                             AutomationProperties.Name="New task title"
-                             PreviewMouseLeftButtonDown="TodoInput_Click">
-                        <TextBox.InputBindings>
-                            <KeyBinding Key="Enter" Command="{Binding Todo.AddCommand}"/>
-                        </TextBox.InputBindings>
-                    </TextBox>
-                    <Button Grid.Column="1" Style="{StaticResource ApproveButton}" Padding="12,6" Margin="7,0,0,0"
-                            Command="{Binding Todo.AddCommand}" ToolTip="Add task"
-                            Content="Add"/>
-                </Grid>
+                <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                        Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=AddTaskCommand}"
+                        ToolTip="Open the task editor" Content="＋  Add a task…" Margin="0,0,0,8"/>
                 <ItemsControl ItemsSource="{Binding Todo.Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -789,7 +865,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <TextBlock Style="{StaticResource PanelHint}" Margin="0,6,0,0"
-                           Text="You’re all caught up. Add your first task above."
+                           Text="You’re all caught up. Use “Add a task” to start your list."
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
@@ -810,6 +886,8 @@
                                Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Right"
                                Text="{Binding HeaderCount}"/>
                 </Grid>
+                <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
                 <ItemsControl ItemsSource="{Binding Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -840,6 +918,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </ScrollViewer>
                 <TextBlock Margin="0,6,0,0">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource PanelHint}">
@@ -889,49 +968,73 @@
                         <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
                     </Button>
                 </Grid>
-                <UniformGrid Columns="4">
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                <UniformGrid Columns="3">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,6"
                             Command="{Binding QuickAccess.OpenPomodoroCommand}" ToolTip="Open focus timer">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
-                                       HorizontalAlignment="Center"/>
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE823;" HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Focus" TextTrimming="CharacterEllipsis" />
+                                       Margin="0,2,0,0" Text="Focus"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Center"
+                                       Text="{Binding QuickAccess.TimerBadge}"
+                                       Visibility="{Binding QuickAccess.TimerBadge, Converter={StaticResource StringToVis}}"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,6"
                             Command="{Binding QuickAccess.OpenWaterCommand}" ToolTip="Open water tracker">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
-                                       HorizontalAlignment="Center"/>
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;" HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Water" TextTrimming="CharacterEllipsis" />
+                                       Margin="0,2,0,0" Text="Water"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,0,6"
                             Command="{Binding QuickAccess.OpenTodoCommand}" ToolTip="Open to-do list">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE73A;"
-                                       HorizontalAlignment="Center"/>
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE73A;" HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="To-do" TextTrimming="CharacterEllipsis" />
+                                       Margin="0,2,0,0" Text="To-do"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}"
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
                             Command="{Binding QuickAccess.OpenShelfCommand}" ToolTip="Open file shelf">
                         <StackPanel>
                             <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"
-                                       HorizontalAlignment="Center"/>
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;" HorizontalAlignment="Center"/>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                        Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Shelf" TextTrimming="CharacterEllipsis" />
+                                       Margin="0,2,0,0" Text="Shelf"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Center"
+                                       Text="{Binding QuickAccess.ShelfBadge}"
+                                       Visibility="{Binding QuickAccess.ShelfBadge, Converter={StaticResource StringToVis}}"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
+                            Command="{Binding QuickAccess.OpenVolumeCommand}" ToolTip="Open volume controls">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE767;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="Volume"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="0"
+                            Command="{Binding QuickAccess.OpenCodexCommand}" ToolTip="Open an embedded Codex conversation">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="{StaticResource AccentAmber}" Text="&#xE7C4;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
+                                       Margin="0,2,0,0" Text="Codex"/>
                         </StackPanel>
                     </Button>
                 </UniformGrid>
