@@ -126,13 +126,17 @@ untracked files; the stale notes and scratch harness are intentionally retained 
 
 ## Security review tooling
 
-The pinned Cloudflare workflow is installed as `cloudflare-security-audit-official` from
-`https://github.com/cloudflare/security-audit-skill/tree/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8/skills/security-audit`.
-It supplies the core guide plus eight companion guides; the full upstream repository is
-also present locally under the bot's skills folder for the remaining companions and
-validators. The older `security-audit` skill remains available. A full six-phase audit runs
-only on an explicit audit or pen-test request; ordinary security questions use guidance
-mode. Source inspection is read-only, and target-controlled execution needs a real sandbox.
+Use the enabled **`security-audit`** skill. It is Cloudflare's official workflow: its
+companion notes cite pinned commit
+`c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, and its full installed package (all companion
+guides, `report-schema.json`, and the two zero-dependency validators) is under the bot's
+skills folder in `cloudflare-security-audit/skills/security-audit`.
+
+On 2026-11-26 an additional native installation named `cloudflare-security-audit-official`
+was compared against it. The workflow bodies were identical, so the duplicate was removed
+and only `security-audit` remains enabled. A full six-phase audit runs only on an explicit
+audit or pen-test request; ordinary security questions use guidance mode. Source inspection
+is read-only, and target-controlled execution needs a real sandbox.
 
 ## Remaining manual acceptance
 
