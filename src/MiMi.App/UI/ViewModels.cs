@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -6,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MiMi.Agents;
+using MiMi.App.Interop;
 using MiMi.App.UI.Mascot;
 using MiMi.Core;
 using MiMi.Lyrics;
@@ -54,9 +56,10 @@ public sealed class RestingView : IslandContent
         set => Set(ref _shelfCount, value);
     }
     // Face-only idle: a slim pill whose width hugs the face with breathing room.
-    public override double TargetWidth => 118;
-    public override double TargetHeight => 38;
-    public override double TargetCornerRadius => 19;
+    public override double TargetWidth => 132;
+    public override double TargetHeight => 40;
+    public override double TargetCornerRadius => 20;
+    public override bool Expandable => true;
 }
 
 public sealed class MediaCompactView : IslandContent
@@ -110,12 +113,22 @@ public sealed class AgentCompactView : IslandContent
 {
     public AgentIndicatorViewModel Indicator { get; }
     public AgentCompactView(AgentIndicatorViewModel indicator) { Indicator = indicator; }
-    public override double TargetWidth => Math.Clamp(88 + new FormattedText(
-        Indicator.Line, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-        new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-        13, Brushes.White, 1).WidthIncludingTrailingWhitespace, 180, 380);
-    public override double TargetHeight => 44;
-    public override double TargetCornerRadius => 22;
+    public override double TargetWidth
+    {
+        get
+        {
+            var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal,
+                FontWeights.SemiBold, FontStretches.Normal);
+            var lineWidth = new FormattedText(Indicator.Line, System.Globalization.CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight, typeface, 14, Brushes.White, 1).WidthIncludingTrailingWhitespace;
+            var pendingWidth = string.IsNullOrEmpty(Indicator.PendingLabel) ? 0
+                : new FormattedText(Indicator.PendingLabel, System.Globalization.CultureInfo.CurrentUICulture,
+                    FlowDirection.LeftToRight, typeface, 12, Brushes.White, 1).WidthIncludingTrailingWhitespace;
+            return Math.Round(Math.Clamp(104 + Math.Max(lineWidth, pendingWidth), 200, 640));
+        }
+    }
+    public override double TargetHeight => 52;
+    public override double TargetCornerRadius => 26;
     public override bool Expandable => true;
 }
 
@@ -296,42 +309,61 @@ public sealed class TodoRowViewModel : ObservableObject
 
 public sealed record QuickAccessButton(string Kind, string Glyph, string Label, bool Accent);
 
-/// <summary>Quick Access hub bindings: four utility shortcuts + back affordance.</summary>
+/// <summary>Quick Access hub bindings: the Nusa-style glanceable launcher.</summary>
 public sealed class QuickAccessViewModel : ObservableObject
 {
     private IReadOnlyList<QuickAccessButton> _buttons = Array.Empty<QuickAccessButton>();
     private string _timerBadge = "";
     private string _shelfBadge = "";
+    private string _clipboardBadge = "";
+    private string _greeting = "Hello";
+    private string _clockLabel = "";
+    private string _dateLabel = "";
 
     public IReadOnlyList<QuickAccessButton> Buttons { get => _buttons; private set => Set(ref _buttons, value); }
-    /// <summary>Shown on the Focus tile while a session runs (context retention cue).</summary>
     public string TimerBadge { get => _timerBadge; private set => Set(ref _timerBadge, value); }
     public string ShelfBadge { get => _shelfBadge; private set => Set(ref _shelfBadge, value); }
+    public string ClipboardBadge { get => _clipboardBadge; private set => Set(ref _clipboardBadge, value); }
+    public string Greeting { get => _greeting; private set => Set(ref _greeting, value); }
+    public string ClockLabel { get => _clockLabel; private set => Set(ref _clockLabel, value); }
+    public string DateLabel { get => _dateLabel; private set => Set(ref _dateLabel, value); }
 
     public ICommand OpenPomodoroCommand { get; }
     public ICommand OpenWaterCommand { get; }
     public ICommand OpenTodoCommand { get; }
     public ICommand OpenShelfCommand { get; }
     public ICommand OpenVolumeCommand { get; }
+    public ICommand OpenBrightnessCommand { get; }
+    public ICommand OpenClipboardCommand { get; }
+    public ICommand OpenWidgetsCommand { get; }
     public ICommand OpenCodexCommand { get; }
+    public ICommand OpenSettingsCommand { get; }
     public ICommand BackCommand { get; }
 
     private readonly Action<string> _openUtility;
     private readonly Action _back;
     private readonly Action _openCodex;
+    private readonly Action _openSettings;
 
-    public QuickAccessViewModel(Action<string> openUtility, Action back, Action? openCodex = null)
+    public QuickAccessViewModel(Action<string> openUtility, Action back, Action? openCodex = null,
+        Action? openSettings = null)
     {
         _openUtility = openUtility;
         _back = back;
         _openCodex = openCodex ?? (() => { });
+        _openSettings = openSettings ?? (() => { });
         OpenPomodoroCommand = new RelayCommand(() => _openUtility(UtilityPinState.Pomodoro));
         OpenWaterCommand = new RelayCommand(() => _openUtility(UtilityPinState.Water));
         OpenTodoCommand = new RelayCommand(() => _openUtility(UtilityPinState.Todo));
         OpenShelfCommand = new RelayCommand(() => _openUtility(UtilityPinState.Shelf));
         OpenVolumeCommand = new RelayCommand(() => _openUtility(UtilityPinState.Volume));
+        OpenBrightnessCommand = new RelayCommand(() => _openUtility(UtilityPinState.Brightness));
+        OpenClipboardCommand = new RelayCommand(() => _openUtility(UtilityPinState.Clipboard));
+        OpenWidgetsCommand = new RelayCommand(() => _openUtility(UtilityPinState.Widgets));
         OpenCodexCommand = new RelayCommand(() => _openCodex());
+        OpenSettingsCommand = new RelayCommand(() => _openSettings());
         BackCommand = new RelayCommand(_back);
+        UpdateClock(DateTime.Now);
     }
 
     public void UpdateTimerBadge(bool running, int sessions)
@@ -340,6 +372,20 @@ public sealed class QuickAccessViewModel : ObservableObject
     }
 
     public void UpdateShelfBadge(int count) => ShelfBadge = count > 0 ? $"{count} item{(count == 1 ? "" : "s")}" : "";
+    public void UpdateClipboardBadge(int count) => ClipboardBadge = count > 0 ? $"{count} clip{(count == 1 ? "" : "s")}" : "";
+
+    public void UpdateClock(DateTime now)
+    {
+        Greeting = now.Hour switch
+        {
+            < 5 or >= 22 => "Still up?",
+            < 12 => "Good morning",
+            < 17 => "Good afternoon",
+            _ => "Good evening",
+        };
+        ClockLabel = now.ToString("HH:mm");
+        DateLabel = now.ToString("ddd, d MMM");
+    }
 }
 
 /// <summary>Hydration reminder with quick-add and snooze actions (Phase 4.1).</summary>
@@ -365,12 +411,14 @@ public sealed class TodoDueView : IslandContent
     public string TaskTitle { get; }
     public ICommand CompleteCommand { get; }
     public ICommand OpenListCommand { get; }
+    public ICommand SnoozeCommand { get; }
 
-    public TodoDueView(string title, Action complete, Action openList)
+    public TodoDueView(string title, Action complete, Action openList, Action snooze)
     {
         TaskTitle = title;
         CompleteCommand = new RelayCommand(complete);
         OpenListCommand = new RelayCommand(openList);
+        SnoozeCommand = new RelayCommand(snooze);
     }
 
     public override double TargetWidth => 400;
@@ -509,14 +557,333 @@ public sealed class HudView : IslandContent
     public override double TargetCornerRadius => 20;
 }
 
+/// <summary>One session-only clipboard entry. Contents are never logged.</summary>
+public sealed class ClipboardEntryViewModel : ObservableObject
+{
+    public string Id { get; } = Guid.NewGuid().ToString("N");
+    public string Text { get; }
+    public string Preview { get; }
+    public string TimeLabel { get; }
+    public ICommand CopyCommand { get; }
+    public ICommand RemoveCommand { get; }
+
+    public ClipboardEntryViewModel(string text, DateTime capturedAt, Action<string> copy, Action<ClipboardEntryViewModel> remove)
+    {
+        Text = text;
+        Preview = text.Replace("\r", "", StringComparison.Ordinal).Replace('\n', ' ').Replace('\t', ' ');
+        if (Preview.Length > 180) Preview = Preview[..179] + "…";
+        TimeLabel = capturedAt.ToString("HH:mm");
+        CopyCommand = new RelayCommand(() => copy(text));
+        RemoveCommand = new RelayCommand(() => remove(this));
+    }
+}
+
+/// <summary>Bounded, in-memory clipboard history. Capture is opt-in and text-only.</summary>
+public sealed class ClipboardViewModel : ObservableObject
+{
+    public const int Capacity = 20;
+    public const int MaxTextLength = 4000;
+
+    public ObservableCollection<ClipboardEntryViewModel> Entries { get; } = new();
+    public int Count => Entries.Count;
+    public bool HasEntries => Entries.Count > 0;
+    public bool IsCapturing { get => _isCapturing; private set => Set(ref _isCapturing, value); }
+    public string CaptureLabel => IsCapturing ? "Capturing on" : "Capturing off";
+    public string StatusLabel => IsCapturing
+        ? $"{Count} clip{(Count == 1 ? "" : "s")} · this session only"
+        : "Off · turn on to remember copied text";
+    private bool _isCapturing;
+
+    public ICommand ToggleCaptureCommand { get; }
+    public ICommand ClearCommand { get; }
+    public ICommand CaptureNowCommand { get; }
+
+    private readonly Action<bool> _setCapture;
+    private readonly Action _captureNow;
+    private readonly Action<string> _copy;
+
+    public ClipboardViewModel(Action<bool> setCapture, Action captureNow, Action<string> copy)
+    {
+        _setCapture = setCapture;
+        _captureNow = captureNow;
+        _copy = copy;
+        ToggleCaptureCommand = new RelayCommand(() => SetCapturing(!IsCapturing, persist: true));
+        ClearCommand = new RelayCommand(Clear);
+        CaptureNowCommand = new RelayCommand(() => _captureNow());
+        Entries.CollectionChanged += (_, _) =>
+        {
+            Raise(nameof(Count));
+            Raise(nameof(HasEntries));
+            Raise(nameof(StatusLabel));
+        };
+    }
+
+    public void SetCapturing(bool enabled, bool persist = false)
+    {
+        if (IsCapturing == enabled) return;
+        IsCapturing = enabled;
+        Raise(nameof(CaptureLabel));
+        Raise(nameof(StatusLabel));
+        if (persist) _setCapture(enabled);
+    }
+
+    public bool Add(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var clean = new string(text.Where(c => c == '\n' || c == '\t' || !char.IsControl(c)).ToArray()).Trim();
+        if (clean.Length == 0) return false;
+        if (clean.Length > MaxTextLength) clean = clean[..MaxTextLength];
+        var duplicate = Entries.FirstOrDefault(e => string.Equals(e.Text, clean, StringComparison.Ordinal));
+        if (duplicate is not null) Entries.Remove(duplicate);
+        Entries.Insert(0, new ClipboardEntryViewModel(clean, DateTime.Now, _copy, Remove));
+        while (Entries.Count > Capacity) Entries.RemoveAt(Entries.Count - 1);
+        return true;
+    }
+
+    public void Remove(ClipboardEntryViewModel entry) => Entries.Remove(entry);
+    public void Clear() => Entries.Clear();
+}
+
+public sealed class ClipboardView : IslandContent
+{
+    public ClipboardViewModel Clipboard { get; }
+    public ClipboardView(ClipboardViewModel clipboard) { Clipboard = clipboard; }
+    public override double TargetWidth => 460;
+    public override double TargetHeight => 320;
+    public override double TargetCornerRadius => 28;
+}
+
+public sealed record WidgetDayViewModel(string Label, int DayNumber, int TaskCount, bool IsToday);
+
+public sealed record WidgetSystemSnapshot(PowerMonitor.BatterySnapshot? Battery, NetworkMonitor.NetworkState? Network);
+
+/// <summary>Local Widgets page: week, tasks, focus, water, battery, network and moon.</summary>
+public sealed class WidgetsViewModel : ObservableObject
+{
+    private IReadOnlyList<WidgetDayViewModel> _weekDays = Array.Empty<WidgetDayViewModel>();
+    private string _todayTasksLabel = "No tasks";
+    private string _nextTaskLabel = "Nothing scheduled";
+    private string _focusLabel = "0 sessions";
+    private string _focusDetail = "Ready when you are";
+    private string _waterLabel = "0.0 / 1.8 L";
+    private string _waterDetail = "0% of daily goal";
+    private double _waterProgress;
+    private string _batteryLabel = "Desktop";
+    private string _batteryDetail = "Plugged in";
+    private double? _batteryProgress;
+    private string _networkLabel = "Offline";
+    private string _networkDetail = "No active connection";
+    private string _moonGlyph = "●";
+    private string _moonLabel = "New moon";
+    private string _moonDetail = "";
+    private string _localClockLabel = "";
+    private string _utcClockLabel = "";
+    private string _updatedLabel = "";
+
+    public IReadOnlyList<WidgetDayViewModel> WeekDays { get => _weekDays; private set => Set(ref _weekDays, value); }
+    public string TodayTasksLabel { get => _todayTasksLabel; private set => Set(ref _todayTasksLabel, value); }
+    public string NextTaskLabel { get => _nextTaskLabel; private set => Set(ref _nextTaskLabel, value); }
+    public string FocusLabel { get => _focusLabel; private set => Set(ref _focusLabel, value); }
+    public string FocusDetail { get => _focusDetail; private set => Set(ref _focusDetail, value); }
+    public string WaterLabel { get => _waterLabel; private set => Set(ref _waterLabel, value); }
+    public string WaterDetail { get => _waterDetail; private set => Set(ref _waterDetail, value); }
+    public double WaterProgress { get => _waterProgress; private set => Set(ref _waterProgress, value); }
+    public string BatteryLabel { get => _batteryLabel; private set => Set(ref _batteryLabel, value); }
+    public string BatteryDetail { get => _batteryDetail; private set => Set(ref _batteryDetail, value); }
+    public double? BatteryProgress { get => _batteryProgress; private set => Set(ref _batteryProgress, value); }
+    public string NetworkLabel { get => _networkLabel; private set => Set(ref _networkLabel, value); }
+    public string NetworkDetail { get => _networkDetail; private set => Set(ref _networkDetail, value); }
+    public string MoonGlyph { get => _moonGlyph; private set => Set(ref _moonGlyph, value); }
+    public string MoonLabel { get => _moonLabel; private set => Set(ref _moonLabel, value); }
+    public string MoonDetail { get => _moonDetail; private set => Set(ref _moonDetail, value); }
+    public string LocalClockLabel { get => _localClockLabel; private set => Set(ref _localClockLabel, value); }
+    public string UtcClockLabel { get => _utcClockLabel; private set => Set(ref _utcClockLabel, value); }
+    public string UpdatedLabel { get => _updatedLabel; private set => Set(ref _updatedLabel, value); }
+
+    public void Update(DateTime now, IReadOnlyList<TodoStore.TodoItem> tasks, int focusSessions,
+        bool focusRunning, int waterMl, int waterGoalMl, WidgetSystemSnapshot? system = null)
+    {
+        var open = tasks.Where(t => !t.Done).ToArray();
+        var start = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
+        WeekDays = Enumerable.Range(0, 7).Select(i =>
+        {
+            var day = start.AddDays(i);
+            return new WidgetDayViewModel(day.ToString("ddd"), day.Day,
+                open.Count(t => t.Due?.Date == day), day == now.Date);
+        }).ToArray();
+
+        var dueToday = open.Count(t => t.Due?.Date == now.Date);
+        TodayTasksLabel = dueToday > 0 ? $"{dueToday} due today" : $"{open.Length} open";
+        var next = open.Where(t => t.Due is not null).OrderBy(t => t.Due).FirstOrDefault();
+        if (next?.Due is not { } due)
+        {
+            NextTaskLabel = "Nothing scheduled";
+        }
+        else
+        {
+            NextTaskLabel = due <= now
+                ? $"Overdue · {next.Title}"
+                : $"{FormatSpan(due - now)} · {next.Title}";
+        }
+        if (NextTaskLabel.Length > 70) NextTaskLabel = NextTaskLabel[..69] + "…";
+
+        FocusLabel = $"{focusSessions} session{(focusSessions == 1 ? "" : "s")}";
+        FocusDetail = focusRunning ? "Focus in progress" : focusSessions > 0 ? "Nice work today" : "Ready when you are";
+        WaterLabel = $"{waterMl / 1000.0:0.0} / {waterGoalMl / 1000.0:0.0} L";
+        WaterProgress = waterGoalMl <= 0 ? 0 : Math.Clamp((double)waterMl / waterGoalMl, 0, 1);
+        WaterDetail = waterMl >= waterGoalMl ? "Daily goal reached" : $"{WaterProgress:0%} of daily goal";
+
+        var battery = system?.Battery;
+        if (battery is { HasBattery: true, PercentUnknown: false })
+        {
+            BatteryLabel = $"{battery.Percent}%";
+            BatteryDetail = battery.Charging ? "Charging" : "On battery";
+            BatteryProgress = battery.Percent / 100.0;
+        }
+        else
+        {
+            BatteryLabel = "Desktop";
+            BatteryDetail = "Plugged in";
+            BatteryProgress = null;
+        }
+
+        var network = system?.Network;
+        NetworkLabel = network is { AnyUp: true } ? network.KindLabel is { Length: > 0 } kind ? kind : "Connected" : "Offline";
+        NetworkDetail = network is { AnyUp: true } ? "Local network available" : "No active connection";
+
+        var (phase, illumination) = MoonPhaseCalculator.Calculate(now);
+        MoonGlyph = MoonPhaseCalculator.Glyph(phase);
+        MoonLabel = MoonPhaseCalculator.Name(phase);
+        MoonDetail = $"{illumination:0%} illuminated";
+        LocalClockLabel = now.ToString("HH:mm");
+        UtcClockLabel = now.ToUniversalTime().ToString("HH:mm");
+        UpdatedLabel = $"Updated {now:HH:mm:ss}";
+    }
+
+    internal static string FormatSpan(TimeSpan span)
+    {
+        if (span <= TimeSpan.Zero) return "now";
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d {span.Hours}h";
+        if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h {span.Minutes}m";
+        return $"{Math.Max(1, (int)span.TotalMinutes)}m";
+    }
+}
+
+public sealed class WidgetsView : IslandContent
+{
+    public WidgetsViewModel Widgets { get; }
+    public WidgetsView(WidgetsViewModel widgets) { Widgets = widgets; }
+    public override double TargetWidth => 520;
+    public override double TargetHeight => 340;
+    public override double TargetCornerRadius => 28;
+}
+
+/// <summary>Interactive laptop brightness. Unsupported displays stay honestly unavailable.</summary>
+public sealed class BrightnessViewModel : ObservableObject
+{
+    private readonly Func<Task<LaptopBrightnessControl.Snapshot>> _read;
+    private readonly Func<string, int, Task<bool>> _set;
+    private double _previewLevel;
+    private bool _isAvailable;
+    private bool _isBusy;
+    private string _statusLabel = "Checking display…";
+    private string? _instanceName;
+
+    public double PreviewLevel
+    {
+        get => _previewLevel;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 100);
+            if (Math.Abs(clamped - _previewLevel) < 0.01) return;
+            _previewLevel = clamped;
+            StatusLabel = _isAvailable ? $"{clamped:0}% · release to apply" : "Not available on this display";
+            Raise(nameof(PreviewLevel));
+        }
+    }
+    public bool IsAvailable { get => _isAvailable; private set => Set(ref _isAvailable, value); }
+    public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
+    public string StatusLabel { get => _statusLabel; private set => Set(ref _statusLabel, value); }
+    public ICommand ApplyCommand { get; }
+    public ICommand RefreshCommand { get; }
+
+    public BrightnessViewModel(Func<Task<LaptopBrightnessControl.Snapshot>> read,
+        Func<string, int, Task<bool>> set)
+    {
+        _read = read;
+        _set = set;
+        ApplyCommand = new RelayCommand(() => _ = ApplyPreviewAsync());
+        RefreshCommand = new RelayCommand(() => _ = RefreshAsync());
+    }
+
+    public async Task RefreshAsync()
+    {
+        if (_isBusy) return;
+        IsBusy = true;
+        try
+        {
+            var snapshot = await _read();
+            _instanceName = snapshot.InstanceName;
+            IsAvailable = snapshot.IsAvailable;
+            _previewLevel = snapshot.IsAvailable ? snapshot.Percent : 0;
+            StatusLabel = snapshot.IsAvailable ? $"{snapshot.Percent}%" : "Not available on this display";
+            Raise(nameof(PreviewLevel));
+        }
+        catch (Exception ex)
+        {
+            IsAvailable = false;
+            StatusLabel = "Brightness unavailable";
+            Logger.Info($"Brightness read failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally { IsBusy = false; }
+    }
+
+    public async Task ApplyPreviewAsync()
+    {
+        if (_isBusy) return;
+        IsBusy = true;
+        try
+        {
+            var snapshot = await _read();
+            _instanceName = snapshot.InstanceName;
+            IsAvailable = snapshot.IsAvailable;
+            if (!snapshot.IsAvailable || string.IsNullOrWhiteSpace(snapshot.InstanceName))
+            {
+                StatusLabel = "Not available on this display";
+                return;
+            }
+            var requested = (int)Math.Round(_previewLevel);
+            var ok = await _set(snapshot.InstanceName, requested);
+            StatusLabel = ok ? $"{requested}%" : "Windows rejected the brightness change";
+            if (ok) _previewLevel = requested;
+            Raise(nameof(PreviewLevel));
+        }
+        catch (Exception ex)
+        {
+            StatusLabel = "Brightness change failed";
+            Logger.Info($"Brightness apply failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally { IsBusy = false; }
+    }
+}
+
+public sealed class BrightnessView : IslandContent
+{
+    public BrightnessViewModel Brightness { get; }
+    public BrightnessView(BrightnessViewModel brightness) { Brightness = brightness; }
+    public override double TargetWidth => 400;
+    public override double TargetHeight => 124;
+    public override double TargetCornerRadius => 26;
+}
+
 /// <summary>Quick Access hub: the island-native utility launcher (Phase 4.1).</summary>
 public sealed class QuickAccessView : IslandContent
 {
     public QuickAccessViewModel QuickAccess { get; }
     public QuickAccessView(QuickAccessViewModel vm) { QuickAccess = vm; }
-    public override double TargetWidth => 440;
-    public override double TargetHeight => 116;
-    public override double TargetCornerRadius => 22;
+    public override double TargetWidth => 500;
+    public override double TargetHeight => 252;
+    public override double TargetCornerRadius => 28;
     public override bool AutoHeight => true;
 }
 
@@ -640,6 +1007,15 @@ public sealed class NullToVisibilityConverter : System.Windows.Data.IValueConver
         => throw new NotSupportedException();
 }
 
+public sealed class InverseBoolToVisibilityConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Shows a pending-approval marker only when the count is above zero.</summary>
 public sealed class PendingCountToVisibilityConverter : System.Windows.Data.IValueConverter
 {
@@ -677,7 +1053,7 @@ public sealed class AgentExpandedView : IslandContent
 {
     public AgentCardViewModel Agent { get; }
     public AgentExpandedView(AgentCardViewModel agent) { Agent = agent; }
-    public override double TargetWidth => 420;
+    public override double TargetWidth => 480;
     public override double TargetHeight => 130;
     public override double TargetCornerRadius => 24;
     public override bool AutoHeight => true;
@@ -725,6 +1101,14 @@ public sealed class MediaViewModel : ObservableObject
         if (next is not null) NextCommand = new RelayCommand(next, () => _snapshot is not null);
         if (previous is not null) PreviousCommand = new RelayCommand(previous, () => _snapshot is not null);
         _seek = seek;
+        SeekCurrentLyricCommand = new RelayCommand(SeekToCurrentLyric, () => CanSeekCurrentLyric);
+    }
+
+    public void SeekToCurrentLyric()
+    {
+        if (!CanSeekCurrentLyric || _snapshot is not { } snapshot) return;
+        var target = _lyricLines[_lyricIndex].Time - TimeSpan.FromMilliseconds(_lyricOffsetMs);
+        _seek?.Invoke(TimeSpan.FromSeconds(Math.Clamp(target.TotalSeconds, 0, snapshot.Duration.TotalSeconds)));
     }
 
     private readonly Action<TimeSpan>? _seek;
@@ -732,6 +1116,8 @@ public sealed class MediaViewModel : ObservableObject
     public ICommand? PlayPauseCommand { get; }
     public ICommand? NextCommand { get; }
     public ICommand? PreviousCommand { get; }
+    public ICommand SeekCurrentLyricCommand { get; }
+    public bool CanSeekCurrentLyric => _lyricIndex >= 0 && _snapshot?.Duration > TimeSpan.Zero && _seek is not null;
 
     public void SeekToFraction(double fraction)
     {
@@ -752,6 +1138,7 @@ public sealed class MediaViewModel : ObservableObject
             Progress = 0;
             Elapsed = "0:00";
             Remaining = "0:00";
+            Raise(nameof(CanSeekCurrentLyric));
             return;
         }
 
@@ -777,6 +1164,7 @@ public sealed class MediaViewModel : ObservableObject
         }
         else Art = null;
         RefreshTimeline();
+        Raise(nameof(CanSeekCurrentLyric));
     }
 
     /// <summary>Cheap extrapolated tick (1 Hz while expanded/playing).</summary>
@@ -830,7 +1218,7 @@ public sealed class MediaViewModel : ObservableObject
     /// <summary>Current line color: gold when a real line is active, dim for ♪ gaps.</summary>
     public System.Windows.Media.Color LyricCurrentColor =>
         LyricCurrentIsLine
-            ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFF5B84B")
+            ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFD79A")
             : System.Windows.Media.Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF);
     public string LyricPrev { get => _lyricPrev; private set => Set(ref _lyricPrev, value); }
     public string LyricCurrent { get => _lyricCurrent; private set => Set(ref _lyricCurrent, value); }
@@ -904,6 +1292,7 @@ public sealed class MediaViewModel : ObservableObject
 
         UpdateLyricVisibility();
         UpdateLyricWindow();
+        Raise(nameof(CanSeekCurrentLyric));
     }
 
     private void UpdateLyricVisibility() => ShowLyricsBlock = LyricsWanted && _lyricsState != LyricsState.Idle;
@@ -927,6 +1316,7 @@ public sealed class MediaViewModel : ObservableObject
         LyricCurrentIsLine = current.Length > 0;
         LyricNext = index + 1 < _lyricLines.Count ? _lyricLines[index + 1].Text : "";
         UpdateLyricVisibility();
+        Raise(nameof(CanSeekCurrentLyric));
     }
 
     public void ClearLyrics()
@@ -1052,7 +1442,7 @@ public sealed class AgentCardViewModel : ObservableObject
             AgentEventTypes.Failed => "#FF6B6B",
             AgentEventTypes.Completed => "#5DD97C",
             AgentEventTypes.Cancelled => "#9A9AA0",
-            _ => "#8AB4FF",
+            _ => "#FFD79A",
         };
         Expression = ev.Type switch
         {

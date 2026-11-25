@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -14,8 +15,53 @@ public sealed class TodoEntryWindow : Window
         VerticalContentAlignment = VerticalAlignment.Center,
         Padding = new Thickness(9, 7, 9, 7),
     };
+    private readonly DatePicker _due = new()
+    {
+        Width = 170,
+        FirstDayOfWeek = DayOfWeek.Monday,
+        SelectedDateFormat = DatePickerFormat.Short,
+        VerticalContentAlignment = VerticalAlignment.Center,
+    };
+    private readonly TextBox _dueTime = new()
+    {
+        Width = 90,
+        Text = "",
+        VerticalContentAlignment = VerticalAlignment.Center,
+        Padding = new Thickness(9, 7, 9, 7),
+        ToolTip = "24-hour time, for example 15:30",
+    };
+    private readonly TextBlock _error = new()
+    {
+        Foreground = new SolidColorBrush(Color.FromRgb(255, 143, 143)),
+        FontSize = 12,
+        Margin = new Thickness(0, 6, 0, 0),
+        Visibility = Visibility.Collapsed,
+    };
 
     public string TaskTitle => _title.Text.Trim();
+    public DateTime? TaskDue => _due.SelectedDate is { } date
+        && TimeSpan.TryParseExact(_dueTime.Text.Trim(), "hh\\:mm", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.TimeSpanStyles.None, out var time)
+            ? date.Date + time
+            : null;
+
+    public bool TryValidateDue(out string? error)
+    {
+        error = null;
+        if (_due.SelectedDate is null && string.IsNullOrWhiteSpace(_dueTime.Text)) return true;
+        if (_due.SelectedDate is null)
+        {
+            error = "Choose a due date or clear the time.";
+            return false;
+        }
+        if (!TimeSpan.TryParseExact(_dueTime.Text.Trim(), "hh\\:mm", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.TimeSpanStyles.None, out _))
+        {
+            error = "Enter the due time as HH:mm, for example 15:30.";
+            return false;
+        }
+        return true;
+    }
 
     public TodoEntryWindow(Window? owner = null)
     {
@@ -55,6 +101,13 @@ public sealed class TodoEntryWindow : Window
                 _title.Focus();
                 return;
             }
+            if (!TryValidateDue(out var dueError))
+            {
+                _error.Text = dueError;
+                _error.Visibility = Visibility.Visible;
+                if (_due.SelectedDate is null) _due.Focus(); else _dueTime.Focus();
+                return;
+            }
             DialogResult = true;
             Close();
         };
@@ -65,6 +118,8 @@ public sealed class TodoEntryWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             Children = { cancel, add },
         };
+        Grid.SetColumn(_due, 1);
+        Grid.SetColumn(_dueTime, 2);
         Content = new StackPanel
         {
             Margin = new Thickness(20),
@@ -72,6 +127,23 @@ public sealed class TodoEntryWindow : Window
             {
                 new TextBlock { Text = "What needs doing?", FontSize = 17, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) },
                 _title,
+                new Grid
+                {
+                    Margin = new Thickness(0, 0, 0, 12),
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition { Width = GridLength.Auto },
+                        new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+                        new ColumnDefinition { Width = GridLength.Auto },
+                    },
+                    Children =
+                    {
+                        new TextBlock { Text = "Due (optional)", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) },
+                        _due,
+                        _dueTime,
+                    },
+                },
+                _error,
                 buttons,
             },
         };

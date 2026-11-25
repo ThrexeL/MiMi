@@ -54,6 +54,9 @@ public sealed class AppSettings
     [JsonPropertyName("lyricsEnabled")] public bool LyricsEnabled { get; set; } = true;
     [JsonPropertyName("lyricsOffsetMs")] public int LyricsOffsetMs { get; set; } = 0;
 
+    // Local convenience modules. Clipboard capture is opt-in and session-only.
+    [JsonPropertyName("clipboardHistoryEnabled")] public bool ClipboardHistoryEnabled { get; set; } = false;
+
     // System HUDs (Milestone 6)
     [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
     [JsonPropertyName("brightnessHudEnabled")] public bool BrightnessHudEnabled { get; set; } = true;

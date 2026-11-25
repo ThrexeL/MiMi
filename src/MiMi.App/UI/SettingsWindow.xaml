@@ -416,6 +416,10 @@
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <CheckBox x:Name="LyricsToggle" Style="{StaticResource Check}" Content="Show synchronized lyrics in the expanded media panel"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
+        <CheckBox x:Name="ClipboardHistoryToggle" Style="{StaticResource Check}"
+                  Content="Remember copied text in a session-only clipboard history (opt-in)"
+                  ToolTip="Text is kept in memory until MiMi exits, never written to disk or logs, and limited to 20 clips."
+                  Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
         <Grid Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="140"/>
@@ -438,11 +442,11 @@
           <ScrollViewer Style="{StaticResource PageScroll}">
             <StackPanel>
               <TextBlock Style="{StaticResource Heading}" Text="Appearance"/>
-              <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,22" Text="A little personality, with just the right amount of gold."/>
+              <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,22" Text="A warm gold aurora, with just the right amount of personality."/>
               <TextBlock Style="{StaticResource Label}" FontWeight="SemiBold" Margin="0,0,0,8" Text="Face and glow"/>
         <CheckBox x:Name="MascotToggle" Style="{StaticResource Check}" Content="Mascot face"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
-        <CheckBox x:Name="GlowToggle" Style="{StaticResource Check}" Content="Gold glow"
+        <CheckBox x:Name="GlowToggle" Style="{StaticResource Check}" Content="Gold aurora glow"
                   Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
 
         <Grid Margin="0,10,0,0">

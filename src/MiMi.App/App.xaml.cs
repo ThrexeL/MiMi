@@ -99,6 +99,7 @@ public partial class App : Application
         _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos, shelf);
         _presenter.TaskEntryRequested += ShowTaskEntry;
         _presenter.CodexConversationRequested += ShowCodexConversation;
+        _presenter.SettingsRequested += ShowSettings;
 
         _island = new IslandWindow(
             _config,
@@ -115,8 +116,13 @@ public partial class App : Application
             shelfClose: () => _presenter.EndShelfDragPreview(),
             quickAccessOpen: () => _presenter.OpenQuickAccess(),
             closeUtility: () => _presenter.CloseUtilityPanel(),
-            addTask: () => _presenter.PromptAddTask());
+            addTask: () => _presenter.PromptAddTask(),
+            quickAccessContentProvider: () => _presenter.BuildQuickAccessView());
         _island.Show();
+        _island.ClipboardChanged += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_config.Current.ClipboardHistoryEnabled) _presenter.CaptureClipboardNow();
+        });
 
         _stateManager.EffectiveContentChanged += content =>
         {
@@ -216,6 +222,10 @@ public partial class App : Application
         _hudController = new SystemHudController(_config, _presenter, Dispatcher);
         _presenter.ConfigureVolume(_hudController.GetVolumeState,
             _hudController.SetVolume, () => _hudController.ToggleMute());
+        _presenter.ConfigureBrightness(Interop.LaptopBrightnessControl.ReadAsync,
+            Interop.LaptopBrightnessControl.SetAsync);
+        _presenter.ConfigureWidgets(() => new WidgetSystemSnapshot(
+            Interop.PowerMonitor.Read(), _hudController.ReadNetworkState()));
         _tray.CommandSelected += OnTrayCommand;
         _island.KeyboardTick += () => _hudController.OnKeyboardTick();
         _island.PowerStatusChanged += () => _hudController.OnPowerStatusChanged();
@@ -420,7 +430,7 @@ public partial class App : Application
         }
         _todoEntryWindow = new TodoEntryWindow(_island) { Owner = _island };
         if (_todoEntryWindow.ShowDialog() == true)
-            _presenter.AddTask(_todoEntryWindow.TaskTitle);
+            _presenter.AddTask(_todoEntryWindow.TaskTitle, _todoEntryWindow.TaskDue);
         _todoEntryWindow = null;
     }
 

@@ -101,6 +101,7 @@ public sealed class SystemHudController : IDisposable
 
     public bool SetVolume(float level) => _volume.SetVolume(Math.Clamp(level, 0f, 1f));
     public bool ToggleMute() => _volume.ToggleMute();
+    public NetworkMonitor.NetworkState ReadNetworkState() => _network.Read();
 
     private void OnVolumeChanged(float level, bool muted)
     {

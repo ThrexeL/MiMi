@@ -16,6 +16,7 @@ public sealed class TodoStore
         public bool Done { get; set; }
         public DateTime? Due { get; set; }
         public bool ReminderFired { get; set; }
+        public DateTime? SnoozedUntil { get; set; }
         public DateTime Created { get; init; } = DateTime.Now;
     }
 
@@ -68,7 +69,17 @@ public sealed class TodoStore
 
     /// <summary>Tasks due now (due time passed, not done, reminder not yet fired).</summary>
     public IReadOnlyList<TodoItem> DueNow(DateTime now) =>
-        _items.Where(t => !t.Done && !t.ReminderFired && t.Due is { } d && d <= now).ToList();
+        _items.Where(t => !t.Done && !t.ReminderFired && t.Due is { } d && d <= now
+            && (t.SnoozedUntil is null || now >= t.SnoozedUntil)).ToList();
+
+    public bool Snooze(Guid id, TimeSpan duration, DateTime now)
+    {
+        var item = _items.FirstOrDefault(t => t.Id == id);
+        if (item is null || item.Done) return false;
+        item.SnoozedUntil = now.Add(duration);
+        item.ReminderFired = false;
+        return true;
+    }
 
     public void MarkReminded(Guid id)
     {

@@ -43,7 +43,9 @@ public class AgentPanelLayoutTests
                 Render(window, new AgentCompactView(indicator), "compact-multiple", 60);
                 var shortWidth = new AgentCompactView(indicator).TargetWidth;
                 indicator.Update("Thursday · Waiting for your approval to run a command", MiMi.App.UI.Mascot.MascotExpression.Alert, 1);
-                Assert.True(new AgentCompactView(indicator).TargetWidth > shortWidth);
+                var longWidth = new AgentCompactView(indicator).TargetWidth;
+                Assert.True(longWidth > shortWidth);
+                Assert.True(longWidth > 420, "Long agent status must expand beyond the old 380 DIP cap.");
                 Render(window, new AgentCompactView(indicator), "compact-long", 60);
                 var card = new AgentCardViewModel { ApprovalId = "preview" };
                 card.Update(AgentEventFactory.Create("thursday", "chat", AgentEventTypes.ApprovalRequested,

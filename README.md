@@ -38,20 +38,25 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
   panel.
 - **Multi-agent tracking with multi-approval navigation**: per-session lifecycle states,
   a hover activity panel, and `‹ ›` navigation across pending approval cards.
-- **Refresh 2026-11-24:** morphing pill geometry, clickable compact states, six-tile Quick
-  Access, fixed-height activity panel, dismissible shelf with count badges, larger type,
-  and a non-activating task editor.
-- **New controls:** interactive volume/mute panel and an experimental embedded Codex
-  conversation window with read-only sandbox and one-shot approvals. See
-  `docs/ui-refresh-and-codex.md`.
+- **Refresh 2026-11-25:** Nusa-inspired gold aurora, taller glowing eyes with a
+  return wave, hover-open Quick Access, local Widgets, opt-in session-only clipboard
+  history, laptop brightness control, task due times with snooze, and click-to-seek lyrics.
+- **Agent status card:** the whole compact pill is clickable, repeated clicks keep the activity
+  options open, long statuses expand and wrap instead of truncating, and tool-running agents use
+  a livelier eye expression.
+- **New controls:** interactive volume/mute and supported-laptop brightness panels plus an
+  experimental embedded Codex conversation window with read-only sandbox and one-shot
+  approvals. See `docs/ui-refresh-and-codex.md` and `docs/nusa-refresh.md`.
 
 ## UI and usability refresh
 
 - **Categorized settings:** General, Appearance, Notifications, Integrations, and System pages in a resizable window, with independently scrolling content and persistent save feedback. Changes save automatically; failures are displayed instead of reporting success. Escape closes settings, and keyboard focus is visible.
 - **Complete everyday controls:** hover expansion, lyrics and timing offset, all system HUD toggles, typography, mascot, glow, notifications, and provider status are available in settings. Keyboard and pointer slider changes persist without an Apply button.
-- **Island polish:** clearer section headings, higher-contrast secondary text and seek track, consistent action buttons, labeled Quick Access tiles, useful empty states, and descriptive icon tooltips/automation names. The idle face, non-activating overlay, and fixed gold glow geometry are unchanged.
+- **Island polish:** clearer section headings, higher-contrast secondary text and seek track, consistent action buttons, labeled Quick Access tiles, useful empty states, and descriptive icon tooltips/automation names. The idle face and non-activating overlay are preserved; the glow is now a warm gold aurora.
 - **Lyrics availability:** unavailable tracks show **No lyrics available**, instrumental tracks are labeled, and fetching shows **Loading lyrics...**. Switching tracks clears the previous lyrics.
-- **Laptop brightness HUD:** real WMI backlight-change events on supported laptops, with its own settings toggle. No external-monitor control, polling, or simulated readings.
+- **Laptop brightness:** real WMI backlight-change events and a real brightness slider on
+  supported active laptop backlights. Desktops and unsupported displays report that the
+  control is unavailable; there are no simulated readings or external-monitor claims.
 - **Regression coverage:** settings persistence and layout, island template layouts, Unicode text/icons, lyrics availability, and brightness policy are automated. Offscreen renders help review layouts; live hardware, DPI, and accessibility checks remain manual.
 
 ## Status
@@ -79,9 +84,9 @@ Notes on the intentionally-unsupported features:
   cannot access it. This is documented — including an honest disclosure in Settings —
   rather than simulated. A packaged companion app is the supported path if the feature is
   wanted later.
-- **External-monitor brightness control.** Not implemented. The brightness HUD observes
-  supported laptop backlights through WMI and `System.Management`; desktops without that
-  interface stay silent. MiMi does not change brightness or provide a fake slider.
+- **External-monitor brightness control.** Not implemented. The brightness HUD and slider
+  use the active WMI laptop backlight; desktops without that interface show an honest
+  unavailable state instead of a fake slider.
 
 ## Build and run
 
@@ -168,9 +173,10 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
   ever read.
 - **Brightness.** `WmiMonitorBrightnessEvent` on supported active laptop backlights,
   with a real percentage/progress HUD and no startup toast. Event setup/teardown runs off
-  the UI thread; duplicate values are suppressed and bursts are bounded. Unsupported or
-  denied WMI access stays silent. Toggle with `brightnessHudEnabled`; this does not
-  control brightness or monitor external displays.
+  the UI thread; duplicate values are suppressed and bursts are bounded. The Quick Access
+  brightness page uses `WmiMonitorBrightnessMethods.WmiSetBrightness`; unsupported or denied
+  WMI access reports unavailable. Toggle the HUD with `brightnessHudEnabled`. External
+  displays are not controlled.
 
 ## Synchronized lyrics
 
@@ -181,7 +187,8 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
   `[offset:]` tag. Line lookup is stateless and seek-proof.
 - **Display:** the expanded media panel shows a 3-line window — previous line dim,
   current line gold, next line dim — replacing the title block when synced lyrics are
-  available. Instrumental gaps render as a gentle `♪` instead of an empty block.
+  available. Click the current timed line to seek to its timestamp (offset-aware).
+  Instrumental gaps render as a gentle `♪` instead of an empty block.
 - **Toggle:** a lyrics glyph on the expanded player turns lyrics on/off per session.
 - **Settings:** `lyricsEnabled` (default on) and `lyricsOffsetMs` (clamped
   -10000…10000) for fine sync adjustment.
@@ -636,11 +643,12 @@ defaults; values are clamped to the ranges below on every save.
 | `mascotAnimationsEnabled` | bool | `true` | Mascot idle animations (blinking, breathing) |
 | `mascotReactionsEnabled` | bool | `true` | Brief mascot reactions to agent events |
 | `mascotSleepyEnabled` | bool | `false` | Opt-in sleepy mode: doze after inactivity, wake on mouse proximity |
-| `glowEnabled` | bool | `true` | Gold bottom-edge glow band |
+| `glowEnabled` | bool | `true` | Warm gold bottom-edge aurora |
 | `glowIntensity` | double | `0.6` | Glow intensity (clamped 0…1) |
 | `animationIntensity` | double | `1.0` | Animation amplitude (clamped 0.5…2) |
 | `lyricsEnabled` | bool | `true` | Synchronized lyrics on the expanded media panel |
 | `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
+| `clipboardHistoryEnabled` | bool | `false` | Opt-in, text-only, session-only clipboard history |
 | `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
 | `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
 | `brightnessHudEnabled` | bool | `true` | Brightness-change HUD on WMI-supported laptop backlights |

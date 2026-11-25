@@ -83,6 +83,7 @@ public partial class SettingsWindow : Window
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         ExpandOnHoverToggle.IsChecked = s.ExpandOnHover;
         LyricsToggle.IsChecked = s.LyricsEnabled;
+        ClipboardHistoryToggle.IsChecked = s.ClipboardHistoryEnabled;
         LyricsOffsetSlider.Value = s.LyricsOffsetMs;
         AgentsToggle.IsChecked = s.AgentsModuleEnabled;
         MascotToggle.IsChecked = s.MascotEnabled;
@@ -149,6 +150,7 @@ public partial class SettingsWindow : Window
                 s.MediaModuleEnabled = MediaToggle.IsChecked == true;
                 s.ExpandOnHover = ExpandOnHoverToggle.IsChecked == true;
                 s.LyricsEnabled = LyricsToggle.IsChecked == true;
+                s.ClipboardHistoryEnabled = ClipboardHistoryToggle.IsChecked == true;
                 s.LyricsOffsetMs = (int)LyricsOffsetSlider.Value;
                 s.AgentsModuleEnabled = AgentsToggle.IsChecked == true;
                 s.MascotEnabled = MascotToggle.IsChecked == true;

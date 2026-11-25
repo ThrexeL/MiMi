@@ -46,6 +46,7 @@ public partial class IslandWindow : Window
     private const long WsExNoActivate = 0x08000000;
     private const long WsExToolWindow = 0x00000080;
     private const int HotkeyId = 0xB00B; // Ctrl+Alt+M
+    private const int WmClipboardUpdate = 0x031D;
 
     public IntPtr PillHandle { get; private set; }
 
@@ -65,6 +66,10 @@ public partial class IslandWindow : Window
     /// <summary>WM_POWERBROADCAST power-status change (plug/unplug, battery level).</summary>
     public event Action? PowerStatusChanged;
 
+    /// <summary>A clipboard listener notification. The app reads text only when the
+    /// user has explicitly enabled session-only clipboard history.</summary>
+    public event Action? ClipboardChanged;
+
     /// <summary>True when Ctrl+Alt+M was registered successfully; false if another
     /// application already owns the combination.</summary>
     public bool HotkeyRegistered { get; private set; }
@@ -79,7 +84,11 @@ public partial class IslandWindow : Window
     private readonly Action? _shelfOpen;
     private readonly Action? _shelfClose;
     private readonly Action? _quickAccessOpen;
+    private readonly Func<IslandContent?>? _quickAccessContentProvider;
     private bool _shelfDragActive;
+    private bool _brightnessDragging;
+    private bool _brightnessDidDrag;
+    private MascotExpression _lastMascotExpression = MascotExpression.Calm;
     private DispatcherTimer? _shelfRevertTimer;
     private readonly Core.ProximityWakePolicy _proximityPolicy = new();
     private readonly DispatcherTimer _proximityTimer;
@@ -101,7 +110,8 @@ public partial class IslandWindow : Window
         Action? quickAccessOpen = null,
         Action? closeUtility = null,
         Action? shelfClose = null,
-        Action? addTask = null)
+        Action? addTask = null,
+        Func<IslandContent?>? quickAccessContentProvider = null)
     {
         CloseUtilityCommand = new RelayCommand(() => closeUtility?.Invoke());
         AddTaskCommand = new RelayCommand(() => addTask?.Invoke());
@@ -113,6 +123,7 @@ public partial class IslandWindow : Window
         _shelfOpen = shelfOpen;
         _shelfClose = shelfClose;
         _quickAccessOpen = quickAccessOpen;
+        _quickAccessContentProvider = quickAccessContentProvider;
         _config = config;
         _contentProvider = contentProvider;
         _approvalTimeLeft = approvalTimeLeft;
@@ -128,9 +139,16 @@ public partial class IslandWindow : Window
                 (IntPtr)(Interop.NativeMethods.GetWindowLongPtrW(PillHandle, Interop.NativeMethods.GWL_EXSTYLE).ToInt64()
                     | WsExNoActivate | WsExToolWindow));
             RegisterGlobalHotkey();
+            if (!Interop.NativeMethods.AddClipboardFormatListener(PillHandle))
+                Logger.Info("Clipboard history listener unavailable on this window.");
         };
 
-        Closed += (_, _) => ReleaseGlobalHotkey();
+        Closed += (_, _) =>
+        {
+            if (PillHandle != IntPtr.Zero)
+                Interop.NativeMethods.RemoveClipboardFormatListener(PillHandle);
+            ReleaseGlobalHotkey();
+        };
 
         Coordinator.Changed += RecomputeVisibility;
 
@@ -146,7 +164,13 @@ public partial class IslandWindow : Window
         // One timer drives both the hover-open delay and the leave-grace period.
         _stateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
         _stateTimer.Tick += StateTimerTick;
-        MouseEnter += (_, _) => { _pointerOver = true; _stateTimer.Interval = TimeSpan.FromMilliseconds(140); _stateTimer.Start(); };
+        MouseEnter += (_, _) =>
+        {
+            _pointerOver = true;
+            _stateTimer.Interval = TimeSpan.FromMilliseconds(140);
+            _stateTimer.Start();
+            if (_pinnedContent is RestingView { Expression: not MascotExpression.Sleepy }) PlayHello();
+        };
         MouseLeave += (_, _) =>
         {
             _pointerOver = false;
@@ -294,6 +318,10 @@ public partial class IslandWindow : Window
             && (uint)wParam == Interop.NativeMethods.PBT_APMPOWERSTATUSCHANGE)
         {
             PowerStatusChanged?.Invoke();
+        }
+        if (msg == WmClipboardUpdate)
+        {
+            ClipboardChanged?.Invoke();
         }
         return IntPtr.Zero;
     }
@@ -537,6 +565,13 @@ public partial class IslandWindow : Window
         {
             UpdateGlow(content);
             SyncProximityTimer();
+            if (content is RestingView resting)
+            {
+                if (_lastMascotExpression == MascotExpression.Sleepy
+                    && resting.Expression is not MascotExpression.Sleepy)
+                    PlayHello();
+                _lastMascotExpression = resting.Expression;
+            }
         }
     }
 
@@ -545,6 +580,7 @@ public partial class IslandWindow : Window
     private IslandContent? Expanded(IslandContent content) => content switch
     {
         MediaCompactView m => new MediaExpandedView(m.Media),
+        RestingView => _quickAccessContentProvider?.Invoke(),
         // Hovering the agent pill opens the full multi-session activity panel.
         AgentCompactView => _agentPanelProvider(),
         _ => null,
@@ -618,6 +654,12 @@ public partial class IslandWindow : Window
 
     private void AnimatePillSize(double width, double height, TimeSpan duration, double radius)
     {
+        // Fractional layout sizes make a one-pixel stroke land across two device
+        // pixels, which reads as a jagged border on layered WPF windows.
+        var dpi = VisualTreeHelper.GetDpi(this);
+        width = Math.Round(width * dpi.DpiScaleX) / dpi.DpiScaleX;
+        height = Math.Round(height * dpi.DpiScaleY) / dpi.DpiScaleY;
+        radius = Math.Round(radius * dpi.DpiScaleX) / dpi.DpiScaleX;
         var targetRadius = Math.Min(radius, height / 2);
         if (MascotOptions.ReducedMotion || duration <= TimeSpan.Zero)
         {
@@ -781,6 +823,13 @@ public partial class IslandWindow : Window
         _shelfRevertTimer.Start();
     }
 
+    private void CurrentLyric_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (!_mediaVm.CanSeekCurrentLyric) return;
+        _mediaVm.SeekToCurrentLyric();
+        e.Handled = true;
+    }
+
     private void CompactMedia_Click(object sender, MouseButtonEventArgs e)
     {
         if (_pinnedContent is not MediaCompactView media) return;
@@ -793,27 +842,25 @@ public partial class IslandWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Explicit agent-options request. Hover may already have opened the
+    /// panel; repeated clicks must keep it open rather than toggle it closed.</summary>
+    public void OpenAgentOptions()
+    {
+        if (_pinnedContent is not (AgentCompactView or MediaCompactView { HasAgentBadge: true })) return;
+        if (_hoverExpanded) return;
+        _hoverExpanded = true;
+        ApplyContent(_agentPanelProvider());
+    }
+
     private void CompactAgent_Click(object sender, MouseButtonEventArgs e)
     {
-        if (_pinnedContent is not AgentCompactView) return;
-        if (_hoverExpanded) CollapseHover();
-        else
-        {
-            _hoverExpanded = true;
-            ApplyContent(_agentPanelProvider());
-        }
+        OpenAgentOptions();
         e.Handled = true;
     }
 
     private void AgentBadge_Click(object sender, MouseButtonEventArgs e)
     {
-        if (_pinnedContent is not MediaCompactView) return;
-        if (_hoverExpanded) CollapseHover();
-        else
-        {
-            _hoverExpanded = true;
-            ApplyContent(_agentPanelProvider());
-        }
+        OpenAgentOptions();
         e.Handled = true;
     }
 
@@ -823,12 +870,54 @@ public partial class IslandWindow : Window
         _quickAccessOpen?.Invoke();
     }
 
+    private void PlayHello()
+    {
+        if (FindMascot(Pill) is not MiMiMascotControl mascot) return;
+        mascot.PlayHello();
+    }
+
+    private static MiMiMascotControl? FindMascot(DependencyObject root)
+    {
+        if (root is MiMiMascotControl mascot) return mascot;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var found = FindMascot(VisualTreeHelper.GetChild(root, i));
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private void WireClipboardDragOut()
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => WireClipboardDragOutRecursive(Pill));
+    }
+
+    private void WireClipboardDragOutRecursive(DependencyObject root)
+    {
+        if (root is Border { Tag: string text } border
+            && root is FrameworkElement { DataContext: ClipboardEntryViewModel })
+        {
+            border.PreviewMouseLeftButtonDown += (_, e) =>
+            {
+                if (IsInsideButton(e.OriginalSource)) return;
+                var data = new DataObject(DataFormats.UnicodeText, text);
+                DragDrop.DoDragDrop(border, data, DragDropEffects.Copy);
+            };
+        }
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+            WireClipboardDragOutRecursive(VisualTreeHelper.GetChild(root, i));
+    }
+
     private void UpdateClip()
     {
         if (Pill.ActualWidth <= 0 || Pill.ActualHeight <= 0) return;
         var radius = Math.Min(Pill.CornerRadius.TopLeft, Math.Min(Pill.ActualWidth, Pill.ActualHeight) / 2);
+        var halfPixel = 0.5 / VisualTreeHelper.GetDpi(this).DpiScaleX;
         Pill.Clip = new RectangleGeometry(
-            new Rect(0, 0, Pill.ActualWidth, Pill.ActualHeight), radius, radius);
+            new Rect(-halfPixel, -halfPixel, Pill.ActualWidth + halfPixel * 2, Pill.ActualHeight + halfPixel * 2),
+            radius + halfPixel, radius + halfPixel);
     }
 
     // ---- template hookup (elements inside DataTemplates, found by walking the tree) ----
@@ -872,6 +961,39 @@ public partial class IslandWindow : Window
                     slider.MouseUp += (_, _) => { if (!_sliderDragging) media.Media.SeekToFraction(slider.Value); };
                 }
                 UpdatePlayGlyph(media.Media.IsPlaying);
+                break;
+
+            case BrightnessView brightness:
+                if (FindDescendant(Pill, "BrightnessSlider") is Slider brightnessSlider)
+                {
+                    brightnessSlider.AddHandler(Thumb.DragStartedEvent,
+                        new DragStartedEventHandler((_, _) => { _brightnessDragging = true; _brightnessDidDrag = false; }));
+                    brightnessSlider.AddHandler(Thumb.DragCompletedEvent,
+                        new DragCompletedEventHandler((_, _) =>
+                        {
+                            _brightnessDragging = false;
+                            _brightnessDidDrag = true;
+                            _ = brightness.Brightness.ApplyPreviewAsync();
+                            Dispatcher.BeginInvoke(() => _brightnessDidDrag = false, DispatcherPriority.Background);
+                        }));
+                    brightnessSlider.MouseUp += (_, _) =>
+                    {
+                        if (!_brightnessDragging && !_brightnessDidDrag)
+                            _ = brightness.Brightness.ApplyPreviewAsync();
+                    };
+                }
+                break;
+
+            case ClipboardView:
+                WireClipboardDragOut();
+                break;
+
+            case QuickAccessView:
+                // In a hover preview the hub is not pinned, so the normal Back command
+                // is a no-op. Collapse the preview explicitly; pinned hubs still use
+                // their command to clear the utility pin.
+                if (FindDescendant(Pill, "QuickAccessBack") is Button back)
+                    back.Click += (_, _) => { if (_hoverExpanded) CollapseHover(); };
                 break;
 
             case RestingView resting:
@@ -1025,9 +1147,13 @@ public partial class IslandWindow : Window
     public void PositionWindow()
     {
         var work = SystemParameters.WorkArea;
-        // The canvas is fixed; center it in the primary work area, just below the top edge.
-        Left = work.Left + (work.Width - Width) / 2 + _config.Current.HorizontalOffsetDip;
-        Top = work.Top + _config.Current.TopMarginDip;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var rawLeft = work.Left + (work.Width - Width) / 2 + _config.Current.HorizontalOffsetDip;
+        var rawTop = work.Top + _config.Current.TopMarginDip;
+        // Keep the layered window itself on whole device pixels; otherwise the
+        // rounded edge is resampled by the desktop compositor.
+        Left = Math.Round(rawLeft * dpi.DpiScaleX) / dpi.DpiScaleX;
+        Top = Math.Round(rawTop * dpi.DpiScaleY) / dpi.DpiScaleY;
     }
 
     // ---- helpers -------------------------------------------------------------------

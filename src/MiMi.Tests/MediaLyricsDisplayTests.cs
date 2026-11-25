@@ -85,6 +85,56 @@ public class MediaLyricsDisplayTests
         Assert.False(vm.LyricsBlockVisible);
     }
 
+    [Fact]
+    public void CurrentLyric_SeeksToTimestampMinusOffsetAndClampsToDuration()
+    {
+        var seeks = new List<TimeSpan>();
+        var vm = new MediaViewModel(seek: seeks.Add);
+        vm.Update(new MediaSnapshot
+        {
+            Title = "Track",
+            Position = TimeSpan.FromSeconds(10),
+            Duration = TimeSpan.FromMinutes(3),
+        });
+        vm.UpdateLyrics(LyricsState.Synced, new LyricsResult
+        {
+            TrackName = "Track",
+            ArtistName = "Artist",
+            SyncedLines = new[]
+            {
+                new LrcLine(TimeSpan.Zero, "Previous"),
+                new LrcLine(TimeSpan.FromSeconds(5), "Current"),
+                new LrcLine(TimeSpan.FromSeconds(20), "Next"),
+            },
+        }, 1000, true);
+
+        Assert.True(vm.CanSeekCurrentLyric);
+        vm.SeekCurrentLyricCommand.Execute(null);
+        Assert.Equal(TimeSpan.FromSeconds(4), Assert.Single(seeks));
+
+        vm.ApplyLyricsSettings(10000, true); // current line becomes the 20 s line
+        vm.SeekToCurrentLyric();
+        Assert.Equal(TimeSpan.FromSeconds(10), seeks[^1]);
+    }
+
+    [Fact]
+    public void CurrentLyric_DoesNotSeekWithoutTimedLineDurationOrCallback()
+    {
+        var vm = WithLyrics();
+        Assert.False(vm.CanSeekCurrentLyric);
+        vm.SeekToCurrentLyric(); // no-op, must not throw
+
+        var noCallback = new MediaViewModel();
+        noCallback.Update(new MediaSnapshot { Title = "Track", Duration = TimeSpan.FromMinutes(3) });
+        noCallback.UpdateLyrics(LyricsState.Synced, new LyricsResult
+        {
+            TrackName = "Track",
+            ArtistName = "Artist",
+            SyncedLines = new[] { new LrcLine(TimeSpan.FromSeconds(5), "Current") },
+        }, 0, true);
+        Assert.False(noCallback.CanSeekCurrentLyric);
+    }
+
     private static MediaViewModel WithLyrics()
     {
         var vm = new MediaViewModel();

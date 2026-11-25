@@ -16,9 +16,13 @@ public sealed class UtilityPinState
     public const string Todo = "todo";
     public const string Shelf = "shelf";
     public const string Volume = "volume";
+    public const string Brightness = "brightness";
+    public const string Clipboard = "clipboard";
+    public const string Widgets = "widgets";
 
     /// <summary>Tray/interaction order used when several utilities are pinned.</summary>
-    public static readonly IReadOnlyList<string> PinOrder = [Pomodoro, Water, Todo, Shelf, Volume];
+    public static readonly IReadOnlyList<string> PinOrder =
+        [Pomodoro, Water, Todo, Shelf, Volume, Brightness, Clipboard, Widgets];
 
     private readonly HashSet<string> _pins = new(StringComparer.Ordinal);
     private bool _hubOpen;

@@ -30,12 +30,21 @@ public sealed class IslandPresenter
     private PomodoroViewModel? _pomodoroVm;
     private WaterViewModel? _waterVm;
     private VolumeViewModel? _volumeVm;
+    private BrightnessViewModel? _brightnessVm;
     private TodoViewModel? _todoVm;
+    private ClipboardViewModel _clipboardVm = null!;
+    private WidgetsViewModel _widgetsVm = null!;
+    private string? _selfCopiedText;
+    private DateTime _selfCopiedUntilUtc;
     private PomodoroView? _pomodoroCachedView;
     private WaterView? _waterCachedView;
     private TodoView? _todoCachedView;
     private ShelfView? _shelfCachedView;
     private VolumeView? _volumeCachedView;
+    private BrightnessView? _brightnessCachedView;
+    private ClipboardView? _clipboardCachedView;
+    private WidgetsView? _widgetsCachedView;
+    private Func<WidgetSystemSnapshot>? _widgetSnapshot;
     private readonly UtilityPinState _utilityPins = new();
     private readonly DragRevertPolicy _shelfDrag = new();
     private bool _shelfDragAutoOpened;
@@ -82,8 +91,15 @@ public sealed class IslandPresenter
         _quickAccessVm = new QuickAccessViewModel(
             openUtility: kind => _utilityPins.OpenUtilityFromHub(kind),
             back: () => _utilityPins.SetHub(false),
-            openCodex: () => CodexConversationRequested?.Invoke()
+            openCodex: () => CodexConversationRequested?.Invoke(),
+            openSettings: () => SettingsRequested?.Invoke()
         );
+        _clipboardVm = new ClipboardViewModel(
+            setCapture: enabled => _config.Update(s => s.ClipboardHistoryEnabled = enabled),
+            captureNow: CaptureClipboardNow,
+            copy: CopyClipboardText);
+        _clipboardVm.SetCapturing(_config.Current.ClipboardHistoryEnabled);
+        _widgetsVm = new WidgetsViewModel();
         _utilityPins.Changed += () => _dispatcher.BeginInvoke(RefreshPinned);
         _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
         {
@@ -98,6 +114,7 @@ public sealed class IslandPresenter
         {
             _notifications.Configure(_config.Current);
             _resting = MakeResting();
+            _clipboardVm.SetCapturing(_config.Current.ClipboardHistoryEnabled);
             RefreshPinned();
         });
 
@@ -200,6 +217,7 @@ public sealed class IslandPresenter
     public event Action<AgentNotice>? WindowsNoticeRequested;
     public event Action? TaskEntryRequested;
     public event Action? CodexConversationRequested;
+    public event Action? SettingsRequested;
 
     public AgentNotificationCoordinator Notifications => _notifications;
 
@@ -217,13 +235,77 @@ public sealed class IslandPresenter
         RefreshPinned();
     }
 
-    public void PromptAddTask() => TaskEntryRequested?.Invoke();
+    public void ConfigureBrightness(Func<Task<Interop.LaptopBrightnessControl.Snapshot>> read,
+        Func<string, int, Task<bool>> set)
+    {
+        _brightnessVm = new BrightnessViewModel(read, set);
+        _ = _brightnessVm.RefreshAsync();
+        RefreshPinned();
+    }
 
-    public bool AddTask(string title)
+    public void ConfigureWidgets(Func<WidgetSystemSnapshot> snapshot)
+    {
+        _widgetSnapshot = snapshot;
+        RefreshPinned();
+    }
+
+    /// <summary>Adds copied text to the bounded session-only history without logging it.</summary>
+    public void CaptureClipboard(string? text)
+    {
+        if (DateTime.UtcNow < _selfCopiedUntilUtc
+            && string.Equals(text, _selfCopiedText, StringComparison.Ordinal)) return;
+        if (_clipboardVm.Add(text))
+        {
+            _quickAccessVm.UpdateClipboardBadge(_clipboardVm.Count);
+            if (_utilityPins.IsPinned(UtilityPinState.Clipboard)) RefreshPinned();
+        }
+    }
+
+    public void CaptureClipboardNow()
     {
         try
         {
-            _todos.Add(title);
+            if (System.Windows.Clipboard.ContainsText())
+                CaptureClipboard(System.Windows.Clipboard.GetText());
+        }
+        catch (Exception ex)
+        {
+            // Another app can temporarily own the clipboard. Never log clipboard contents.
+            Logger.Info($"Clipboard read unavailable: {ex.GetType().Name}.");
+        }
+    }
+
+    private void CopyClipboardText(string text)
+    {
+        try
+        {
+            System.Windows.Clipboard.SetText(text);
+            _selfCopiedText = text;
+            _selfCopiedUntilUtc = DateTime.UtcNow.AddSeconds(2);
+        }
+        catch (Exception ex) { Logger.Info($"Clipboard write unavailable: {ex.GetType().Name}."); }
+    }
+
+    /// <summary>Hover preview uses the same live ViewModel as the pinned hub, but does
+    /// not change pin state. Moving the pointer away collapses back to the face.</summary>
+    public QuickAccessView BuildQuickAccessView()
+    {
+        _quickAccessVm.UpdateClock(DateTime.Now);
+        _quickAccessVm.UpdateTimerBadge(_pomodoro.IsRunning, _pomodoro.CompletedFocusSessions);
+        _quickAccessVm.UpdateShelfBadge(_shelf.Count);
+        _quickAccessVm.UpdateClipboardBadge(_clipboardVm.Count);
+        return _quickAccessView ??= new QuickAccessView(_quickAccessVm);
+    }
+
+    public void PromptAddTask() => TaskEntryRequested?.Invoke();
+
+    public bool AddTask(string title) => AddTask(title, null);
+
+    public bool AddTask(string title, DateTime? due)
+    {
+        try
+        {
+            _todos.Add(title, due);
             _todos.Save();
             RefreshPinned();
             return true;
@@ -405,6 +487,12 @@ public sealed class IslandPresenter
                 {
                     SetUtilityPin(UtilityPinState.Todo, true);
                     _state.Clear("hud:todo-due:" + id);
+                },
+                snooze: () =>
+                {
+                    _todos.Snooze(id, TimeSpan.FromMinutes(10), DateTime.Now);
+                    _todos.Save();
+                    _state.Clear("hud:todo-due:" + id);
                 }),
             Duration = TimeSpan.FromSeconds(30),
         });
@@ -428,6 +516,7 @@ public sealed class IslandPresenter
     private void UpdateUtilityVms()
     {
         var todoPinned = _utilityPins.IsPinned(UtilityPinState.Todo);
+        var widgetsPinned = _utilityPins.IsPinned(UtilityPinState.Widgets);
         // Pomodoro
         _pomodoroVm ??= new PomodoroViewModel(
             playPause: () =>
@@ -470,6 +559,16 @@ public sealed class IslandPresenter
             _water.GoalReached ? "Goal reached" : $"{_water.RemainingMl} ml to go");
 
         _volumeVm?.Refresh();
+
+        if (widgetsPinned)
+        {
+            _widgetsVm ??= new WidgetsViewModel();
+            WidgetSystemSnapshot? snapshot = null;
+            try { snapshot = _widgetSnapshot?.Invoke(); }
+            catch (Exception ex) { Logger.Info($"Widgets snapshot unavailable: {ex.GetType().Name}: {ex.Message}"); }
+            _widgetsVm.Update(DateTime.Now, _todos.Open, _pomodoro.CompletedFocusSessions,
+                _pomodoro.IsRunning, _water.TodayMl, _water.DailyGoalMl, snapshot);
+        }
 
         // To-do (max 4 open rows) — rebuilt only while the panel is open.
         if (!todoPinned) return;
@@ -537,8 +636,10 @@ public sealed class IslandPresenter
         _mascotExpression = ToExpression(_reaction ?? _persistentMood);
         _resting.Expression = _mascotExpression;
         _resting.ShelfCount = _shelf.Count;
+        _quickAccessVm.UpdateClock(DateTime.Now);
         _quickAccessVm.UpdateTimerBadge(_pomodoro.IsRunning, _pomodoro.CompletedFocusSessions);
         _quickAccessVm.UpdateShelfBadge(_shelf.Count);
+        _quickAccessVm.UpdateClipboardBadge(_clipboardVm.Count);
 
         // Coexistence rule: with music playing, the media pill stays and carries a tiny
         // agent-count badge; without music, the agent indicator gets the pill.
@@ -577,12 +678,15 @@ public sealed class IslandPresenter
         
         IslandContent? utilityView = activeUtility switch
         {
-            UtilityPinState.Hub => _quickAccessView ??= new QuickAccessView(_quickAccessVm),
+            UtilityPinState.Hub => BuildQuickAccessView(),
             UtilityPinState.Pomodoro => _pomodoroCachedView ??= new PomodoroView(_pomodoroVm!),
             UtilityPinState.Water => _waterCachedView ??= new WaterView(_waterVm!),
             UtilityPinState.Todo => _todoCachedView ??= new TodoView(_todoVm!),
             UtilityPinState.Shelf => _shelfCachedView ??= BuildShelfView(),
             UtilityPinState.Volume => _volumeCachedView ??= _volumeVm is null ? null : new VolumeView(_volumeVm),
+            UtilityPinState.Brightness => _brightnessCachedView ??= _brightnessVm is null ? null : new BrightnessView(_brightnessVm),
+            UtilityPinState.Clipboard => _clipboardCachedView ??= new ClipboardView(_clipboardVm),
+            UtilityPinState.Widgets => _widgetsCachedView ??= new WidgetsView(_widgetsVm),
             _ => null,
         };
         var utilityPriority = activeUtility is not null ? IslandPriority.UserPanel : IslandPriority.Utility;
@@ -626,16 +730,24 @@ public sealed class IslandPresenter
     private void UpdateAgentIndicator(IReadOnlyList<AgentSession> sessions, int workingCount)
     {
         _agentIndicatorVm ??= new AgentIndicatorViewModel();
+        var active = sessions.Where(IsWorking).ToArray();
+        var expression = _mascotExpression == MascotExpression.Alert
+            ? MascotExpression.Alert
+            : active.Any(s => s.State == SessionActivity.ExecutingTool)
+                ? MascotExpression.Lively
+                : active.Any(s => s.State is SessionActivity.Started or SessionActivity.WaitingForInput)
+                    ? MascotExpression.Curious
+                    : _mascotExpression;
         if (workingCount > 1)
         {
             var pending = sessions.Sum(s => s.PendingApprovalIds.Count);
-            _agentIndicatorVm.Update($"{workingCount} agents active", _mascotExpression, pending);
+            _agentIndicatorVm.Update($"{workingCount} agents active", expression, pending);
         }
         else
         {
-            var s = sessions.First(IsWorking);
+            var s = active[0];
             var provider = AgentCardViewModel.DisplayProvider(s.Provider);
-            _agentIndicatorVm.Update($"{provider} \u00B7 {StatusLabel(s)}", _mascotExpression, s.PendingApprovalIds.Count);
+            _agentIndicatorVm.Update($"{provider} \u00B7 {StatusLabel(s)}", expression, s.PendingApprovalIds.Count);
         }
     }
 
@@ -725,7 +837,7 @@ public sealed class IslandPresenter
         SessionActivity.Error => "#FF6B6B",
         SessionActivity.TurnFinished => "#5DD97C",
         SessionActivity.Ended => "#9A9AA0",
-        _ => "#8AB4FF",
+        _ => "#FFD79A",
     };
 
     /// <summary>Resolved once and re-checked only when it was missing, so installing the CLI
