@@ -442,7 +442,7 @@ public partial class MiMiMascotControl : UserControl
         back.Start();
     }
 
-    /// <summary>A short eye-wave when Basit returns. It runs once, detaches, and leaves
+    /// <summary>A short eye-wave when the user returns. It runs once, detaches, and leaves
     /// the expression pose pinned so idle rendering returns to zero.</summary>
     public void PlayHello()
     {

@@ -51,7 +51,7 @@ public class AgentPanelLayoutTests
                 card.Update(AgentEventFactory.Create("thursday", "chat", AgentEventTypes.ApprovalRequested,
                     title: "Permission required", message: "Allow this tool family for this task?", project: "ImpressiveBackup",
                     approvalRequestId: "preview", metadata: new Dictionary<string, string> {
-                        ["action_kind"] = "bash", ["command"] = "cd C:/Users/basit/ImpressiveBackup\nls -la\ncat package.json" }));
+                        ["action_kind"] = "bash", ["command"] = "cd C:/Users/demo/ImpressiveBackup\nls -la\ncat package.json" }));
                 Render(window, new ApprovalView(card), "approval", 470);
                 window.Close();
             }

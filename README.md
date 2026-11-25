@@ -140,7 +140,7 @@ Prerequisites: Windows 11 x64 and .NET SDK 10. On this machine the SDK is user-l
 before building because it locks its output.
 
 ```powershell
-cd C:\Users\basit\MiMi
+cd path\to\MiMi
 $env:DOTNET_ROOT = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
 $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 
