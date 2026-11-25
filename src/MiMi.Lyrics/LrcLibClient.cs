@@ -75,7 +75,7 @@ public sealed record LyricsRecord(
 /// </summary>
 public sealed class LrcLibClient
 {
-    public const string UserAgent = "MiMi/4.0 (Windows Dynamic Island; local desktop app)";
+    public const string UserAgent = "MiMi/1.0 (Windows Dynamic Island; local desktop app)";
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
 
     private readonly HttpClient _http;

@@ -35,7 +35,7 @@ image is a live capture showing MiMi's gold icon.
 |---|---|
 | ![Settings Integrations page with OpenAI-compatible API fields](images/settings-api.png) | ![Live Windows taskbar with the gold MiMi icon](images/taskbar-icon.png) |
 
-## MiMi 4.0 — what's new
+## What's new in MiMi 1.0
 
 - **Face-only idle.** The resting state is a slim pill with the mascot face only — the
   clock (and its setting) are gone.
@@ -749,7 +749,7 @@ defaults; values are clamped to the ranges below on every save.
 | `desktopPersistVisible` | bool | `true` | Stay visible on the desktop |
 | `fullscreenSuppress` | bool | `true` | Step aside for fullscreen apps |
 
-The clock has no setting in 4.0: the idle state is face-only by design.
+The clock has no setting in 1.0: the idle state is face-only by design.
 
 ## Troubleshooting
 
@@ -836,20 +836,20 @@ warnings and errors.
   input fields tolerated, wrong event rejected) and the decision-JSON shape — allow/deny
   with a message only, never `updatedInput`; Codex notify payload parsing (turn-complete
   mapping, long messages truncated, unknown types to status).
-- **Lyrics** (new in 4.0): LRC parser (multi-timestamp, metadata, `[offset:]`), line
+- **Lyrics** (new in 1.0): LRC parser (multi-timestamp, metadata, `[offset:]`), line
   indexing, exact-vs-search matching with the 15 s duration window, cache behavior,
   instrumental/unavailable degradation.
-- **Agent sessions & notifications** (new in 4.0): timeline tests, notification
+- **Agent sessions & notifications** (new in 1.0): timeline tests, notification
   coordinator policy, provider hook catalog/inspector.
-- **File shelf** (new in 4.0): add/validate/duplicates, capacity eviction, persistence and
+- **File shelf** (new in 1.0): add/validate/duplicates, capacity eviction, persistence and
   corruption recovery, missing-original detection.
-- **Productivity** (new in 4.0): Pomodoro phase flow and deadline math, water tracker
+- **Productivity** (new in 1.0): Pomodoro phase flow and deadline math, water tracker
   (midnight rollover, quiet hours, snooze, goal), to-do store (due reminders, persistence).
-- **System HUD policies** (new in 4.0): battery transition/low-battery policy, network
+- **System HUD policies** (new in 1.0): battery transition/low-battery policy, network
   labels, volume coalescing, keyboard HUD sampling.
-- **Mascot mood & proximity wake** (new in 4.0): mood→expression mapping;
+- **Mascot mood & proximity wake** (new in 1.0): mood→expression mapping;
   `ProximityWakePolicy` hysteresis (wake/re-doze/min-awake).
-- **Visibility & glow** (new in 4.0): `VisibilityCoordinator` preferences, `FadePlan`
+- **Visibility & glow** (new in 1.0): `VisibilityCoordinator` preferences, `FadePlan`
   transitions, `FadeSequencer` superseded-generation handling, `GlowLayout` band geometry.
 - **AI/API coverage:** provider detection and settings round-trip; plaintext keys absent
   from saved settings; DPAPI round-trip; OpenAI-compatible URL, Bearer header, request body,
