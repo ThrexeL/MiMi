@@ -327,7 +327,7 @@ public sealed class QuickAccessViewModel : ObservableObject
     private bool _showBrightness = true;
     private bool _showClipboard = true;
     private bool _showWidgets = true;
-    private bool _showCodex = true;
+    private bool _showAi = true;
 
     public IReadOnlyList<QuickAccessButton> Buttons { get => _buttons; private set => Set(ref _buttons, value); }
     public string TimerBadge { get => _timerBadge; private set => Set(ref _timerBadge, value); }
@@ -344,7 +344,7 @@ public sealed class QuickAccessViewModel : ObservableObject
     public bool ShowBrightness { get => _showBrightness; private set => Set(ref _showBrightness, value); }
     public bool ShowClipboard { get => _showClipboard; private set => Set(ref _showClipboard, value); }
     public bool ShowWidgets { get => _showWidgets; private set => Set(ref _showWidgets, value); }
-    public bool ShowCodex { get => _showCodex; private set => Set(ref _showCodex, value); }
+    public bool ShowAi { get => _showAi; private set => Set(ref _showAi, value); }
 
     public ICommand OpenPomodoroCommand { get; }
     public ICommand OpenWaterCommand { get; }
@@ -354,21 +354,21 @@ public sealed class QuickAccessViewModel : ObservableObject
     public ICommand OpenBrightnessCommand { get; }
     public ICommand OpenClipboardCommand { get; }
     public ICommand OpenWidgetsCommand { get; }
-    public ICommand OpenCodexCommand { get; }
+    public ICommand OpenAiCommand { get; }
     public ICommand OpenSettingsCommand { get; }
     public ICommand BackCommand { get; }
 
     private readonly Action<string> _openUtility;
     private readonly Action _back;
-    private readonly Action _openCodex;
+    private readonly Action _openAi;
     private readonly Action _openSettings;
 
-    public QuickAccessViewModel(Action<string> openUtility, Action back, Action? openCodex = null,
+    public QuickAccessViewModel(Action<string> openUtility, Action back, Action? openAi = null,
         Action? openSettings = null)
     {
         _openUtility = openUtility;
         _back = back;
-        _openCodex = openCodex ?? (() => { });
+        _openAi = openAi ?? (() => { });
         _openSettings = openSettings ?? (() => { });
         OpenPomodoroCommand = new RelayCommand(() => _openUtility(UtilityPinState.Pomodoro));
         OpenWaterCommand = new RelayCommand(() => _openUtility(UtilityPinState.Water));
@@ -378,7 +378,7 @@ public sealed class QuickAccessViewModel : ObservableObject
         OpenBrightnessCommand = new RelayCommand(() => _openUtility(UtilityPinState.Brightness));
         OpenClipboardCommand = new RelayCommand(() => _openUtility(UtilityPinState.Clipboard));
         OpenWidgetsCommand = new RelayCommand(() => _openUtility(UtilityPinState.Widgets));
-        OpenCodexCommand = new RelayCommand(() => _openCodex());
+        OpenAiCommand = new RelayCommand(() => _openAi());
         OpenSettingsCommand = new RelayCommand(() => _openSettings());
         BackCommand = new RelayCommand(_back);
         UpdateClock(DateTime.Now);
@@ -403,7 +403,7 @@ public sealed class QuickAccessViewModel : ObservableObject
         ShowBrightness = !hidden.Contains(UtilityPinState.Brightness);
         ShowClipboard = !hidden.Contains(UtilityPinState.Clipboard);
         ShowWidgets = !hidden.Contains(UtilityPinState.Widgets);
-        ShowCodex = !hidden.Contains(UtilityPinState.Codex);
+        ShowAi = !hidden.Contains(UtilityPinState.Ai);
     }
 
     public void UpdateClock(DateTime now)

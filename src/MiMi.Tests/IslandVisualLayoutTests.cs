@@ -188,6 +188,19 @@ public class IslandVisualLayoutTests
             var (root, _, _) = Layout(window, new QuickAccessView(vm), 320);
             var buttons = Descendants<Button>(root).ToList();
             Assert.Equal(11, buttons.Count);
+            var tilePaths = new[]
+            {
+                "QuickAccess.OpenPomodoroCommand", "QuickAccess.OpenWaterCommand", "QuickAccess.OpenTodoCommand",
+                "QuickAccess.OpenShelfCommand", "QuickAccess.OpenVolumeCommand", "QuickAccess.OpenClipboardCommand",
+                "QuickAccess.OpenWidgetsCommand", "QuickAccess.OpenBrightnessCommand", "QuickAccess.OpenAiCommand",
+            };
+            foreach (var path in tilePaths)
+            {
+                var tile = Assert.Single(buttons, b => BindingPath(b, Button.CommandProperty) == path);
+                Assert.Equal(new Thickness(4), tile.Margin);
+                Assert.NotNull(tile.Background);
+                Assert.NotNull(tile.BorderBrush);
+            }
             foreach (var (path, command) in new[]
             {
                 ("QuickAccess.OpenPomodoroCommand", vm.OpenPomodoroCommand),
@@ -198,7 +211,7 @@ public class IslandVisualLayoutTests
                 ("QuickAccess.OpenBrightnessCommand", vm.OpenBrightnessCommand),
                 ("QuickAccess.OpenClipboardCommand", vm.OpenClipboardCommand),
                 ("QuickAccess.OpenWidgetsCommand", vm.OpenWidgetsCommand),
-                ("QuickAccess.OpenCodexCommand", vm.OpenCodexCommand),
+                ("QuickAccess.OpenAiCommand", vm.OpenAiCommand),
                 ("QuickAccess.OpenSettingsCommand", vm.OpenSettingsCommand),
                 ("QuickAccess.BackCommand", vm.BackCommand)
             })
@@ -219,12 +232,12 @@ public class IslandVisualLayoutTests
         OnSta(() => WithIsland(window =>
         {
             var vm = new QuickAccessViewModel(_ => UnexpectedCommand(), UnexpectedCommand);
-            vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Codex]);
+            vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Ai]);
             var (root, _, _) = Layout(window, new QuickAccessView(vm), 320);
             var buttons = Descendants<Button>(root).ToList();
-            Assert.Equal(9, buttons.Count(b => b.Visibility == Visibility.Visible));
             Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Open water tracker" && b.Visibility == Visibility.Visible);
-            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Open an embedded Codex conversation" && b.Visibility == Visibility.Visible);
+            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Choose an AI assistant" && b.Visibility == Visibility.Visible);
+            Assert.Equal(9, buttons.Count(b => b.Visibility == Visibility.Visible));
         }));
     }
 

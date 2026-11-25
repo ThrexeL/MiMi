@@ -60,6 +60,12 @@ public sealed class AppSettings
     [JsonPropertyName("clipboardHistoryEnabled")] public bool ClipboardHistoryEnabled { get; set; } = false;
     [JsonPropertyName("quickAccessHiddenPages")] public string[] QuickAccessHiddenPages { get; set; } = [];
 
+    // AI assistants. Built-ins are detected on PATH; custom commands are per-user.
+    [JsonPropertyName("aiDefaultProvider")] public string AiDefaultProvider { get; set; } = "codex";
+    [JsonPropertyName("aiCustomName")] public string AiCustomName { get; set; } = "Custom AI";
+    [JsonPropertyName("aiCustomCommand")] public string AiCustomCommand { get; set; } = "";
+    [JsonPropertyName("aiCustomArguments")] public string AiCustomArguments { get; set; } = "";
+
     // System HUDs (Milestone 6)
     [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
     [JsonPropertyName("brightnessHudEnabled")] public bool BrightnessHudEnabled { get; set; } = true;
@@ -115,9 +121,22 @@ public sealed class AppSettings
         PanelIdleTimeoutSeconds = Math.Clamp(PanelIdleTimeoutSeconds, 0, 120);
         var allowedPages = UtilityPinState.QuickAccessKinds;
         QuickAccessHiddenPages = (QuickAccessHiddenPages ?? [])
+            .Select(page => page == UtilityPinState.Codex ? UtilityPinState.Ai : page)
             .Where(page => allowedPages.Contains(page, StringComparer.Ordinal))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        AiDefaultProvider = AiDefaultProvider?.Trim().ToLowerInvariant() switch
+        {
+            "claude" => "claude",
+            "custom" => "custom",
+            _ => "codex",
+        };
+        AiCustomName = string.IsNullOrWhiteSpace(AiCustomName) ? "Custom AI" : AiCustomName.Trim();
+        if (AiCustomName.Length > 40) AiCustomName = AiCustomName[..40];
+        AiCustomCommand = (AiCustomCommand ?? "").Trim();
+        if (AiCustomCommand.Length > 1000) AiCustomCommand = AiCustomCommand[..1000];
+        AiCustomArguments = (AiCustomArguments ?? "").Trim();
+        if (AiCustomArguments.Length > 2000) AiCustomArguments = AiCustomArguments[..2000];
         ApprovalTtlMinutes = Math.Clamp(ApprovalTtlMinutes, 1, 60);
         NotificationDurationMs = Math.Clamp(NotificationDurationMs, 1500, 10000);
         if (double.IsNaN(Scale) || double.IsInfinity(Scale)) Scale = 1.0;

@@ -5,6 +5,7 @@ using System.Windows.Automation.Provider;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MiMi.App.AI;
 using MiMi.App.UI;
 using MiMi.Core;
 using Xunit;
@@ -72,7 +73,7 @@ public class SettingsWindowTests
             {
                 Assert.Equal(45, ((Slider)window.FindName("PanelIdleTimeoutSlider")).Value);
                 Assert.False(((CheckBox)window.FindName("PageWaterToggle")).IsChecked);
-                Assert.False(((CheckBox)window.FindName("PageCodexToggle")).IsChecked);
+                Assert.False(((CheckBox)window.FindName("PageAiToggle")).IsChecked);
                 Assert.True(((CheckBox)window.FindName("PageFocusToggle")).IsChecked);
                 Assert.False(((Button)window.FindName("RestartButton")).IsEnabled);
 
@@ -81,7 +82,7 @@ public class SettingsWindowTests
                 var saved = AppSettings.Load(path);
                 Assert.Equal(60, saved.PanelIdleTimeoutSeconds);
                 Assert.DoesNotContain(UtilityPinState.Water, saved.QuickAccessHiddenPages);
-                Assert.Contains(UtilityPinState.Codex, saved.QuickAccessHiddenPages);
+                Assert.Contains(UtilityPinState.Ai, saved.QuickAccessHiddenPages);
                 Assert.DoesNotContain("unknown-page", saved.QuickAccessHiddenPages);
 
                 var happy = Assert.IsType<Button>(window.FindName("PreviewHappyButton"));
@@ -93,6 +94,46 @@ public class SettingsWindowTests
             {
                 window.Close();
                 File.Delete(path);
+            }
+        });
+    }
+
+    [Fact]
+    public void AiConfiguration_LoadsSavesAndReportsCustomCommand()
+    {
+        OnSta(() =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+            var command = Path.Combine(Path.GetTempPath(), $"mimi-settings-ai-{Guid.NewGuid():N}.cmd");
+            File.WriteAllText(command, "@echo off\r\n");
+            new AppSettings
+            {
+                AiDefaultProvider = "custom",
+                AiCustomName = "Portable AI",
+                AiCustomCommand = command,
+                AiCustomArguments = "--read-only",
+            }.Save(path);
+            var store = new ConfigStore(path);
+            var service = new AiProviderService(store.Current);
+            var window = new SettingsWindow(store, _ => { }, aiProviders: service);
+            try
+            {
+                Assert.True(window.ShowInTaskbar);
+                Assert.Equal(2, ((ComboBox)window.FindName("AiDefaultCombo")).SelectedIndex);
+                Assert.Equal("Portable AI", ((TextBox)window.FindName("AiCustomNameInput")).Text);
+                Assert.Contains("Portable AI: Ready", ((TextBlock)window.FindName("AiAvailabilityText")).Text);
+
+                ((TextBox)window.FindName("AiCustomNameInput")).Text = "Friend's Assistant";
+                ((TextBox)window.FindName("AiCustomArgumentsInput")).Text = "--safe";
+                var saved = AppSettings.Load(path);
+                Assert.Equal("Friend's Assistant", saved.AiCustomName);
+                Assert.Equal("--safe", saved.AiCustomArguments);
+            }
+            finally
+            {
+                window.Close();
+                File.Delete(path);
+                File.Delete(command);
             }
         });
     }

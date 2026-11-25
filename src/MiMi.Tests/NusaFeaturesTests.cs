@@ -25,10 +25,10 @@ public class NusaFeaturesTests
     {
         var opened = new List<string>();
         var vm = new QuickAccessViewModel(opened.Add, () => { });
-        vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Codex]);
+        vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Ai]);
         Assert.True(vm.ShowFocus);
         Assert.False(vm.ShowWater);
-        Assert.False(vm.ShowCodex);
+        Assert.False(vm.ShowAi);
         Assert.True(vm.ShowWidgets);
         vm.OpenWaterCommand.Execute(null);
         Assert.Equal(UtilityPinState.Water, Assert.Single(opened));

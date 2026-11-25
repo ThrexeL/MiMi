@@ -200,7 +200,7 @@ public sealed class TrayIcon : IDisposable
             (IntPtr)MenuShelf, "File shelf");
         NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSettings, "Settings…");
-        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuCodex, "Codex conversation…");
+        NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuCodex, "AI assistants…");
         NativeMethods.AppendMenuW(menu, 0, (IntPtr)MenuSimulate, "Simulate agent event");
         NativeMethods.AppendMenuW(menu, 0x800, IntPtr.Zero, ""); // separator
         NativeMethods.AppendMenuW(menu, _autoStartChecked ? 8u : 0u, (IntPtr)MenuAutoStart, "Start with Windows"); // MF_CHECKED

@@ -91,7 +91,7 @@ public sealed class IslandPresenter
         _quickAccessVm = new QuickAccessViewModel(
             openUtility: kind => _utilityPins.OpenUtilityFromHub(kind),
             back: () => _utilityPins.SetHub(false),
-            openCodex: () => CodexConversationRequested?.Invoke(),
+            openAi: () => AiProviderRequested?.Invoke(),
             openSettings: () => SettingsRequested?.Invoke()
         );
         _clipboardVm = new ClipboardViewModel(
@@ -218,7 +218,7 @@ public sealed class IslandPresenter
     /// The composition root owns the tray; the presenter never displays system UI itself.</summary>
     public event Action<AgentNotice>? WindowsNoticeRequested;
     public event Action? TaskEntryRequested;
-    public event Action? CodexConversationRequested;
+    public event Action? AiProviderRequested;
     public event Action? SettingsRequested;
 
     public AgentNotificationCoordinator Notifications => _notifications;

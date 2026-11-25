@@ -10,7 +10,7 @@
         ResizeMode="CanResize"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        ShowInTaskbar="False" FontFamily="Segoe UI Variable Display, Segoe UI"
+        ShowInTaskbar="True" FontFamily="Segoe UI Variable Display, Segoe UI"
         Foreground="#FFF3F3F5" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -139,6 +139,15 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="Input" TargetType="TextBox">
+            <Setter Property="Background" Value="#FF17181E"/>
+            <Setter Property="Foreground" Value="#FFF3F3F5"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
         </Style>
         <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource Btn}">
             <Setter Property="Background" Value="{StaticResource GoldGradient}"/>
@@ -394,7 +403,7 @@
                                 <CheckBox x:Name="PageBrightnessToggle" Style="{StaticResource Check}" Content="Brightness" Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
                                 <CheckBox x:Name="PageClipboardToggle" Style="{StaticResource Check}" Content="Clipboard" Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
                                 <CheckBox x:Name="PageWidgetsToggle" Style="{StaticResource Check}" Content="Widgets" Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
-                                <CheckBox x:Name="PageCodexToggle" Style="{StaticResource Check}" Content="Codex" Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
+                                <CheckBox x:Name="PageAiToggle" Style="{StaticResource Check}" Content="AI" Checked="Checkbox_Changed" Unchecked="Checkbox_Changed"/>
                             </UniformGrid>
                         </StackPanel></Border>
 
@@ -507,6 +516,39 @@
                                 <Button x:Name="RefreshProvidersButton" Grid.Column="1" Style="{StaticResource Btn}" Content="Refresh" Click="RefreshProviders_Click"/>
                             </Grid>
                             <TextBlock x:Name="ProviderCheckedText" Style="{StaticResource Sub}" HorizontalAlignment="Right" Margin="0,6,0,0"/>
+                        </StackPanel></Border>
+
+                        <Border Style="{StaticResource Card}"><StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="AI assistants"/>
+                            <TextBlock Style="{StaticResource CardSub}" Text="Codex and Claude are detected on PATH. Add any other AI CLI or app for this PC; nothing is hard-coded to one user."/>
+                            <Grid Margin="0,2,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource Label}" Text="Default assistant"/>
+                                <ComboBox x:Name="AiDefaultCombo" Grid.Column="1" SelectionChanged="AiSettings_Changed">
+                                    <ComboBoxItem Content="Codex"/><ComboBoxItem Content="Claude"/><ComboBoxItem Content="Custom"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource Label}" Text="Custom name"/>
+                                <TextBox x:Name="AiCustomNameInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource Label}" Text="Command or path"/>
+                                <TextBox x:Name="AiCustomCommandInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                <Button x:Name="BrowseAiCommandButton" Grid.Column="2" Style="{StaticResource Btn}" Content="Browse…" Margin="8,0,0,0" Click="BrowseAiCommand_Click"/>
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource Label}" Text="Arguments"/>
+                                <TextBox x:Name="AiCustomArgumentsInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="AiAvailabilityText" Style="{StaticResource Sub}" Text="Checking installed assistants…" VerticalAlignment="Center"/>
+                                <Button x:Name="RefreshAiButton" Grid.Column="1" Style="{StaticResource Btn}" Content="Refresh" Click="RefreshAiAvailability_Click"/>
+                            </Grid>
                         </StackPanel></Border>
 
                         <Border Style="{StaticResource Card}"><StackPanel>

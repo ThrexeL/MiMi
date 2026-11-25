@@ -20,9 +20,10 @@ public sealed class UtilityPinState
     public const string Clipboard = "clipboard";
     public const string Widgets = "widgets";
     public const string Codex = "codex";
+    public const string Ai = "ai";
 
     public static readonly IReadOnlyList<string> QuickAccessKinds =
-        [Pomodoro, Water, Todo, Shelf, Volume, Clipboard, Widgets, Brightness, Codex];
+        [Pomodoro, Water, Todo, Shelf, Volume, Clipboard, Widgets, Brightness, Ai];
 
     /// <summary>Tray/interaction order used when several utilities are pinned.</summary>
     public static readonly IReadOnlyList<string> PinOrder =

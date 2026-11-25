@@ -41,6 +41,9 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
 - **Refresh 2026-11-25:** Nusa-inspired gold aurora, taller glowing eyes with a
   return wave, hover-open Quick Access, local Widgets, opt-in session-only clipboard
   history, laptop brightness control, task due times with snooze, and click-to-seek lyrics.
+- **Portable AI assistants:** the Quick Access AI tile opens a picker with detected Codex,
+  Claude Code, and a user-configured custom AI command. Codex and Claude are found on PATH;
+  custom commands live in per-user settings, so MiMi can be shared on GitHub and other PCs.
 - **UI/UX refresh 2026-11-25:** pointer-aware hover dismissal with a configurable 30-second
   inactivity cap, uniform Agent activity cards with safe session-copy actions, and a modern
   card-based Settings window with Quick Access page controls, live mascot preview, activity
@@ -655,6 +658,10 @@ defaults; values are clamped to the ranges below on every save.
 | `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
 | `clipboardHistoryEnabled` | bool | `false` | Opt-in, text-only, session-only clipboard history |
 | `quickAccessHiddenPages` | string[] | `[]` | Quick Access pages to hide; unknown entries are discarded |
+| `aiDefaultProvider` | string | `codex` | Default AI assistant: `codex`, `claude`, or `custom` |
+| `aiCustomName` | string | `Custom AI` | Display name for the custom AI assistant |
+| `aiCustomCommand` | string | `""` | Custom AI executable, script, or PATH command |
+| `aiCustomArguments` | string | `""` | Arguments passed to the custom AI command |
 | `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
 | `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
 | `brightnessHudEnabled` | bool | `true` | Brightness-change HUD on WMI-supported laptop backlights |

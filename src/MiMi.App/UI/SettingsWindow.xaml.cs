@@ -6,7 +6,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using MiMi.Agents;
+using MiMi.App.AI;
 using MiMi.App.Interop;
 using MiMi.App.UI.Mascot;
 using MiMi.Core;
@@ -30,10 +32,11 @@ public partial class SettingsWindow : Window
     private readonly StatusIndicatorViewModel? _impressiveBot;
     private readonly Action? _restartRequested;
     private readonly IslandPresenter? _presenter;
+    private readonly AiProviderService? _aiProviders;
 
     public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null,
         ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null,
-        Action? restartRequested = null)
+        Action? restartRequested = null, AiProviderService? aiProviders = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
@@ -41,6 +44,7 @@ public partial class SettingsWindow : Window
         _providerInspector = providerInspector ?? new ProviderIntegrationInspector();
         _presenter = presenter;
         _restartRequested = restartRequested;
+        _aiProviders = aiProviders;
         InitializeComponent();
         SizeChanged += (_, _) => FitRootToClient();
         SettingsCategories.SizeChanged += (_, _) => FitCategoryWidths();
@@ -127,7 +131,16 @@ public partial class SettingsWindow : Window
         PageBrightnessToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Brightness);
         PageClipboardToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Clipboard);
         PageWidgetsToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Widgets);
-        PageCodexToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Codex);
+        PageAiToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Ai);
+        AiDefaultCombo.SelectedIndex = s.AiDefaultProvider switch
+        {
+            "claude" => 1,
+            "custom" => 2,
+            _ => 0,
+        };
+        AiCustomNameInput.Text = s.AiCustomName;
+        AiCustomCommandInput.Text = s.AiCustomCommand;
+        AiCustomArgumentsInput.Text = s.AiCustomArguments;
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         ExpandOnHoverToggle.IsChecked = s.ExpandOnHover;
         LyricsToggle.IsChecked = s.LyricsEnabled;
@@ -162,6 +175,7 @@ public partial class SettingsWindow : Window
             : "Global toggle shortcut: Ctrl + Alt + M  (unavailable \u2014 another program owns it)";
         RefreshLabels();
         _loading = false;
+        RefreshAiAvailability();
         _ = RefreshProvidersAsync();
     }
 
@@ -199,6 +213,15 @@ public partial class SettingsWindow : Window
                 s.CollapseDelayMs = (int)DelaySlider.Value;
                 s.PanelIdleTimeoutSeconds = (int)PanelIdleTimeoutSlider.Value;
                 s.QuickAccessHiddenPages = HiddenQuickAccessPages();
+                s.AiDefaultProvider = AiDefaultCombo.SelectedIndex switch
+                {
+                    1 => "claude",
+                    2 => "custom",
+                    _ => "codex",
+                };
+                s.AiCustomName = AiCustomNameInput.Text;
+                s.AiCustomCommand = AiCustomCommandInput.Text;
+                s.AiCustomArguments = AiCustomArgumentsInput.Text;
                 s.MediaModuleEnabled = MediaToggle.IsChecked == true;
                 s.ExpandOnHover = ExpandOnHoverToggle.IsChecked == true;
                 s.LyricsEnabled = LyricsToggle.IsChecked == true;
@@ -228,6 +251,8 @@ public partial class SettingsWindow : Window
                 s.CapsLockHudEnabled = CapsLockHudToggle.IsChecked == true;
                 s.HeadphoneHudEnabled = HeadphoneHudToggle.IsChecked == true;
             });
+            _aiProviders?.Update(_config.Current);
+            RefreshAiAvailability();
             ShowSaved();
         }
         catch (Exception ex)
@@ -247,7 +272,7 @@ public partial class SettingsWindow : Window
         if (PageBrightnessToggle.IsChecked != true) pages.Add(UtilityPinState.Brightness);
         if (PageClipboardToggle.IsChecked != true) pages.Add(UtilityPinState.Clipboard);
         if (PageWidgetsToggle.IsChecked != true) pages.Add(UtilityPinState.Widgets);
-        if (PageCodexToggle.IsChecked != true) pages.Add(UtilityPinState.Codex);
+        if (PageAiToggle.IsChecked != true) pages.Add(UtilityPinState.Ai);
         return pages.ToArray();
     }
 
@@ -357,6 +382,37 @@ public partial class SettingsWindow : Window
     }
 
     private void TextSize_Changed(object sender, SelectionChangedEventArgs e) => CaptureToSettings();
+
+    private void AiSettings_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_loading) CaptureToSettings();
+    }
+
+    private void BrowseAiCommand_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose an AI executable or command",
+            Filter = "Executables and scripts|*.exe;*.cmd;*.bat;*.com|All files|*.*",
+            CheckFileExists = true,
+        };
+        if (AiCustomCommandInput.Text.Length > 0)
+        {
+            try { dialog.FileName = AiCustomCommandInput.Text; } catch { }
+        }
+        if (dialog.ShowDialog(this) == true)
+            AiCustomCommandInput.Text = dialog.FileName;
+    }
+
+    private void RefreshAiAvailability_Click(object sender, RoutedEventArgs e) => RefreshAiAvailability();
+
+    private void RefreshAiAvailability()
+    {
+        var service = _aiProviders ?? new AiProviderService(_config.Current);
+        service.Update(_config.Current);
+        AiAvailabilityText.Text = string.Join("  ·  ", service.GetProviders().Select(option =>
+            $"{option.Provider.Name}: {(option.IsAvailable ? "Ready" : "Unavailable")}"));
+    }
 
     private void PreviewExpression_Click(object sender, RoutedEventArgs e)
     {
