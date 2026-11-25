@@ -10,6 +10,10 @@ implementation. The stack is C# / .NET 10 / WPF with CsWinRT Windows SDK project
 no Electron, no WebView, no third-party UI packages. Even the tray icon is a hand-rolled
 `Shell_NotifyIconW` P/Invoke.
 
+Maintainers should start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the current
+build, test, architecture, and repository-hygiene workflow. AI provider setup is also
+documented in [docs/ai-assistants.md](docs/ai-assistants.md).
+
 ## MiMi 4.0 — what's new
 
 - **Face-only idle.** The resting state is a slim pill with the mascot face only — the
