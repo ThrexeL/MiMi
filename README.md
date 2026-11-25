@@ -10,9 +10,8 @@ implementation. The stack is C# / .NET 10 / WPF with CsWinRT Windows SDK project
 no Electron, no WebView, no third-party UI packages. Even the tray icon is a hand-rolled
 `Shell_NotifyIconW` P/Invoke.
 
-Maintainers should start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the current
-build, test, architecture, and repository-hygiene workflow. AI provider setup is also
-documented in [docs/ai-assistants.md](docs/ai-assistants.md).
+Maintainer and integration notes are kept locally in `docs/` and are not published with
+this repository.
 
 ## MiMi 4.0 — what's new
 
@@ -58,7 +57,7 @@ documented in [docs/ai-assistants.md](docs/ai-assistants.md).
   a livelier eye expression.
 - **New controls:** interactive volume/mute and supported-laptop brightness panels plus an
   experimental embedded Codex conversation window with read-only sandbox and one-shot
-  approvals. See `docs/ui-refresh-and-codex.md` and `docs/nusa-refresh.md`.
+  approvals.
 
 ## UI and usability refresh
 
@@ -736,7 +735,6 @@ The clock has no setting in 4.0: the idle state is face-only by design.
 | `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest and `activity` lifecycle hooks, Codex notify) and their installers |
 | `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest; mascot (`UI/Mascot`: `MiMiMascotControl`, `MascotExpression`), `GlowLayout`, `SystemHudController` with the Core Audio / power / network / keyboard interop monitors |
 | `MiMi.Tests` | xUnit tests covering core policies, integration contracts, settings persistence, and offscreen island layouts |
-| `docs/` | Research references: Claude Code hooks (`claude-code-hooks.md`), Codex integrations (`codex-integrations.md`) |
 
 Data flow: providers/bridge → `AgentEventBus` → `IslandPresenter` → `IslandStateManager`
 → `IslandWindow`. The bridge normalizes and validates events, the bus decouples producers
@@ -810,8 +808,8 @@ These are separate features, not enabled or represented as complete by the UI re
 
 - **Codex app-server embedding:** the hook-based integration is implemented. A full embedded
   client still needs a version-pinned protocol, process/session ownership, transcript UI,
-  sandbox/model configuration, and end-to-end approval/cancellation verification. See
-  `docs/codex-integrations.md`; hooks must remain the default until that client is validated.
+  sandbox/model configuration, and end-to-end approval/cancellation verification. Hooks must
+  remain the default until that client is validated.
 - **Windows notification ingestion:** still requires an MSIX package identity, declared
   `userNotificationListener` capability, explicit/revocable user consent, and packaged
   deployment testing. The portable build cannot provide this. Notification bodies can be

@@ -19,7 +19,8 @@ Thumbs.db
 *.log
 *.tmp
 
-# Local-only project notes and scratch harnesses — never publish
+# Local-only documentation, notes, and scratch harnesses — never publish
+docs/
 HANDOFF.md
 PROJECT_STATE.md
 FIXES_SUMMARY.md
