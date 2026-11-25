@@ -1,11 +1,14 @@
 ﻿using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using MiMi.Agents;
 using MiMi.App.Interop;
+using MiMi.App.UI.Mascot;
 using MiMi.Core;
 
 namespace MiMi.App.UI;
@@ -25,19 +28,30 @@ public partial class SettingsWindow : Window
     private readonly Func<bool> _hotkeyStatus;
 
     private readonly StatusIndicatorViewModel? _impressiveBot;
+    private readonly Action? _restartRequested;
+    private readonly IslandPresenter? _presenter;
 
     public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null,
-        ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null)
+        ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null,
+        Action? restartRequested = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
         _hotkeyStatus = hotkeyStatus ?? (() => true);
         _providerInspector = providerInspector ?? new ProviderIntegrationInspector();
+        _presenter = presenter;
+        _restartRequested = restartRequested;
         InitializeComponent();
+        SizeChanged += (_, _) => FitRootToClient();
+        SettingsCategories.SizeChanged += (_, _) => FitCategoryWidths();
+        RestartButton.IsEnabled = _restartRequested is not null;
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = version is null ? "MiMi" : $"MiMi {version.Major}.{version.Minor}.{version.Build}";
         _sliderSaveTimer.Tick += (_, _) => SavePendingSlider();
         Load();
         Loaded += (_, _) =>
         {
+            FitRootToClient();
             // Bound the entire window, including its non-client chrome, to the desktop work area.
             var workArea = SystemParameters.WorkArea;
             MinWidth = Math.Min(MinWidth, workArea.Width);
@@ -67,6 +81,29 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void FitRootToClient()
+    {
+        if (PresentationSource.FromVisual(this) is not HwndSource source) return;
+        if (!Interop.NativeMethods.GetClientRect(source.Handle, out var rect)) return;
+        var size = source.CompositionTarget.TransformFromDevice.Transform(
+            new Point(rect.Right - rect.Left, rect.Bottom - rect.Top));
+        var headerHeight = Math.Max(SettingsHeader.ActualHeight, 90);
+        var footerHeight = Math.Max(SettingsFooter.ActualHeight, 60);
+        SettingsCategories.MaxHeight = Math.Max(120, size.Y - headerHeight - footerHeight - 14);
+        SettingsCategories.Height = SettingsCategories.MaxHeight;
+        FitCategoryWidths();
+    }
+
+    private void FitCategoryWidths()
+    {
+        if (SettingsCategories.ActualWidth <= 0) return;
+        foreach (TabItem tab in SettingsCategories.Items)
+        {
+            if (tab.Content is ScrollViewer scroll)
+                scroll.Width = Math.Max(320, SettingsCategories.ActualWidth - 48);
+        }
+    }
+
     private void Load()
     {
         _loading = true;
@@ -80,6 +117,17 @@ public partial class SettingsWindow : Window
         };
         SpeedSlider.Value = s.AnimationSpeed;
         DelaySlider.Value = s.CollapseDelayMs;
+        PanelIdleTimeoutSlider.Value = s.PanelIdleTimeoutSeconds;
+        var hiddenPages = s.QuickAccessHiddenPages.ToHashSet(StringComparer.Ordinal);
+        PageFocusToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Pomodoro);
+        PageWaterToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Water);
+        PageTodoToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Todo);
+        PageShelfToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Shelf);
+        PageVolumeToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Volume);
+        PageBrightnessToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Brightness);
+        PageClipboardToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Clipboard);
+        PageWidgetsToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Widgets);
+        PageCodexToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Codex);
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         ExpandOnHoverToggle.IsChecked = s.ExpandOnHover;
         LyricsToggle.IsChecked = s.LyricsEnabled;
@@ -122,6 +170,8 @@ public partial class SettingsWindow : Window
         ScaleLabel.Text = ScaleSlider.Value.ToString("0.00\u00D7");
         SpeedLabel.Text = SpeedSlider.Value.ToString("0.0\u00D7");
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
+        PanelIdleTimeoutLabel.Text = PanelIdleTimeoutSlider.Value <= 0
+            ? "Off" : $"{PanelIdleTimeoutSlider.Value:0} s";
         GlowLabel.Text = GlowSlider.Value.ToString("P0");
         LyricsOffsetLabel.Text = $"{LyricsOffsetSlider.Value:+0;-0;0} ms";
         FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0\u00D7}";
@@ -147,6 +197,8 @@ public partial class SettingsWindow : Window
                 };
                 s.AnimationSpeed = SpeedSlider.Value;
                 s.CollapseDelayMs = (int)DelaySlider.Value;
+                s.PanelIdleTimeoutSeconds = (int)PanelIdleTimeoutSlider.Value;
+                s.QuickAccessHiddenPages = HiddenQuickAccessPages();
                 s.MediaModuleEnabled = MediaToggle.IsChecked == true;
                 s.ExpandOnHover = ExpandOnHoverToggle.IsChecked == true;
                 s.LyricsEnabled = LyricsToggle.IsChecked == true;
@@ -182,6 +234,21 @@ public partial class SettingsWindow : Window
         {
             ShowSaveFailure(ex);
         }
+    }
+
+    private string[] HiddenQuickAccessPages()
+    {
+        var pages = new List<string>();
+        if (PageFocusToggle.IsChecked != true) pages.Add(UtilityPinState.Pomodoro);
+        if (PageWaterToggle.IsChecked != true) pages.Add(UtilityPinState.Water);
+        if (PageTodoToggle.IsChecked != true) pages.Add(UtilityPinState.Todo);
+        if (PageShelfToggle.IsChecked != true) pages.Add(UtilityPinState.Shelf);
+        if (PageVolumeToggle.IsChecked != true) pages.Add(UtilityPinState.Volume);
+        if (PageBrightnessToggle.IsChecked != true) pages.Add(UtilityPinState.Brightness);
+        if (PageClipboardToggle.IsChecked != true) pages.Add(UtilityPinState.Clipboard);
+        if (PageWidgetsToggle.IsChecked != true) pages.Add(UtilityPinState.Widgets);
+        if (PageCodexToggle.IsChecked != true) pages.Add(UtilityPinState.Codex);
+        return pages.ToArray();
     }
 
     private void ShowSaved()
@@ -290,6 +357,24 @@ public partial class SettingsWindow : Window
     }
 
     private void TextSize_Changed(object sender, SelectionChangedEventArgs e) => CaptureToSettings();
+
+    private void PreviewExpression_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string name } && Enum.TryParse<MascotExpression>(name, out var expression))
+            MascotPreview.Expression = expression;
+    }
+
+    private void RunDemo_Click(object sender, RoutedEventArgs e)
+    {
+        _presenter?.SimulateAgentSequence();
+        Close();
+    }
+
+    private void Restart_Click(object sender, RoutedEventArgs e)
+    {
+        SavePendingSlider();
+        _restartRequested?.Invoke();
+    }
 
     private async void RefreshProviders_Click(object sender, RoutedEventArgs e) => await RefreshProvidersAsync();
 

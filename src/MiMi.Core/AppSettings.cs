@@ -22,6 +22,8 @@ public sealed class AppSettings
     [JsonPropertyName("animationSpeed")] public double AnimationSpeed { get; set; } = 1.0;
     [JsonPropertyName("collapseDelayMs")] public int CollapseDelayMs { get; set; } = 900;
     [JsonPropertyName("expandOnHover")] public bool ExpandOnHover { get; set; } = true;
+    /// <summary>Maximum hover-panel lifetime without pointer movement. 0 disables the cap.</summary>
+    [JsonPropertyName("panelIdleTimeoutSeconds")] public int PanelIdleTimeoutSeconds { get; set; } = 30;
 
     // Modules
     [JsonPropertyName("mediaModuleEnabled")] public bool MediaModuleEnabled { get; set; } = true;
@@ -56,6 +58,7 @@ public sealed class AppSettings
 
     // Local convenience modules. Clipboard capture is opt-in and session-only.
     [JsonPropertyName("clipboardHistoryEnabled")] public bool ClipboardHistoryEnabled { get; set; } = false;
+    [JsonPropertyName("quickAccessHiddenPages")] public string[] QuickAccessHiddenPages { get; set; } = [];
 
     // System HUDs (Milestone 6)
     [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
@@ -109,6 +112,12 @@ public sealed class AppSettings
         TopMarginDip = Math.Clamp(TopMarginDip, 0, 200);
         HorizontalOffsetDip = Math.Clamp(HorizontalOffsetDip, -800, 800);
         CollapseDelayMs = Math.Clamp(CollapseDelayMs, 200, 5000);
+        PanelIdleTimeoutSeconds = Math.Clamp(PanelIdleTimeoutSeconds, 0, 120);
+        var allowedPages = UtilityPinState.QuickAccessKinds;
+        QuickAccessHiddenPages = (QuickAccessHiddenPages ?? [])
+            .Where(page => allowedPages.Contains(page, StringComparer.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         ApprovalTtlMinutes = Math.Clamp(ApprovalTtlMinutes, 1, 60);
         NotificationDurationMs = Math.Clamp(NotificationDurationMs, 1500, 10000);
         if (double.IsNaN(Scale) || double.IsInfinity(Scale)) Scale = 1.0;

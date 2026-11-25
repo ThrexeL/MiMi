@@ -8,6 +8,33 @@ namespace MiMi.Tests;
 public class NusaFeaturesTests
 {
     [Fact]
+    public void Settings_ClampIdleTimeoutAndSanitizeHiddenPages()
+    {
+        var settings = new AppSettings
+        {
+            PanelIdleTimeoutSeconds = 999,
+            QuickAccessHiddenPages = ["unknown", UtilityPinState.Water, UtilityPinState.Water],
+        };
+        settings.Clamp();
+        Assert.Equal(120, settings.PanelIdleTimeoutSeconds);
+        Assert.Equal(UtilityPinState.Water, Assert.Single(settings.QuickAccessHiddenPages));
+    }
+
+    [Fact]
+    public void QuickAccess_HiddenPagesReflowWithoutDisablingCommands()
+    {
+        var opened = new List<string>();
+        var vm = new QuickAccessViewModel(opened.Add, () => { });
+        vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Codex]);
+        Assert.True(vm.ShowFocus);
+        Assert.False(vm.ShowWater);
+        Assert.False(vm.ShowCodex);
+        Assert.True(vm.ShowWidgets);
+        vm.OpenWaterCommand.Execute(null);
+        Assert.Equal(UtilityPinState.Water, Assert.Single(opened));
+    }
+
+    [Fact]
     public void Clipboard_DeduplicatesBoundsAndStripsControlCharacters()
     {
         var copied = new List<string>();

@@ -99,6 +99,7 @@ public sealed class IslandPresenter
             captureNow: CaptureClipboardNow,
             copy: CopyClipboardText);
         _clipboardVm.SetCapturing(_config.Current.ClipboardHistoryEnabled);
+        _quickAccessVm.ApplyHiddenPages(_config.Current.QuickAccessHiddenPages);
         _widgetsVm = new WidgetsViewModel();
         _utilityPins.Changed += () => _dispatcher.BeginInvoke(RefreshPinned);
         _pomodoro.PhaseCompleted += phase => _dispatcher.BeginInvoke(() =>
@@ -115,6 +116,7 @@ public sealed class IslandPresenter
             _notifications.Configure(_config.Current);
             _resting = MakeResting();
             _clipboardVm.SetCapturing(_config.Current.ClipboardHistoryEnabled);
+            _quickAccessVm.ApplyHiddenPages(_config.Current.QuickAccessHiddenPages);
             RefreshPinned();
         });
 
@@ -873,15 +875,20 @@ public sealed class IslandPresenter
                 : live.Contains(s) ? "ACTIVE" : "RECENT";
             var heading = section != previousSection ? section : "";
             previousSection = section;
-            return new AgentSessionRow
-        {
-            Section = heading,
-            Provider = ProviderNames.IsImpressiveBot(s.Provider)
+            var provider = ProviderNames.IsImpressiveBot(s.Provider)
                 ? (ProviderNames.BotName(s.Provider) is { Length: > 0 } bot
                     ? "ImpressiveBot · " + bot
                     : "ImpressiveBot")
-                : AgentCardViewModel.DisplayProvider(s.Provider),
-            Project = string.IsNullOrEmpty(s.Project) ? "\u2014" : s.Project,
+                : AgentCardViewModel.DisplayProvider(s.Provider);
+            var sessionId = s.SessionId ?? "";
+            return new AgentSessionRow
+            {
+                Section = heading,
+                Provider = provider,
+                SessionId = sessionId,
+                CopySessionCommand = new RelayCommand(() => CopyClipboardText(
+                    string.IsNullOrWhiteSpace(sessionId) ? provider : $"{provider}\nSession: {sessionId}")),
+                Project = string.IsNullOrEmpty(s.Project) ? "\u2014" : s.Project,
             StatusLabel = StatusLabel(s),
             LastAction = string.IsNullOrEmpty(s.LastSummary) ? StatusLabel(s) : s.LastSummary,
             AgeLabel = AgeLabel(s.LastEventUtc),

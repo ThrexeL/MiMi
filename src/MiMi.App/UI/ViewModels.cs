@@ -319,6 +319,15 @@ public sealed class QuickAccessViewModel : ObservableObject
     private string _greeting = "Hello";
     private string _clockLabel = "";
     private string _dateLabel = "";
+    private bool _showFocus = true;
+    private bool _showWater = true;
+    private bool _showTodo = true;
+    private bool _showShelf = true;
+    private bool _showVolume = true;
+    private bool _showBrightness = true;
+    private bool _showClipboard = true;
+    private bool _showWidgets = true;
+    private bool _showCodex = true;
 
     public IReadOnlyList<QuickAccessButton> Buttons { get => _buttons; private set => Set(ref _buttons, value); }
     public string TimerBadge { get => _timerBadge; private set => Set(ref _timerBadge, value); }
@@ -327,6 +336,15 @@ public sealed class QuickAccessViewModel : ObservableObject
     public string Greeting { get => _greeting; private set => Set(ref _greeting, value); }
     public string ClockLabel { get => _clockLabel; private set => Set(ref _clockLabel, value); }
     public string DateLabel { get => _dateLabel; private set => Set(ref _dateLabel, value); }
+    public bool ShowFocus { get => _showFocus; private set => Set(ref _showFocus, value); }
+    public bool ShowWater { get => _showWater; private set => Set(ref _showWater, value); }
+    public bool ShowTodo { get => _showTodo; private set => Set(ref _showTodo, value); }
+    public bool ShowShelf { get => _showShelf; private set => Set(ref _showShelf, value); }
+    public bool ShowVolume { get => _showVolume; private set => Set(ref _showVolume, value); }
+    public bool ShowBrightness { get => _showBrightness; private set => Set(ref _showBrightness, value); }
+    public bool ShowClipboard { get => _showClipboard; private set => Set(ref _showClipboard, value); }
+    public bool ShowWidgets { get => _showWidgets; private set => Set(ref _showWidgets, value); }
+    public bool ShowCodex { get => _showCodex; private set => Set(ref _showCodex, value); }
 
     public ICommand OpenPomodoroCommand { get; }
     public ICommand OpenWaterCommand { get; }
@@ -373,6 +391,20 @@ public sealed class QuickAccessViewModel : ObservableObject
 
     public void UpdateShelfBadge(int count) => ShelfBadge = count > 0 ? $"{count} item{(count == 1 ? "" : "s")}" : "";
     public void UpdateClipboardBadge(int count) => ClipboardBadge = count > 0 ? $"{count} clip{(count == 1 ? "" : "s")}" : "";
+
+    public void ApplyHiddenPages(IEnumerable<string>? hiddenPages)
+    {
+        var hidden = (hiddenPages ?? []).ToHashSet(StringComparer.Ordinal);
+        ShowFocus = !hidden.Contains(UtilityPinState.Pomodoro);
+        ShowWater = !hidden.Contains(UtilityPinState.Water);
+        ShowTodo = !hidden.Contains(UtilityPinState.Todo);
+        ShowShelf = !hidden.Contains(UtilityPinState.Shelf);
+        ShowVolume = !hidden.Contains(UtilityPinState.Volume);
+        ShowBrightness = !hidden.Contains(UtilityPinState.Brightness);
+        ShowClipboard = !hidden.Contains(UtilityPinState.Clipboard);
+        ShowWidgets = !hidden.Contains(UtilityPinState.Widgets);
+        ShowCodex = !hidden.Contains(UtilityPinState.Codex);
+    }
 
     public void UpdateClock(DateTime now)
     {
@@ -903,7 +935,13 @@ public sealed class AgentActivityPanelView : IslandContent
     public bool HasImpressiveBot => _impressiveBotLine.Length > 0;
     public bool HasPendingImpressiveBot => ImpressiveBot?.WaitingCount > 0;
     public string ImpressiveBotApprovalNote => HasPendingImpressiveBot ? ImpressiveBotStatus.ApprovalNote : "";
-    public string Summary => Rows.Count == 0 ? "No recent activity" : $"{Rows.Count} recent sessions · approvals first";
+    public string Summary => Rows.Count == 0
+        ? "No recent activity"
+        : $"{ActiveCount} active · {WaitingCount} waiting · {ApprovalCount} approval{(ApprovalCount == 1 ? "" : "s")}";
+    public int ActiveCount => Rows.Count(r => r.IsActive);
+    public int WaitingCount => Rows.Count(r => r.StatusLabel.Contains("Waiting", StringComparison.OrdinalIgnoreCase));
+    public int ApprovalCount => Rows.Sum(r => r.PendingApprovals);
+    public bool HasRows => Rows.Count > 0;
 
     /// <summary>The status snapshot this panel was built with, so the 1 Hz tick can
     /// refresh the line in place instead of rebuilding the whole panel.</summary>
@@ -924,6 +962,10 @@ public sealed class AgentActivityPanelView : IslandContent
         SetImpressiveBot(impressiveBot);
         Raise(nameof(Rows));
         Raise(nameof(Summary));
+        Raise(nameof(ActiveCount));
+        Raise(nameof(WaitingCount));
+        Raise(nameof(ApprovalCount));
+        Raise(nameof(HasRows));
     }
 
     /// <summary>Refreshes only the ImpressiveBot line: the 1 Hz tick uses this cheap path.</summary>
@@ -937,7 +979,6 @@ public sealed class AgentActivityPanelView : IslandContent
             : status.IsHealthy ? "#5DD97C"
             : "#9A9AA0";
         ImpressiveBot = status;
-        ImpressiveBot = status;
         if (line == _impressiveBotLine && detail == _impressiveBotDetail && color == _impressiveBotColor) return;
         _impressiveBotLine = line;
         _impressiveBotDetail = detail;
@@ -949,9 +990,9 @@ public sealed class AgentActivityPanelView : IslandContent
         Raise(nameof(HasPendingImpressiveBot));
         Raise(nameof(ImpressiveBotApprovalNote));
     }
-    public override double TargetWidth => 480;
+    public override double TargetWidth => 560;
     public override double TargetHeight => PanelHeight;
-    public override double TargetCornerRadius => 24;
+    public override double TargetCornerRadius => 28;
 
     /// <summary>
     /// The panel keeps ONE height while it is open. It used to hug its content, so a
@@ -959,7 +1000,7 @@ public sealed class AgentActivityPanelView : IslandContent
     /// left the pill, and the panel collapsed mid-read. A fixed height (the list scrolls
     /// inside it) keeps the panel stable for as long as it is shown.
     /// </summary>
-    public const double PanelHeight = 320;
+    public const double PanelHeight = 360;
     public override bool AutoHeight => false;
 }
 
@@ -967,13 +1008,19 @@ public sealed class AgentActivityPanelView : IslandContent
 public sealed class AgentSessionRow
 {
     public required string Provider { get; init; }
+    public string ProviderInitial => string.IsNullOrWhiteSpace(Provider) ? "?" : Provider[..1].ToUpperInvariant();
+    public string SessionId { get; init; } = "";
+    public bool HasSessionId => !string.IsNullOrWhiteSpace(SessionId);
+    public ICommand CopySessionCommand { get; init; } = new RelayCommand(() => { });
     public required string Project { get; init; }
     public required string StatusLabel { get; init; }
     public required string LastAction { get; init; }
     public required string AgeLabel { get; init; }
     public required int PendingApprovals { get; init; }
+    public string PendingLabel => PendingApprovals > 0 ? $"{PendingApprovals} pending" : "";
     public bool HasDetail => !string.IsNullOrEmpty(LastAction) && LastAction != StatusLabel;
     public string Section { get; init; } = "";
+    public bool IsActive => Section is "ACTIVE" or "NEEDS APPROVAL";
     public required Brush StateBrush { get; init; }
     /// <summary>Newest-last confirmed events (bounded, max three shown).</summary>
     public required IReadOnlyList<AgentTimelineItem> Timeline { get; init; }

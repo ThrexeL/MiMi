@@ -143,6 +143,43 @@ public class IslandVisualLayoutTests
     }
 
     [Fact]
+    public void HoverPanel_IdleTimerUsesConfiguredTimeoutAndStopsOnCollapse()
+    {
+        OnSta(() =>
+        {
+            var path = TemporaryConfigPath();
+            var store = new ConfigStore(path);
+            store.Update(s => s.PanelIdleTimeoutSeconds = 30);
+            var window = new IslandWindow(store, () => null, _ => null, new MediaViewModel(),
+                agentPanelProvider: () => new AgentActivityPanelView(Array.Empty<AgentSessionRow>()));
+            try
+            {
+                var indicator = new AgentIndicatorViewModel();
+                indicator.Update("Codex · Working", MascotExpression.Focused, 0);
+                window.ShowPinned(new AgentCompactView(indicator));
+                window.OpenAgentOptions();
+                var field = typeof(IslandWindow).GetField("_hoverIdleTimer",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(field);
+                var timer = Assert.IsType<DispatcherTimer>(field!.GetValue(window));
+                Assert.True(timer.IsEnabled);
+                Assert.Equal(TimeSpan.FromSeconds(30), timer.Interval);
+                window.CollapseHover();
+                Assert.False(timer.IsEnabled);
+
+                store.Update(s => s.PanelIdleTimeoutSeconds = 0);
+                window.OpenAgentOptions();
+                Assert.False(timer.IsEnabled);
+            }
+            finally
+            {
+                window.Close();
+                File.Delete(path);
+            }
+        });
+    }
+
+    [Fact]
     public void QuickAccess_RetainsAllCommandsAndAccessibleTiles()
     {
         OnSta(() => WithIsland(window =>
@@ -173,6 +210,21 @@ public class IslandVisualLayoutTests
             foreach (var button in buttons)
                 AssertInside(root, button);
             Render(root, "island-quick-access");
+        }));
+    }
+
+    [Fact]
+    public void QuickAccess_HiddenPagesAreRemovedFromLayout()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var vm = new QuickAccessViewModel(_ => UnexpectedCommand(), UnexpectedCommand);
+            vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Codex]);
+            var (root, _, _) = Layout(window, new QuickAccessView(vm), 320);
+            var buttons = Descendants<Button>(root).ToList();
+            Assert.Equal(9, buttons.Count(b => b.Visibility == Visibility.Visible));
+            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Open water tracker" && b.Visibility == Visibility.Visible);
+            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Open an embedded Codex conversation" && b.Visibility == Visibility.Visible);
         }));
     }
 
@@ -286,6 +338,40 @@ public class IslandVisualLayoutTests
     }
 
     [Fact]
+    public void AgentActivity_UsesUniformCardsAndSafeRowActions()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var rows = new[]
+            {
+                new AgentSessionRow
+                {
+                    Section = "ACTIVE", Provider = "ImpressiveBot · Forge", SessionId = "session-forge",
+                    Project = "MiMi", StatusLabel = "Executing tool", LastAction = "Reading workspace files",
+                    AgeLabel = "8s ago", PendingApprovals = 0, StateBrush = Brushes.Gold,
+                    Timeline = new[] { new AgentTimelineItem { TimeLabel = "15:30", Text = "Running tool", Kind = "tool" } },
+                },
+                new AgentSessionRow
+                {
+                    Provider = "ImpressiveBot · Cove", SessionId = "session-cove",
+                    Project = "Research", StatusLabel = "Waiting for input", LastAction = "Which option?",
+                    AgeLabel = "12s ago", PendingApprovals = 1, StateBrush = Brushes.Orange,
+                    Timeline = Array.Empty<AgentTimelineItem>(),
+                },
+            };
+            var panel = new AgentActivityPanelView(rows);
+            var (root, _, _) = Layout(window, panel, 380);
+            Assert.Equal(2, Descendants<Border>(root).Count(b =>
+                b.Style == window.Resources["WidgetCard"] as Style && b.Visibility == Visibility.Visible));
+            Assert.Equal(2, Descendants<Button>(root).Count(b => b.ToolTip as string == "Copy a safe session reference"));
+            Assert.Single(Descendants<Button>(root), b => b.ToolTip as string == "Close agent activity");
+            AssertActionsAccessible(root);
+            foreach (var button in Descendants<Button>(root)) AssertInside(root, button);
+            Render(root, "island-agent-activity-cards");
+        }));
+    }
+
+    [Fact]
     public void NusaUtilityPanels_LoadBindingsAndStayInsideThePill()
     {
         OnSta(() => WithIsland(window =>
@@ -377,13 +463,14 @@ public class IslandVisualLayoutTests
             {
                 Assert.False(window.IsVisible);
                 Assert.False(window.IsLoaded);
-                var root = Assert.IsAssignableFrom<FrameworkElement>(window.Content);
+                var root = Assert.IsType<ScrollViewer>(window.FindName("BodyScroll"));
+                root.Width = 840;
+                root.Height = 700;
                 root.Measure(new Size(840, 700));
                 root.Arrange(new Rect(0, 0, 840, 700));
                 root.UpdateLayout();
                 Assert.Equal(840, root.ActualWidth);
                 Assert.Equal(700, root.ActualHeight);
-                AssertInside(root, Assert.IsType<Button>(window.FindName("CloseButton")));
                 Assert.IsType<CheckBox>(window.FindName("MediaToggle"));
                 Assert.IsType<CheckBox>(window.FindName("ClipboardHistoryToggle"));
                 Assert.False(File.Exists(path));

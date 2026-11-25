@@ -41,6 +41,10 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
 - **Refresh 2026-11-25:** Nusa-inspired gold aurora, taller glowing eyes with a
   return wave, hover-open Quick Access, local Widgets, opt-in session-only clipboard
   history, laptop brightness control, task due times with snooze, and click-to-seek lyrics.
+- **UI/UX refresh 2026-11-25:** pointer-aware hover dismissal with a configurable 30-second
+  inactivity cap, uniform Agent activity cards with safe session-copy actions, and a modern
+  card-based Settings window with Quick Access page controls, live mascot preview, activity
+  demo, and restart tools.
 - **Agent status card:** the whole compact pill is clickable, repeated clicks keep the activity
   options open, long statuses expand and wrap instead of truncating, and tool-running agents use
   a livelier eye expression.
@@ -636,6 +640,7 @@ defaults; values are clamped to the ranges below on every save.
 | `textSize` | string | `"default"` | Island typography: `"small"`, `"default"`, `"large"` |
 | `animationSpeed` | double | `1.0` | Animation speed multiplier (clamped 0.5…2.5) |
 | `collapseDelayMs` | int | `900` | Delay before auto-collapse after the pointer leaves (clamped 200…5000) |
+| `panelIdleTimeoutSeconds` | int | `30` | Maximum hover-panel lifetime without pointer movement; 0 disables the cap |
 | `expandOnHover` | bool | `true` | Expand the island when the pointer hovers over it |
 | `mediaModuleEnabled` | bool | `true` | GSMTC media pill and media panel |
 | `agentsModuleEnabled` | bool | `true` | Agent event cards and approvals |
@@ -649,6 +654,7 @@ defaults; values are clamped to the ranges below on every save.
 | `lyricsEnabled` | bool | `true` | Synchronized lyrics on the expanded media panel |
 | `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
 | `clipboardHistoryEnabled` | bool | `false` | Opt-in, text-only, session-only clipboard history |
+| `quickAccessHiddenPages` | string[] | `[]` | Quick Access pages to hide; unknown entries are discarded |
 | `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
 | `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
 | `brightnessHudEnabled` | bool | `true` | Brightness-change HUD on WMI-supported laptop backlights |

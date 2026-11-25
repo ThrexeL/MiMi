@@ -257,6 +257,8 @@ public partial class App : Application
         Logger.Info("MiMi started.");
         if (e.Args.Contains("--codex", StringComparer.OrdinalIgnoreCase))
             Dispatcher.BeginInvoke(ShowCodexConversation);
+        if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+            Dispatcher.BeginInvoke(ShowSettings);
     }
 
     private void QueueAgentEvent(AgentEvent ev)
@@ -378,23 +380,27 @@ public partial class App : Application
                     _tray.SetAutoStartIndicator(enable);
                     break;
                 case TrayMenuCommand.Restart:
-                    // Release the old hotkey before the replacement can reach RegisterHotKey.
-                    _island.ReleaseGlobalHotkey();
-                    // Release the single-instance mutex immediately so the new instance can acquire it successfully
-                    if (_ownsMutex)
-                    {
-                        try { _singleInstance?.ReleaseMutex(); } catch { }
-                        _ownsMutex = false;
-                    }
-                    try { _singleInstance?.Dispose(); } catch { }
-                    _singleInstance = null;
-
-                    System.Diagnostics.Process.Start(Environment.ProcessPath ?? "");
-                    Shutdown();
+                    RestartMiMi();
                     break;
                 case TrayMenuCommand.Exit: Shutdown(); break;
             }
         });
+    }
+
+    private void RestartMiMi()
+    {
+        // Release the old hotkey before the replacement can reach RegisterHotKey.
+        _island.ReleaseGlobalHotkey();
+        if (_ownsMutex)
+        {
+            try { _singleInstance?.ReleaseMutex(); } catch { }
+            _ownsMutex = false;
+        }
+        try { _singleInstance?.Dispose(); } catch { }
+        _singleInstance = null;
+
+        System.Diagnostics.Process.Start(Environment.ProcessPath ?? "");
+        Shutdown();
     }
 
     private void ShowCodexConversation()
@@ -442,7 +448,7 @@ public partial class App : Application
             return;
         }
         _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable),
-            () => _island.HotkeyRegistered, _providerInspector, _presenter);
+            () => _island.HotkeyRegistered, _providerInspector, _presenter, RestartMiMi);
         _settingsWindow.Show();
     }
 

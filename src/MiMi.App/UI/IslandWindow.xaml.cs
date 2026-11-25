@@ -31,6 +31,7 @@ public partial class IslandWindow : Window
     private bool _pointerOver;
 
     private readonly DispatcherTimer _stateTimer;   // shared: enter-delay / leave-grace
+    private readonly DispatcherTimer _hoverIdleTimer; // hard cap for hover-expanded panels
     private readonly DispatcherTimer _progressTimer;
     private readonly Random _random = new();
 
@@ -95,6 +96,7 @@ public partial class IslandWindow : Window
     private bool _proximityAwake;
 
     public ICommand CloseUtilityCommand { get; }
+    public ICommand CloseHoverCommand { get; }
     public ICommand AddTaskCommand { get; }
     public ICommand OpenQuickAccessCommand { get; }
 
@@ -114,6 +116,7 @@ public partial class IslandWindow : Window
         Func<IslandContent?>? quickAccessContentProvider = null)
     {
         CloseUtilityCommand = new RelayCommand(() => closeUtility?.Invoke());
+        CloseHoverCommand = new RelayCommand(CollapseHover);
         AddTaskCommand = new RelayCommand(() => addTask?.Invoke());
         OpenQuickAccessCommand = new RelayCommand(() => _quickAccessOpen?.Invoke());
         _agentPanelProvider = agentPanelProvider ?? (() => new AgentActivityPanelView([]));
@@ -161,22 +164,25 @@ public partial class IslandWindow : Window
         ApplySettings();
         _config.Changed += _ => Dispatcher.BeginInvoke(ApplySettings);
 
-        // One timer drives both the hover-open delay and the leave-grace period.
+        // One timer drives hover-open delay and leave-grace; a second timer is a
+        // hard inactivity cap so a panel can never remain stuck open indefinitely.
         _stateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
         _stateTimer.Tick += StateTimerTick;
-        MouseEnter += (_, _) =>
+        _hoverIdleTimer = new DispatcherTimer();
+        _hoverIdleTimer.Tick += (_, _) =>
         {
-            _pointerOver = true;
-            _stateTimer.Interval = TimeSpan.FromMilliseconds(140);
-            _stateTimer.Start();
-            if (_pinnedContent is RestingView { Expression: not MascotExpression.Sleepy }) PlayHello();
+            _hoverIdleTimer.Stop();
+            if (_hoverExpanded)
+            {
+                CollapseHover();
+                // The pointer may still be over the pill. Treat the next movement as
+                // a fresh hover so the panel can reopen instead of staying stuck shut.
+                _pointerOver = false;
+            }
         };
-        MouseLeave += (_, _) =>
-        {
-            _pointerOver = false;
-            _stateTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(250, _config.Current.CollapseDelayMs));
-            _stateTimer.Start();
-        };
+        MouseEnter += (_, _) => SetPointerOverPill(true);
+        MouseMove += (_, _) => UpdatePointerOverPill();
+        MouseLeave += (_, _) => SetPointerOverPill(false);
 
         Pill.SizeChanged += (_, _) => UpdateClip();
 
@@ -345,6 +351,11 @@ public partial class IslandWindow : Window
     private void RecomputeVisibility()
     {
         var visible = Coordinator.EffectiveVisible;
+        if (!visible)
+        {
+            _hoverIdleTimer.Stop();
+            _pointerOver = false;
+        }
         // Only user-initiated hides fade out; fullscreen/session restrictions stay instant.
         var userInitiatedHide = !visible && Coordinator.Preference == VisibilityPreference.HiddenByUser;
         var plan = VisibilityTransitionPlanner.Plan(_windowShown && IsVisible, Opacity, visible,
@@ -481,7 +492,11 @@ public partial class IslandWindow : Window
     public void ShowPinned(IslandContent content)
     {
         _pinnedContent = content;
-        if (!content.Expandable) _hoverExpanded = false;
+        if (!content.Expandable)
+        {
+            _hoverExpanded = false;
+            _hoverIdleTimer.Stop();
+        }
         ApplyContent(_hoverExpanded ? Expanded(content) ?? content : content);
     }
 
@@ -837,6 +852,7 @@ public partial class IslandWindow : Window
         else
         {
             _hoverExpanded = true;
+            ResetHoverIdleTimer();
             ApplyContent(new MediaExpandedView(media.Media));
         }
         e.Handled = true;
@@ -849,6 +865,7 @@ public partial class IslandWindow : Window
         if (_pinnedContent is not (AgentCompactView or MediaCompactView { HasAgentBadge: true })) return;
         if (_hoverExpanded) return;
         _hoverExpanded = true;
+        ResetHoverIdleTimer();
         ApplyContent(_agentPanelProvider());
     }
 
@@ -1068,6 +1085,56 @@ public partial class IslandWindow : Window
 
     // ---- hover expansion ------------------------------------------------------
 
+    private void SetPointerOverPill(bool over)
+    {
+        if (over == _pointerOver && !(over && _hoverExpanded)) return;
+        _pointerOver = over;
+        _stateTimer.Stop();
+        if (over)
+        {
+            if (_pinnedContent is RestingView { Expression: not MascotExpression.Sleepy }) PlayHello();
+            _stateTimer.Interval = TimeSpan.FromMilliseconds(140);
+            _stateTimer.Start();
+            if (_hoverExpanded) ResetHoverIdleTimer();
+        }
+        else
+        {
+            _hoverIdleTimer.Stop();
+            _stateTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(250, _config.Current.CollapseDelayMs));
+            _stateTimer.Start();
+        }
+    }
+
+    private void UpdatePointerOverPill()
+    {
+        if (!IsVisible || Pill.ActualWidth <= 0 || Pill.ActualHeight <= 0) return;
+        var position = Mouse.GetPosition(Pill);
+        var over = position.X >= 0 && position.Y >= 0
+                   && position.X <= Pill.ActualWidth && position.Y <= Pill.ActualHeight;
+        if (over)
+        {
+            if (!_pointerOver) SetPointerOverPill(true);
+            else if (_hoverExpanded) ResetHoverIdleTimer();
+        }
+        else if (_pointerOver)
+        {
+            SetPointerOverPill(false);
+        }
+    }
+
+    private void ResetHoverIdleTimer()
+    {
+        var seconds = _config.Current.PanelIdleTimeoutSeconds;
+        if (seconds <= 0)
+        {
+            _hoverIdleTimer.Stop();
+            return;
+        }
+        _hoverIdleTimer.Interval = TimeSpan.FromSeconds(seconds);
+        _hoverIdleTimer.Stop();
+        _hoverIdleTimer.Start();
+    }
+
     private void StateTimerTick(object? sender, EventArgs e)
     {
         _stateTimer.Stop();
@@ -1091,12 +1158,14 @@ public partial class IslandWindow : Window
         if (content is MediaCompactView { HasAgentBadge: true } && PointerOverAgentBadge())
         {
             _hoverExpanded = true;
+            ResetHoverIdleTimer();
             ApplyContent(_agentPanelProvider());
             return;
         }
 
         if (Expanded(content) is not { } expandedView) return;
         _hoverExpanded = true;
+        ResetHoverIdleTimer();
         ApplyContent(expandedView);
     }
 
@@ -1107,6 +1176,7 @@ public partial class IslandWindow : Window
     {
         if (!_hoverExpanded) return;
         _hoverExpanded = false;
+        _hoverIdleTimer.Stop();
         if (_pinnedContent is not null) ApplyContent(_pinnedContent);
     }
 

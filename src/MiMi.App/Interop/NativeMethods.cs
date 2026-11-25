@@ -224,6 +224,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = false)]
     public static extern uint SendMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", SetLastError = false)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
     [DllImport("user32.dll", SetLastError = false, CharSet = CharSet.Unicode)]
     public static extern uint RegisterWindowMessageW(string lpString);
 
