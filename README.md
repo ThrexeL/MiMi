@@ -1,17 +1,39 @@
 # MiMi
 
-A lightweight Dynamic Island-style overlay for Windows 11. MiMi lives at the top center of
-the primary monitor, is always on top, and never steals keyboard focus. It shows your
-current media (with synchronized lyrics), agent activity, approvals, system HUDs, and
-utility panels in a compact pill that expands on hover.
+MiMi is a Dynamic Island-style overlay for Windows 11. It lives at the top center of the
+primary monitor, stays on top, and never steals keyboard focus. A small dark pill with a
+sleepy mascot expands on hover into media controls with synchronized lyrics, agent
+activity and approvals, system HUDs, productivity utilities, and a nine-tile Quick Access
+hub. The AI tile opens a portable picker for local assistants and text-only API chats.
 
 MiMi is inspired by [Nusa](https://rama2555.github.io/nusa/) but is an original
-implementation. The stack is C# / .NET 10 / WPF with CsWinRT Windows SDK projections —
-no Electron, no WebView, no third-party UI packages. Even the tray icon is a hand-rolled
-`Shell_NotifyIconW` P/Invoke.
+implementation. It is C# / .NET 10 / WPF with CsWinRT Windows SDK projections — no
+Electron, WebView, or third-party UI packages. The gold mascot icon is shared by the
+executable, taskbar windows, and a hand-rolled `Shell_NotifyIconW` tray entry.
 
 Maintainer and integration notes are kept locally in `docs/` and are not published with
 this repository.
+
+## What MiMi looks like
+
+Most island captures below are offscreen renders from the current WPF code. The taskbar
+image is a live capture showing MiMi's gold icon.
+
+| Idle pill | Quick Access |
+|---|---|
+| ![MiMi idle pill with white mascot eyes and a warm gold bottom glow](images/island-idle.png) | ![Expanded Quick Access with nine colored tiles](images/quick-access.png) |
+
+| Agent activity | Approval card |
+|---|---|
+| ![Agent activity panel with session rows and a pending approval](images/agent-activity.png) | ![Approval card with command detail and fully visible Approve, Deny, and Copy session buttons](images/approval-card.png) |
+
+| Media with lyrics | AI picker |
+|---|---|
+| ![Expanded media panel with synchronized lyric lines and transport controls](images/media-lyrics.png) | ![AI picker showing Codex, Claude, OpenCode, Grok, and Custom AI](images/ai-picker.png) |
+
+| Settings API panel | Taskbar identity |
+|---|---|
+| ![Settings Integrations page with OpenAI-compatible API fields](images/settings-api.png) | ![Live Windows taskbar with the gold MiMi icon](images/taskbar-icon.png) |
 
 ## MiMi 4.0 — what's new
 
@@ -72,7 +94,7 @@ this repository.
 
 ## Status
 
-Development is phased. State as of the 4.0 release candidate:
+Development is phased. Current state:
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -80,12 +102,13 @@ Development is phased. State as of the 4.0 release candidate:
 | 2 — agent foundation | Named-pipe bridge, `AgentEvent` model, approvals, island priorities | implemented |
 | 3 — agent integrations | Claude Code / Codex approval hooks via `MiMi.AgentCli`, Codex notify | implemented |
 | 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
-| 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
+| 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | implemented |
+| 4.2 — AI providers | Codex, Claude, OpenCode, Grok, Custom commands, and text-only OpenAI-compatible API chats with encrypted keys | implemented |
 | 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language, supported laptop brightness | implemented |
-| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; experimental read-only Codex conversation client implemented | partial / experimental |
+| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity/approval adapters and an experimental read-only Codex conversation client are implemented; full session management remains limited | partial / experimental |
 | 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
 | 8 — mascot and UI polish | Expressions, categorized settings, island styling, offscreen template/layout review | implemented; interactive/DPI acceptance remains manual |
-| 9 — release prep | Portable build script, automated tests, selftest, documented acceptance checklist | implemented; release signing/distribution and manual acceptance remain maintainer tasks |
+| 9 — release prep | Portable build script with downloadable zip, automated tests, selftest, documented acceptance checklist | implemented; GitHub upload and manual acceptance remain maintainer tasks |
 
 Notes on the intentionally-unsupported features:
 
@@ -99,28 +122,41 @@ Notes on the intentionally-unsupported features:
   use the active WMI laptop backlight; desktops without that interface show an honest
   unavailable state instead of a fake slider.
 
-## Build and run
+## Download a release
 
-Prerequisites: Windows 11 x64 and the .NET SDK 10. The machine was provisioned with a
-user-local SDK at `%LOCALAPPDATA%\Microsoft\dotnet` (via `dotnet-install.ps1`), so make
-sure that directory is on your `PATH`.
+Download `MiMi-win-x64.zip` from the GitHub Releases page, extract it anywhere, and run
+`MiMi.exe`. No installer, administrator rights, or sign-in are required. The default zip
+needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download); a
+self-contained archive is published as `MiMi-win-x64-selfcontained.zip` when available.
+Check `SHA256SUMS.txt` inside the archive before running an untrusted download.
+
+Settings and agent data stay in `%LOCALAPPDATA%\MiMi`, so replacing the executable does
+not erase your configuration.
+
+## Build and run from source
+
+Prerequisites: Windows 11 x64 and .NET SDK 10. On this machine the SDK is user-local at
+`%LOCALAPPDATA%\Microsoft\dotnet`; put that directory on `PATH` first. Stop a running MiMi
+before building because it locks its output.
 
 ```powershell
+cd C:\Users\basit\MiMi
+$env:DOTNET_ROOT = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
+$env:PATH = "$env:DOTNET_ROOT;$env:PATH"
+
+Get-Process -Name MiMi -ErrorAction SilentlyContinue | Stop-Process -Force
+dotnet build MiMi.slnx -c Debug
+dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Debug --nologo
 dotnet build MiMi.slnx -c Release
-dotnet run --project src/MiMi.App -c Release
+& 'src\MiMi.App\bin\Release\net10.0-windows10.0.26100.0\MiMi.exe' --selftest
 
-# or run the built executable directly:
+# run the app:
 .\src\MiMi.App\bin\Release\net10.0-windows10.0.26100.0\MiMi.exe
-
-# headless pipeline check (prints [PASS]/[FAIL] lines, exit code 0/1):
-MiMi.exe --selftest
-
-# unit tests:
-dotnet test MiMi.slnx -c Debug
 ```
 
-Note: the solution file is `MiMi.slnx` — the new .NET 10 XML solution format, not the
-classic `.sln`. For a distributable build, see "Portable release" below.
+The solution file is `MiMi.slnx` — the .NET 10 XML format, not a classic `.sln`. The
+current suite has **424 tests**; Debug and Release build with zero warnings. See
+"Portable release" for the zip-producing script.
 
 ## Testing real media integration
 
@@ -207,6 +243,29 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
   1 fetch/second pacing, obsolete-fetch cancellation, and HTTP 429 `Retry-After`
   cooldown. All failures degrade to an `Unavailable` state; confirmed-instrumental
   tracks show an `Instrumental` state.
+
+## AI assistants and API chat
+
+The Quick Access **AI** tile opens a foreground picker. Providers are detected on `PATH`
+or configured per user; no machine-specific executable is hard-coded.
+
+- **Codex** — embedded read-only conversation with streaming transcript and one-shot
+  command approvals.
+- **Claude** and **OpenCode** — open their terminal assistants in the MiMi workspace.
+- **Grok** — opens the Grok terminal assistant when `grok` is on `PATH`.
+- **Custom AI** — either an external command with arguments, or a text-only
+  OpenAI-compatible API chat.
+
+API mode includes Grok, OpenAI, OpenRouter, and custom-compatible presets. Set the base
+URL, model, system prompt, and API key in **Settings → Integrations → AI assistants**.
+The key is encrypted with Windows DPAPI for the current user, never displayed after
+saving, and never written to `settings.json` as plaintext. You can also supply
+`MIMI_AI_API_KEY` instead of storing a key. API requests use Bearer authentication and
+`POST /chat/completions`; remote keys require HTTPS.
+
+API chats have no local file, shell, tool, or approval access. External AI commands run
+with your normal user permissions and are **not** the embedded Codex read-only sandbox.
+Never put secrets in custom command arguments; those arguments are ordinary settings.
 
 ## Agent bridge API contract
 
@@ -582,7 +641,7 @@ Activity hooks carry no timeout override, so they can never gate or delay the pr
 
 ### Verification performed
 
-- 211/211 automated tests (see "Testing checklist").
+- 424 automated tests (see "Testing checklist").
 - Bridge integration test: approval is registered before subscribers see it, and a pending
   approval is dismissed when its requesting connection drops.
 - Live bridge + UI verification using provider-shaped hook JSON through the real
@@ -733,8 +792,10 @@ The clock has no setting in 4.0: the idle state is face-only by design.
 | `MiMi.Agents` | `AgentEvent` model/normalization, approval store, agent event bus, `AgentSessionManager`, `MascotMood` policy, `ProviderHookCatalog`/`ProviderIntegrationInspector`, `AgentNotificationCoordinator` |
 | `MiMi.Bridge` | Named-pipe receiver, framing/serialization, token and pipe security, per-connection approval correlation |
 | `MiMi.AgentCli` | Provider hook adapters (Claude Code / Codex PermissionRequest and `activity` lifecycle hooks, Codex notify) and their installers |
-| `MiMi.App` | WPF island window, presenter, tray icon, settings UI, fullscreen watcher, selftest; mascot (`UI/Mascot`: `MiMiMascotControl`, `MascotExpression`), `GlowLayout`, `SystemHudController` with the Core Audio / power / network / keyboard interop monitors |
-| `MiMi.Tests` | xUnit tests covering core policies, integration contracts, settings persistence, and offscreen island layouts |
+| `MiMi.App` | WPF island window, presenter, taskbar/tray icon, settings UI, fullscreen watcher, selftest; mascot (`UI/Mascot`), `GlowLayout`, `SystemHudController`, and Core Audio / power / network / keyboard interop |
+| `MiMi.App/AI` | `AiProviderService` detection and launching, `AiApiClient` text-only OpenAI-compatible transport, and `AiApiKeyProtector` DPAPI key storage |
+| `MiMi.App/Interop/MiMiIcon.cs` | Shared seven-resolution icon for executable, taskbar windows, and tray |
+| `MiMi.Tests` | 424 xUnit tests for core policies, integration contracts, settings, AI transport, approval layout, and offscreen island rendering |
 
 Data flow: providers/bridge → `AgentEventBus` → `IslandPresenter` → `IslandStateManager`
 → `IslandWindow`. The bridge normalizes and validates events, the bus decouples producers
@@ -746,8 +807,9 @@ wins, transients expire back to the pinned state), and the window renders it. Vi
 
 ## Testing checklist
 
-Automated coverage (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Release`)
-and the separate `MiMi.exe --selftest` pipeline check:
+Automated coverage: **424 tests** (`dotnet test src/MiMi.Tests/MiMi.Tests.csproj -c Debug`)
+and the separate `MiMi.exe --selftest` pipeline check. Debug and Release builds have zero
+warnings and errors.
 
 - Settings round-trip and corrupt-file fallback to defaults; value clamping.
 - Dedup store: duplicate ids rejected, capacity eviction, empty id accepted.
@@ -789,6 +851,13 @@ and the separate `MiMi.exe --selftest` pipeline check:
   `ProximityWakePolicy` hysteresis (wake/re-doze/min-awake).
 - **Visibility & glow** (new in 4.0): `VisibilityCoordinator` preferences, `FadePlan`
   transitions, `FadeSequencer` superseded-generation handling, `GlowLayout` band geometry.
+- **AI/API coverage:** provider detection and settings round-trip; plaintext keys absent
+  from saved settings; DPAPI round-trip; OpenAI-compatible URL, Bearer header, request body,
+  response parsing, plaintext-HTTP rejection, sanitized errors; API window configuration
+  refresh and taskbar visibility.
+- **Approval layout coverage:** a long command card is measured after its template loads,
+  and both Approve and Deny must stay inside the pill.
+- **Identity coverage:** seven ICO resolutions and the selected 64 px frame for taskbar windows.
 - GSMTC availability check (`--selftest` reports the active session count).
 
 Requires manual verification (not automated, not claimed done):
@@ -806,10 +875,10 @@ Requires manual verification (not automated, not claimed done):
 
 These are separate features, not enabled or represented as complete by the UI refresh:
 
-- **Codex app-server embedding:** the hook-based integration is implemented. A full embedded
-  client still needs a version-pinned protocol, process/session ownership, transcript UI,
-  sandbox/model configuration, and end-to-end approval/cancellation verification. Hooks must
-  remain the default until that client is validated.
+- **Codex app-server embedding:** the hook-based integration remains the default. An
+  experimental embedded client provides a read-only conversation, streamed items,
+  interruption, and one-shot command approvals. Thread resume/history, model pickers,
+  session-wide grants, MCP elicitation, and file-change approvals are still unsupported.
 - **Windows notification ingestion:** still requires an MSIX package identity, declared
   `userNotificationListener` capability, explicit/revocable user consent, and packaged
   deployment testing. The portable build cannot provide this. Notification bodies can be
@@ -828,7 +897,7 @@ Remove-Item Env:MIMI_QA_DIR
 
 ## Portable release
 
-`build-release.ps1` produces a portable build in `dist/`:
+`build-release.ps1` produces a portable build in `dist/` and a downloadable zip next to it:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 -Verify
@@ -839,11 +908,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 -Verify -O
 
 `-Verify` runs the Release test suite before publishing and the published app's headless
 selftest afterward. Failures stop the script. Published files include `SHA256SUMS.txt`
-for the app, companion CLI, and README. Close MiMi before overwriting its executable,
-or select a separate output directory.
+for the app, companion CLI, README, and release zip. Close MiMi before overwriting its
+executable, or select a separate output directory.
 
 - **Output:** `dist\MiMi.exe` (single file, win-x64), `dist\MiMi.AgentCli.exe` next to it
-  (hook installers + adapters resolve this path), plus `README.md` and `SHA256SUMS.txt`.
+  (hook installers + adapters resolve this path), plus `README.md`, `images\`, and
+  `SHA256SUMS.txt`.
+- **Release zip:** `MiMi-win-x64.zip` in the output folder's parent (the repository root
+  for the default `dist` output). Use `-SelfContained` for
+  `MiMi-win-x64-selfcontained.zip`. Upload this zip to GitHub Releases; extract it and
+  run `MiMi.exe` with no installer.
 - **Framework-dependent by default:** the target machine needs the
   [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download). Pass `-SelfContained`
   to embed the runtime (~180 MB) so it runs with nothing installed.

@@ -1,5 +1,6 @@
 ﻿# MiMi release build script
 # Produces a portable (framework-dependent, single-file) Release build in dist/
+# and a downloadable zip next to it for GitHub Releases.
 #
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File build-release.ps1 [-SelfContained] [-Verify] [-OutputDirectory path]
@@ -50,8 +51,9 @@ dotnet publish "$root\src\MiMi.AgentCli\MiMi.AgentCli.csproj" -c Release -r $rid
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$OutputDirectory" --nologo
 if ($LASTEXITCODE -ne 0) { Write-Host "CLI BUILD FAILED" -ForegroundColor Red; exit 1 }
 
-# Docs
+# Docs and README images, so extracted copies render the same screenshots.
 Copy-Item "$root\README.md" "$OutputDirectory\" -Force
+Copy-Item "$root\images" "$OutputDirectory\images" -Recurse -Force
 
 if ($Verify) {
     Write-Host "== Running published selftest ==" -ForegroundColor Cyan
@@ -86,7 +88,31 @@ $hashes = foreach ($name in @("MiMi.exe", "MiMi.AgentCli.exe", "README.md")) {
 }
 $hashes | Set-Content (Join-Path $OutputDirectory "SHA256SUMS.txt") -Encoding ASCII
 
+# Downloadable archive for GitHub Releases. Keep it outside the output folder so a
+# second publish cannot accidentally include its own zip.
+$zipName = if ($SelfContained) { "MiMi-win-x64-selfcontained.zip" } else { "MiMi-win-x64.zip" }
+$zipPath = Join-Path (Split-Path -Parent $OutputDirectory) $zipName
+if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+Compress-Archive -LiteralPath @(
+    (Join-Path $OutputDirectory "MiMi.exe"),
+    (Join-Path $OutputDirectory "MiMi.AgentCli.exe"),
+    (Join-Path $OutputDirectory "README.md"),
+    (Join-Path $OutputDirectory "SHA256SUMS.txt"),
+    (Join-Path $OutputDirectory "images")
+) -DestinationPath $zipPath -CompressionLevel Optimal
+
+$zipStream = [System.IO.File]::OpenRead($zipPath)
+$zipSha = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $zipHash = [System.BitConverter]::ToString($zipSha.ComputeHash($zipStream)).Replace("-", "").ToLowerInvariant()
+    Add-Content -LiteralPath (Join-Path $OutputDirectory "SHA256SUMS.txt") -Value "$zipHash  $zipName" -Encoding ASCII
+} finally {
+    $zipSha.Dispose()
+    $zipStream.Dispose()
+}
+
 Write-Host ""
 Write-Host "== $OutputDirectory contents ==" -ForegroundColor Cyan
 Get-ChildItem "$OutputDirectory" | Format-Table Name, @{n="MB";e={[math]::Round($_.Length/1MB, 1)}} -AutoSize
+Write-Host "Release zip: $zipPath" -ForegroundColor Green
 Write-Host "Launch: $OutputDirectory\MiMi.exe  (no admin, no installer; settings live in %LOCALAPPDATA%\MiMi)"

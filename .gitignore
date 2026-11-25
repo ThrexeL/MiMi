@@ -5,6 +5,7 @@ dist/
 TestResults/
 artifacts/
 coverage/
+MiMi-win-x64*.zip
 
 # Editors and OS metadata
 .vs/

@@ -122,6 +122,18 @@ public class AiProviderTests
                 Assert.Equal(5, window.Providers.Count);
                 var items = (ItemsControl)window.FindName("ProviderItems");
                 Assert.Same(window.Providers, items.ItemsSource);
+                var content = (FrameworkElement)window.Content;
+                content.Measure(new Size(660, 560));
+                content.Arrange(new Rect(0, 0, 660, 560));
+                content.UpdateLayout();
+                var header = (TextBlock)window.FindName("HeaderText");
+                var subtitle = (TextBlock)window.FindName("SubtitleText");
+                var headerBottom = header.TransformToVisual(content)
+                    .Transform(new Point(0, header.ActualHeight)).Y;
+                var subtitleTop = subtitle.TransformToVisual(content)
+                    .Transform(new Point(0, 0)).Y;
+                Assert.True(headerBottom <= subtitleTop + 1,
+                    $"Header bottom {headerBottom:0.#} overlaps subtitle top {subtitleTop:0.#}.");
                 window.Close();
             }
             catch (Exception ex) { failure = ex; }
