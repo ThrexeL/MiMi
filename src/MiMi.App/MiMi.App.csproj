@@ -4,9 +4,13 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\mimi.ico</ApplicationIcon>
     <AssemblyName>MiMi</AssemblyName>
     <RootNamespace>MiMi.App</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\mimi.ico" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Management" Version="10.0.0" />
   </ItemGroup>
@@ -16,5 +20,6 @@
     <ProjectReference Include="..\MiMi.Lyrics\MiMi.Lyrics.csproj" />
     <ProjectReference Include="..\MiMi.Agents\MiMi.Agents.csproj" />
     <ProjectReference Include="..\MiMi.Bridge\MiMi.Bridge.csproj" />
+    <ProjectReference Include="..\MiMi.Codex\MiMi.Codex.csproj" />
   </ItemGroup>
 </Project>

@@ -1,13 +1,36 @@
+# Build and test output
 bin/
 obj/
+dist/
+TestResults/
 artifacts/
-*.user
+coverage/
+
+# Editors and OS metadata
 .vs/
 .idea/
+*.user
 *.suo
-*.log
-dist/
+*.swp
+Thumbs.db
+.DS_Store
 
-# Local-only planning/handoff docs — never publish
+# Logs and transient files
+*.log
+*.tmp
+
+# Local-only project notes and scratch harnesses — never publish
 HANDOFF.md
 PROJECT_STATE.md
+FIXES_SUMMARY.md
+FIX_ISSUES.md
+WORKSPACE_EXAMINATION.md
+scratch-relay/
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.snk

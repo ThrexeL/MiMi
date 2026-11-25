@@ -40,6 +40,7 @@ public partial class MiMiMascotControl : UserControl
     private DispatcherTimer? _dartBackTimer;
     private Storyboard? _bobStoryboard;
     private Storyboard? _sleepZStoryboard;
+    private Storyboard? _helloStoryboard;
     private readonly Random _random = new();
     private MascotExpression _lastExpression = MascotExpression.Calm;
     private bool _templateReady;
@@ -72,19 +73,23 @@ public partial class MiMiMascotControl : UserControl
 
         Loaded += (_, _) =>
         {
+            MascotOptions.Changed -= OnOptionsChanged;
+            MascotOptions.Changed += OnOptionsChanged;
             _templateReady = true;
             PlayWake();
             ApplyExpression(Expression, animated: false);
             StartLife();
         };
-        Unloaded += (_, _) => StopLife();
+        Unloaded += (_, _) =>
+        {
+            MascotOptions.Changed -= OnOptionsChanged;
+            StopLife();
+        };
         IsVisibleChanged += (_, e) =>
         {
             if ((bool)e.NewValue) StartLife(); else StopLife();
         };
 
-        MascotOptions.Changed += OnOptionsChanged;
-        Unloaded += (_, _) => MascotOptions.Changed -= OnOptionsChanged;
     }
 
     private static void OnExpressionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -104,6 +109,7 @@ public partial class MiMiMascotControl : UserControl
         if (!_templateReady) return;
 
         var wasSleepy = _lastExpression == MascotExpression.Sleepy;
+        var wasCurious = _lastExpression == MascotExpression.Curious;
         _lastExpression = expression;
         if (MascotOptions.ReducedMotion) animated = false;
 
@@ -141,6 +147,8 @@ public partial class MiMiMascotControl : UserControl
             _bobStoryboard.Begin(this, isControllable: false);
         }
 
+        UpdateExpressionAccents(expression, animated, ease, wasCurious);
+
         // Happy: one small bounce, under 400 ms, then perfectly still.
         if (animated && expression == MascotExpression.Happy && !MascotOptions.ReducedMotion)
             PlayHappyBounce();
@@ -168,16 +176,66 @@ public partial class MiMiMascotControl : UserControl
         EyeRMove.Y = 0;
     }
 
+    private void UpdateExpressionAccents(MascotExpression expression, bool animated,
+        IEasingFunction ease, bool wasCurious)
+    {
+        var duration = TimeSpan.FromMilliseconds(animated ? 220 : 0);
+        var cheekOpacity = expression is MascotExpression.Happy or MascotExpression.Lively
+            or MascotExpression.Curious ? 0.55 : 0;
+        AnimateOpacity(CheekL, cheekOpacity, duration, ease, animated);
+        AnimateOpacity(CheekR, cheekOpacity, duration, ease, animated);
+        AnimateOpacity(HappySparkle, expression == MascotExpression.Happy ? 0.9 : 0,
+            duration, ease, animated);
+
+        if (expression == MascotExpression.Curious)
+        {
+            // One raised, tilted eye reads as a cute "what's happening?" without
+            // changing the identity of the face.
+            AnimateAngle(EyeLTilt, 6, duration, ease, animated);
+            AnimateAngle(EyeRTilt, -8, duration, ease, animated);
+            AnimateTranslateY(EyeRMove, -1.3, duration, ease, animated);
+        }
+        else if (wasCurious)
+        {
+            AnimateTranslateY(EyeRMove, 0, duration, ease, animated);
+        }
+    }
+
+    private static void AnimateTranslateY(TranslateTransform transform, double y,
+        TimeSpan duration, IEasingFunction ease, bool animate)
+    {
+        if (!animate)
+        {
+            transform.BeginAnimation(TranslateTransform.YProperty, null);
+            transform.Y = y;
+            return;
+        }
+        transform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(y, duration) { EasingFunction = ease });
+    }
+
     private static void AnimateScale(ScaleTransform t, double sx, double sy, TimeSpan d, IEasingFunction ease, bool animate)
     {
-        if (!animate) { t.ScaleX = sx; t.ScaleY = sy; return; }
+        if (!animate)
+        {
+            t.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            t.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            t.ScaleX = sx;
+            t.ScaleY = sy;
+            return;
+        }
         t.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(sx, d) { EasingFunction = ease });
         t.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(sy, d) { EasingFunction = ease });
     }
 
     private static void AnimateAngle(RotateTransform t, double degrees, TimeSpan d, IEasingFunction ease, bool animate)
     {
-        if (!animate) { t.Angle = degrees; return; }
+        if (!animate)
+        {
+            t.BeginAnimation(RotateTransform.AngleProperty, null);
+            t.Angle = degrees;
+            return;
+        }
         t.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(degrees, d) { EasingFunction = ease });
     }
 
@@ -229,7 +287,12 @@ public partial class MiMiMascotControl : UserControl
         EyeLBlink.ScaleY = Pose(Expression).Sy;
         EyeRBlink.ScaleY = Pose(Expression).Sy;
         StopBob();
+        StopHello();
         StopSleepZs();
+        CheekL.BeginAnimation(OpacityProperty, null);
+        CheekR.BeginAnimation(OpacityProperty, null);
+        HappySparkle.BeginAnimation(OpacityProperty, null);
+        CheekL.Opacity = CheekR.Opacity = HappySparkle.Opacity = 0;
     }
 
     /// <summary>Two small z's that rise and fade above the dozing face. With motion off
@@ -379,9 +442,63 @@ public partial class MiMiMascotControl : UserControl
         back.Start();
     }
 
+    /// <summary>A short eye-wave when Basit returns. It runs once, detaches, and leaves
+    /// the expression pose pinned so idle rendering returns to zero.</summary>
+    public void PlayHello()
+    {
+        if (!_templateReady || !IsVisible || Expression == MascotExpression.Sleepy
+            || MascotOptions.ReducedMotion || !MascotOptions.AnimationsEnabled) return;
+        StopHello();
+        StopBob();
+        var duration = TimeSpan.FromMilliseconds(680);
+        var tilt = new DoubleAnimationUsingKeyFrames { Duration = duration };
+        tilt.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        tilt.KeyFrames.Add(new LinearDoubleKeyFrame(-18, KeyTime.FromPercent(0.18)));
+        tilt.KeyFrames.Add(new LinearDoubleKeyFrame(12, KeyTime.FromPercent(0.42)));
+        tilt.KeyFrames.Add(new LinearDoubleKeyFrame(-9, KeyTime.FromPercent(0.66)));
+        tilt.KeyFrames.Add(new LinearDoubleKeyFrame(-Pose(Expression).Tilt, KeyTime.FromPercent(1)));
+        Storyboard.SetTarget(tilt, EyeRTilt);
+        Storyboard.SetTargetProperty(tilt, new PropertyPath(RotateTransform.AngleProperty));
+
+        var lift = new DoubleAnimationUsingKeyFrames { Duration = duration };
+        lift.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+        lift.KeyFrames.Add(new LinearDoubleKeyFrame(-1.4, KeyTime.FromPercent(0.18)));
+        lift.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0.42)));
+        lift.KeyFrames.Add(new LinearDoubleKeyFrame(-1.1, KeyTime.FromPercent(0.66)));
+        lift.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+        Storyboard.SetTarget(lift, EyeRMove);
+        Storyboard.SetTargetProperty(lift, new PropertyPath(TranslateTransform.YProperty));
+
+        _helloStoryboard = new Storyboard();
+        _helloStoryboard.Children.Add(tilt);
+        _helloStoryboard.Children.Add(lift);
+        _helloStoryboard.Completed += (_, _) =>
+        {
+            _helloStoryboard?.Remove(this);
+            _helloStoryboard = null;
+            EyeRTilt.BeginAnimation(RotateTransform.AngleProperty, null);
+            EyeRMove.BeginAnimation(TranslateTransform.YProperty, null);
+            EyeRTilt.Angle = -Pose(Expression).Tilt;
+            EyeRMove.Y = 0;
+        };
+        _helloStoryboard.Begin(this, isControllable: false);
+    }
+
+    private void StopHello()
+    {
+        if (_helloStoryboard is null) return;
+        _helloStoryboard.Remove(this);
+        _helloStoryboard = null;
+        EyeRTilt.BeginAnimation(RotateTransform.AngleProperty, null);
+        EyeRMove.BeginAnimation(TranslateTransform.YProperty, null);
+        EyeRTilt.Angle = -Pose(Expression).Tilt;
+        EyeRMove.Y = 0;
+    }
+
     /// <summary>Wake-up: a soft pop as the face appears — MiMi "notices" you.</summary>
     private void PlayWake()
     {
+        if (MascotOptions.ReducedMotion) return;
         WakeScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.86, 1, TimeSpan.FromMilliseconds(320))
         {
             EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 },

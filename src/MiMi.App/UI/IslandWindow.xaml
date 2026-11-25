@@ -19,15 +19,31 @@
 
     <Window.Resources>
         <!-- ============================= palette ============================= -->
-        <SolidColorBrush x:Key="Surface" Color="#F0141416"/>
-        <SolidColorBrush x:Key="Stroke" Color="#22FFFFFF"/>
+        <SolidColorBrush x:Key="Surface" Color="#FF05060C"/>
+        <SolidColorBrush x:Key="Stroke" Color="#26FFFFFF"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#FFF2F2F4"/>
         <SolidColorBrush x:Key="TextSecondary" Color="#C0FFFFFF"/>
         <SolidColorBrush x:Key="TextTertiary" Color="#A6FFFFFF"/>
-        <SolidColorBrush x:Key="AccentAmber" Color="#FFB454"/>
-        <SolidColorBrush x:Key="AccentInk" Color="#FF1A1A1C"/>
-        <SolidColorBrush x:Key="ArtPlaceholder" Color="#FF2A2A2E"/>
+        <SolidColorBrush x:Key="AccentAmber" Color="#FFFFB45C"/>
+        <SolidColorBrush x:Key="AccentGoldLight" Color="#FFFFE2AE"/>
+        <SolidColorBrush x:Key="AccentGold" Color="#FFFFC266"/>
+        <SolidColorBrush x:Key="AccentCopper" Color="#FFFF9861"/>
+        <SolidColorBrush x:Key="AccentGreen" Color="#FF69E3A6"/>
+        <SolidColorBrush x:Key="AccentPink" Color="#FFFF8FC7"/>
+        <SolidColorBrush x:Key="AccentOrange" Color="#FFFFC06A"/>
+        <SolidColorBrush x:Key="AccentInk" Color="#FF05060C"/>
+        <SolidColorBrush x:Key="ArtPlaceholder" Color="#FF1A1712"/>
         <SolidColorBrush x:Key="EqBar" Color="#CCFFFFFF"/>
+        <LinearGradientBrush x:Key="AuroraBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#FFFFE6B0" Offset="0"/>
+            <GradientStop Color="#FFFFC266" Offset="0.52"/>
+            <GradientStop Color="#FFFF9257" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="AuroraBorderBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#99FFE6B0" Offset="0"/>
+            <GradientStop Color="#66FFC266" Offset="0.52"/>
+            <GradientStop Color="#99FF9257" Offset="1"/>
+        </LinearGradientBrush>
         <!-- Caret brush: the island never shows a text caret. Without this, WPF paints the
              system caret (an "A" with a "^" above it) on the first focusable text surface,
              which reads as a stray glyph sitting on top of the face. -->
@@ -35,12 +51,12 @@
 
         <!-- Typography ladder (DynamicResource so the Small/Default/Large setting
              updates live). Sizes are modest step-ups from the previous scale. -->
-        <sys:Double x:Key="FontMicro">11</sys:Double>
-        <sys:Double x:Key="FontCaption">12</sys:Double>
-        <sys:Double x:Key="FontBody">13</sys:Double>
-        <sys:Double x:Key="FontPrimary">14</sys:Double>
-        <sys:Double x:Key="FontTitle">15.5</sys:Double>
-        <sys:Double x:Key="FontMono">12</sys:Double>
+        <sys:Double x:Key="FontMicro">12</sys:Double>
+        <sys:Double x:Key="FontCaption">13</sys:Double>
+        <sys:Double x:Key="FontBody">14</sys:Double>
+        <sys:Double x:Key="FontPrimary">15</sys:Double>
+        <sys:Double x:Key="FontTitle">16.5</sys:Double>
+        <sys:Double x:Key="FontMono">13</sys:Double>
 
         <DropShadowEffect x:Key="PillShadow" BlurRadius="34" ShadowDepth="1" Direction="270"
                           Opacity="0.55" Color="#C8000000"/>
@@ -50,6 +66,7 @@
         <ui:PendingCountToVisibilityConverter x:Key="PendingToVis"/>
         <ui:RunningToGlyphConverter x:Key="RunningToGlyph"/>
         <ui:NullToVisibilityConverter x:Key="NullToCollapsed"/>
+        <ui:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
 
         <Style x:Key="IslandScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="8"/>
@@ -179,8 +196,49 @@
         </Style>
 
         <Style x:Key="QuickAccessTile" TargetType="Button" BasedOn="{StaticResource GhostButton}">
-            <Setter Property="Padding" Value="4,10"/>
+            <Setter Property="Padding" Value="4,8"/>
             <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="14" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#2AFFFFFF"/>
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="#66FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#18FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WidgetCard" TargetType="Border">
+            <Setter Property="Background" Value="#14FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+        <Style x:Key="WidgetValue" TargetType="TextBlock" BasedOn="{StaticResource IslandFont}">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style x:Key="WidgetLabel" TargetType="TextBlock" BasedOn="{StaticResource IslandFont}">
+            <Setter Property="FontSize" Value="{DynamicResource FontMicro}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
 
         <Style x:Key="ApproveButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
@@ -252,6 +310,35 @@
             </Setter>
         </Style>
 
+        <Style x:Key="LyricLineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource IslandFocusCue}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#18FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow"/>
+                                <Setter TargetName="Bg" Property="Opacity" Value="0.72"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ============================ slider ============================ -->
         <Style x:Key="SliderRepeatButton" TargetType="RepeatButton">
             <Setter Property="Focusable" Value="False"/>
@@ -313,16 +400,42 @@
                  so the host fills the content box and paints a transparent background.
                  The face keeps its aspect ratio (the mascot's own Viewbox) and is never
                  squashed or clipped by the pill's rounded clip. -->
-            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True"
+            <Grid x:Name="IdleFaceHost" Background="Transparent" IsHitTestVisible="True" Cursor="Hand"
+                  ToolTip="Open Quick Access"
                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                <mascot:MiMiMascotControl Width="56" Height="26" Expression="{Binding Expression}"
+                <mascot:MiMiMascotControl Width="64" Height="28" Expression="{Binding Expression}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Visibility="{Binding ShowMascot, Converter={StaticResource BoolToVis}}"/>
+                <Ellipse Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Fill="{StaticResource AccentAmber}">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowMascot}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
+                <Border Background="#22F5B84B" CornerRadius="9" Padding="5,2"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                        Visibility="{Binding ShelfCount, Converter={StaticResource PendingToVis}}"
+                        ToolTip="Files on the shelf">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                   Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource AccentAmber}" Margin="4,0,0,0" Text="{Binding ShelfCount}"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:MediaCompactView}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Cursor="Hand" MouseLeftButtonDown="CompactMedia_Click">
                 <Border Width="28" Height="28" CornerRadius="7" Background="{StaticResource ArtPlaceholder}">
                     <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="28" Height="28"/>
                 </Border>
@@ -350,7 +463,9 @@
                 </StackPanel>
                 <!-- Tiny agent-count badge: both worlds stay discoverable while music plays. -->
                 <Border Background="#22FFB454" CornerRadius="9" Padding="6,2" Margin="4,0,2,0"
-                        VerticalAlignment="Center"
+                        VerticalAlignment="Center" Cursor="Hand"
+                        MouseLeftButtonDown="AgentBadge_Click"
+                        ToolTip="Open agent activity"
                         Visibility="{Binding HasAgentBadge, Converter={StaticResource BoolToVis}}">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
                                Foreground="{StaticResource AccentAmber}"
@@ -363,7 +478,23 @@
             <StackPanel Margin="20,14,20,12">
                 <StackPanel Orientation="Horizontal">
                     <Border Width="58" Height="58" CornerRadius="12" Background="{StaticResource ArtPlaceholder}">
+                        <Grid>
                         <Image Source="{Binding Media.Art}" Stretch="UniformToFill" Width="58" Height="58"/>
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="24"
+                               Foreground="{StaticResource TextTertiary}" Text="&#xE8D6;"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Media.Art}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                        </Grid>
                     </Border>
                     <Grid Margin="14,0,0,0" Width="300" VerticalAlignment="Center"
                                               ToolTip="{Binding Media.Title}">
@@ -371,8 +502,9 @@
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="11.5"
                                        Foreground="{StaticResource TextTertiary}"
                                        Text="{Binding Media.LyricPrev}" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Style="{StaticResource IslandFont}" FontSize="14" FontWeight="SemiBold"
-                                       Margin="0,2,0,2">
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="14" FontWeight="SemiBold" Cursor="Hand"
+                                       MouseLeftButtonDown="CurrentLyric_Click" AutomationProperties.Name="Jump to the current lyric"
+                                       Margin="0,2,0,2" TextTrimming="CharacterEllipsis" ToolTip="Click to jump to this lyric">
                                 <TextBlock.Foreground>
                                     <SolidColorBrush Color="{Binding Media.LyricCurrentColor}"/>
                                 </TextBlock.Foreground>
@@ -408,6 +540,9 @@
                 </Grid>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                    <Button Style="{StaticResource TransportButton}" Width="30" Height="30" Margin="0,0,12,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenQuickAccessCommand}"
+                            Content="&#xE7C4;" ToolTip="Open Quick Access"/>
                     <Button x:Name="LyricsToggle" Style="{StaticResource TransportButton}" FontSize="12"
                             Width="30" Height="30" Margin="0,0,12,0"
                             Content="&#xE7C3;" ToolTip="Toggle synchronized lyrics"/>
@@ -428,26 +563,32 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentCompactView}">
-            <Grid Margin="18,0" VerticalAlignment="Center">
+            <Grid x:Name="AgentCompactHost" Margin="18,0" VerticalAlignment="Center" Cursor="Hand"
+                  Background="Transparent" ToolTip="Open agent activity and options"
+                  MouseLeftButtonDown="CompactAgent_Click">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="38"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Viewbox Width="38" Height="24" Stretch="Uniform" VerticalAlignment="Center">
-                <mascot:MiMiMascotControl Width="48" Height="30"
-                                          Expression="{Binding Indicator.Expression}"
-                                          VerticalAlignment="Center"/>
+                <Viewbox Width="42" Height="28" Stretch="Uniform" VerticalAlignment="Center">
+                    <mascot:MiMiMascotControl Width="48" Height="30"
+                                              Expression="{Binding Indicator.Expression}"
+                                              VerticalAlignment="Center"/>
                 </Viewbox>
-                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" FontWeight="SemiBold"
                                Text="{Binding Indicator.Line}" ToolTip="{Binding Indicator.Line}"
-                               TextAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                               TextAlignment="Center" TextWrapping="Wrap"/>
                     <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
                                Foreground="{StaticResource AccentAmber}"
                                Text="{Binding Indicator.PendingLabel}"
-                               TextAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap"
                                Visibility="{Binding Indicator.PendingLabel, Converter={StaticResource StringToVis}}"/>
                 </StackPanel>
+                <TextBlock Grid.Column="2" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                           Foreground="{StaticResource TextTertiary}" Text="&#xE76C;"
+                           VerticalAlignment="Center"/>
             </Grid>
         </DataTemplate>
 
@@ -466,10 +607,10 @@
                 </StackPanel>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}" Margin="0,10,0,0"
                            VerticalAlignment="Top"
-                           Text="{Binding Agent.Title}" TextTrimming="CharacterEllipsis"/>
+                           Text="{Binding Agent.Title}" TextWrapping="Wrap"/>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" Margin="0,4,0,0"
                            Foreground="{StaticResource TextSecondary}" Text="{Binding Agent.Message}"
-                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           TextWrapping="Wrap"
                            Visibility="{Binding Agent.Message, Converter={StaticResource StringToVis}}"/>
                 <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" Margin="0,6,0,0"
                            Foreground="{StaticResource TextTertiary}" Text="{Binding Agent.SessionLabel}"
@@ -543,7 +684,7 @@
                             ToolTip="Deny this request"
                             Content="Deny" Margin="8,0,0,0"/>
                     <Button Style="{StaticResource GhostButton}" Command="{Binding Agent.OpenCommand}"
-                            AutomationProperties.Name="Open in agent"
+                            AutomationProperties.Name="Copy session reference"
                             ToolTip="Copy a safe session reference to the clipboard"
                             Content="Copy session" Margin="8,0,0,0"/>
                 </StackPanel>
@@ -551,103 +692,135 @@
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type ui:AgentActivityPanelView}">
-            <!-- Fixed-height panel: the header and the ImpressiveBot line stay put and only
-                 the session list scrolls, so the panel never resizes while it is open. -->
-            <Grid Margin="20,14,20,12">
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-              </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Style="{StaticResource PanelHeading}" Text="Agent activity"/>
-                <TextBlock Grid.Row="1" Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                           Foreground="{StaticResource TextTertiary}" Text="{Binding Summary}" Margin="0,3,0,0"/>
+            <Grid Margin="18,14,18,14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Agent activity"/>
+                        <TextBlock Style="{StaticResource PanelHint}" Text="{Binding Summary}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource TransportButton}" Width="30" Height="30" Margin="0,0,6,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenQuickAccessCommand}"
+                            Content="&#xE7C4;" ToolTip="Open Quick Access"/>
+                    <Button Grid.Column="2" Style="{StaticResource TransportButton}" Width="30" Height="30"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseHoverCommand}"
+                            Content="&#xE711;" ToolTip="Close agent activity"/>
+                </Grid>
 
-                <!-- Live ImpressiveBot status: shown whenever ImpressiveBot reports, even with
-                     no bot mid-turn. Approvals are still answered in ImpressiveBot. -->
-                <Border Grid.Row="2" Background="#10FFFFFF" CornerRadius="8" Padding="10,7" Margin="0,9,0,0"
+                <Border Grid.Row="1" Style="{StaticResource WidgetCard}" Margin="0,0,0,10" Padding="12,10"
                         Visibility="{Binding HasImpressiveBot, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,8,0">
-                                <Ellipse.Fill>
-                                    <SolidColorBrush Color="{Binding ImpressiveBotColor}"/>
-                                </Ellipse.Fill>
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,9,0">
+                                <Ellipse.Fill><SolidColorBrush Color="{Binding ImpressiveBotColor}"/></Ellipse.Fill>
                             </Ellipse>
                             <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
-                                       FontWeight="SemiBold" Text="{Binding ImpressiveBotLine}"
-                                       TextTrimming="CharacterEllipsis"/>
+                                       FontWeight="SemiBold" Text="{Binding ImpressiveBotLine}" TextWrapping="Wrap"/>
                         </StackPanel>
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                   Foreground="{StaticResource TextTertiary}" Margin="15,2,0,0"
-                                   Text="{Binding ImpressiveBotDetail}" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding ImpressiveBotDetail}"
+                                   Foreground="{StaticResource TextTertiary}" Margin="17,3,0,0"
+                                   Text="{Binding ImpressiveBotDetail}" TextWrapping="Wrap"
                                    Visibility="{Binding ImpressiveBotDetail, Converter={StaticResource StringToVis}}"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource AccentAmber}" Margin="17,3,0,0"
+                                   Text="{Binding ImpressiveBotApprovalNote}" TextWrapping="Wrap"
+                                   Visibility="{Binding ImpressiveBotApprovalNote, Converter={StaticResource StringToVis}}"/>
                     </StackPanel>
                 </Border>
-                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
-                <ItemsControl ItemsSource="{Binding Rows}" Margin="0,8,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="0,0,0,10">
-                                <TextBlock Style="{StaticResource IslandFont}" Text="{Binding Section}" FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextTertiary}" Margin="0,6,0,7"
-                                           Visibility="{Binding Section, Converter={StaticResource StringToVis}}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
-                                        <Ellipse.Fill>
-                                            <SolidColorBrush Color="{Binding StateBrush.Color}"/>
-                                        </Ellipse.Fill>
-                                    </Ellipse>
-                                    <StackPanel Width="118" VerticalAlignment="Center">
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" FontWeight="SemiBold"
-                                                   Text="{Binding Provider}" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                   Foreground="{StaticResource TextTertiary}"
-                                                   Text="{Binding Project}" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="8,0,0,0" VerticalAlignment="Center" Width="150">
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
-                                                   Text="{Binding StatusLabel}" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                   Foreground="{StaticResource TextSecondary}"
-                                                   Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}"
-                                                   Text="{Binding LastAction}" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                    <StackPanel VerticalAlignment="Center" Margin="8,0,0,0">
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                   Foreground="{StaticResource TextTertiary}"
-                                                   Text="{Binding AgeLabel}" HorizontalAlignment="Right"/>
-                                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                   Foreground="{StaticResource AccentAmber}"
-                                                   Text="{Binding PendingApprovals, StringFormat='{}{0} pending'}"
-                                                   Visibility="{Binding PendingApprovals, Converter={StaticResource PendingToVis}}"
-                                                   HorizontalAlignment="Right"/>
-                                    </StackPanel>
-                                </StackPanel>
 
-                                <!-- Confirmed events only; bounded to three newest entries. -->
-                                <ItemsControl ItemsSource="{Binding Timeline}" Margin="16,2,0,0"
-                                              Visibility="{Binding Timeline.Count, Converter={StaticResource PendingToVis}}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
-                                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                           Foreground="{StaticResource TextTertiary}"
-                                                           Text="{Binding TimeLabel}" Width="38"/>
-                                                <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                                           Foreground="{StaticResource TextSecondary}" Margin="6,0,0,0"
-                                                           Text="{Binding Text}" TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
+                    <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,8">
+                                    <TextBlock Style="{StaticResource IslandFont}" Text="{Binding Section}"
+                                               FontSize="{DynamicResource FontMicro}" FontWeight="SemiBold"
+                                               Foreground="{StaticResource AccentAmber}" Margin="2,0,0,5"
+                                               Visibility="{Binding Section, Converter={StaticResource StringToVis}}"/>
+                                    <Border Style="{StaticResource WidgetCard}" Padding="12,9" Margin="0">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="30"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="62"/>
+                                                    <ColumnDefinition Width="30"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="26" Height="26" CornerRadius="13" Background="#33FFC266"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AccentGoldLight}"
+                                                               Text="{Binding ProviderInitial}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="10,0,12,0" VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}" FontWeight="SemiBold"
+                                                               Text="{Binding Provider}" ToolTip="{Binding Provider}"/>
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                               Foreground="{StaticResource TextTertiary}"
+                                                               Text="{Binding Project}" ToolTip="{Binding Project}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Margin="0,0,10,0" VerticalAlignment="Center">
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
+                                                               Text="{Binding StatusLabel}" TextWrapping="Wrap"/>
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap"
+                                                               Text="{Binding LastAction}"
+                                                               Visibility="{Binding HasDetail, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                                               Foreground="{StaticResource TextTertiary}" Text="{Binding AgeLabel}"
+                                                               HorizontalAlignment="Right"/>
+                                                    <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                                               Foreground="{StaticResource AccentAmber}" Text="{Binding PendingLabel}"
+                                                               HorizontalAlignment="Right"
+                                                               Visibility="{Binding PendingLabel, Converter={StaticResource StringToVis}}"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="4" Style="{StaticResource TransportButton}" Width="28" Height="28"
+                                                        Command="{Binding CopySessionCommand}" IsEnabled="{Binding HasSessionId}"
+                                                        Content="&#xE8C8;" ToolTip="Copy a safe session reference"
+                                                        AutomationProperties.Name="Copy session reference"/>
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Timeline}" Margin="40,7,0,0"
+                                                          Visibility="{Binding Timeline.Count, Converter={StaticResource PendingToVis}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,1,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="40"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                                                       Foreground="{StaticResource TextTertiary}" Text="{Binding TimeLabel}"/>
+                                                            <TextBlock Grid.Column="1" Style="{StaticResource IslandFont}" FontSize="10"
+                                                                       Foreground="{StaticResource TextSecondary}" Margin="7,0,0,0"
+                                                                       Text="{Binding Text}" TextWrapping="Wrap"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Style="{StaticResource PanelHint}" Margin="4,10,0,0"
+                               Text="No agent sessions yet. Start a connected agent and its live status will appear here."
+                               Visibility="{Binding HasRows, Converter={StaticResource InverseBoolToVis}}"/>
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </DataTemplate>
@@ -679,6 +852,8 @@
                         <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontBody}"
                                    Foreground="{StaticResource AccentAmber}"
                                    Text="{Binding Pomodoro.Remaining, StringFormat='{}{0} remaining'}"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextTertiary}" Text="{Binding Pomodoro.SubLabel}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource TransportButton}" Width="30" Height="30"
@@ -735,6 +910,37 @@
             </StackPanel>
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type ui:VolumeView}">
+            <StackPanel Margin="18,12,18,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TransportButton}" Width="28" Height="28" Margin="0,0,10,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE72B;"/>
+                    </Button>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Volume"/>
+                        <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
+                                   Foreground="{StaticResource TextSecondary}" Text="{Binding Volume.StatusLabel}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource TransportButton}" Width="34" Height="34"
+                            IsEnabled="{Binding Volume.IsAvailable}"
+                            Command="{Binding Volume.MuteCommand}" ToolTip="Mute or unmute">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" Text="&#xE74F;"/>
+                    </Button>
+                </Grid>
+                <Slider Style="{StaticResource IslandSlider}" Margin="0,10,0,0"
+                        Minimum="0" Maximum="100" Value="{Binding Volume.Level, Mode=TwoWay}"
+                        AutomationProperties.Name="Master volume" ToolTip="Adjust master volume"
+                        IsEnabled="{Binding Volume.IsAvailable}"/>
+            </StackPanel>
+        </DataTemplate>
+
         <DataTemplate DataType="{x:Type ui:TodoView}">
             <StackPanel Margin="16,10,14,10">
                 <Grid Margin="0,0,0,6">
@@ -750,24 +956,9 @@
                                Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Right"
                                Text="{Binding Todo.HeaderCount}"/>
                 </Grid>
-                <Grid Margin="0,0,0,7">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="NewTaskInput" Grid.Column="0" Style="{StaticResource IslandInput}"
-                             MaxLength="200" AcceptsReturn="False"
-                             Text="{Binding Todo.NewTaskTitle, UpdateSourceTrigger=PropertyChanged}"
-                             AutomationProperties.Name="New task title"
-                             PreviewMouseLeftButtonDown="TodoInput_Click">
-                        <TextBox.InputBindings>
-                            <KeyBinding Key="Enter" Command="{Binding Todo.AddCommand}"/>
-                        </TextBox.InputBindings>
-                    </TextBox>
-                    <Button Grid.Column="1" Style="{StaticResource ApproveButton}" Padding="12,6" Margin="7,0,0,0"
-                            Command="{Binding Todo.AddCommand}" ToolTip="Add task"
-                            Content="Add"/>
-                </Grid>
+                <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Stretch"
+                        Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=AddTaskCommand}"
+                        ToolTip="Open the task editor" Content="＋  Add a task…" Margin="0,0,0,8"/>
                 <ItemsControl ItemsSource="{Binding Todo.Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -789,7 +980,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <TextBlock Style="{StaticResource PanelHint}" Margin="0,6,0,0"
-                           Text="You’re all caught up. Add your first task above."
+                           Text="You’re all caught up. Use “Add a task” to start your list."
                            Visibility="{Binding Todo.HasNoRows, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </DataTemplate>
@@ -810,6 +1001,8 @@
                                Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Right"
                                Text="{Binding HeaderCount}"/>
                 </Grid>
+                <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
                 <ItemsControl ItemsSource="{Binding Rows}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -840,6 +1033,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </ScrollViewer>
                 <TextBlock Margin="0,6,0,0">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource PanelHint}">
@@ -879,59 +1073,321 @@
         </DataTemplate>
 
 
-        <DataTemplate DataType="{x:Type ui:QuickAccessView}">
-            <StackPanel Margin="16,12,16,12">
-                <Grid Margin="0,0,0,8">
-                    <TextBlock Style="{StaticResource PanelHeading}" Text="Quick access"/>
-                    <Button Style="{StaticResource TransportButton}" Width="22" Height="22"
-                            HorizontalAlignment="Right" Command="{Binding QuickAccess.BackCommand}"
+        <DataTemplate DataType="{x:Type ui:ClipboardView}">
+            <StackPanel Margin="18,14,18,14">
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TransportButton}" Width="26" Height="26" Margin="0,0,9,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
                             ToolTip="Back to island">
-                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="9" Text="&#xE72B;"/>
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Text="&#xE72B;"/>
+                    </Button>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Clipboard"/>
+                        <TextBlock Style="{StaticResource PanelHint}" Text="{Binding Clipboard.StatusLabel}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource GhostButton}" Padding="10,5" Margin="0,0,6,0"
+                                Command="{Binding Clipboard.CaptureNowCommand}" ToolTip="Capture the current text clipboard">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE77B;"/>
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Padding="10,5" Margin="0,0,6,0"
+                                Command="{Binding Clipboard.ClearCommand}" IsEnabled="{Binding Clipboard.HasEntries}"
+                                ToolTip="Clear all remembered clips">
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE74D;"/>
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Padding="10,5"
+                                Command="{Binding Clipboard.ToggleCaptureCommand}" ToolTip="Turn automatic clipboard capture on or off"
+                                Content="{Binding Clipboard.CaptureLabel}"/>
+                    </StackPanel>
+                </Grid>
+                <Border Background="#10FFFFFF" CornerRadius="12" Padding="10,7" Margin="0,0,0,9">
+                    <TextBlock Style="{StaticResource PanelHint}"
+                               Text="Text only · kept in memory until MiMi exits · never written to disk or logs."/>
+                </Border>
+                <ScrollViewer MaxHeight="196" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource IslandScrollBar}"/></ScrollViewer.Resources>
+                    <ItemsControl ItemsSource="{Binding Clipboard.Entries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="ClipboardRow" Tag="{Binding Text}" Background="#14FFFFFF"
+                                        BorderBrush="#1FFFFFFF" BorderThickness="1" CornerRadius="11"
+                                        Padding="9,7" Margin="0,0,0,6" Cursor="SizeAll"
+                                        ToolTip="Drag into an app to paste, or click Copy">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontCaption}"
+                                                       Text="{Binding Preview}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10"
+                                                       Foreground="{StaticResource TextTertiary}" Margin="0,2,0,0"
+                                                       Text="{Binding TimeLabel}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Style="{StaticResource TransportButton}" Width="26" Height="26"
+                                                    Command="{Binding CopyCommand}" ToolTip="Copy this clip again">
+                                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE8C8;"/>
+                                            </Button>
+                                            <Button Style="{StaticResource TransportButton}" Width="26" Height="26" Margin="5,0,0,0"
+                                                    Command="{Binding RemoveCommand}" ToolTip="Forget this clip">
+                                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Text="&#xE711;"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Style="{StaticResource PanelHint}" Margin="0,7,0,0"
+                           Text="Copy something to add it here, or use Capture now."
+                           Visibility="{Binding Clipboard.HasEntries, Converter={StaticResource InverseBoolToVis}}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:WidgetsView}">
+            <StackPanel Margin="18,14,18,14">
+                <Grid Margin="0,0,0,11">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TransportButton}" Width="26" Height="26" Margin="0,0,9,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Text="&#xE72B;"/>
+                    </Button>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Widgets"/>
+                        <TextBlock Style="{StaticResource PanelHint}" Text="A quiet glance at your day"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock Style="{StaticResource PanelHint}" HorizontalAlignment="Right"
+                                   Text="{Binding Widgets.LocalClockLabel, StringFormat='Local {0}'}"/>
+                        <TextBlock Style="{StaticResource PanelHint}" HorizontalAlignment="Right"
+                                   Text="{Binding Widgets.UtcClockLabel, StringFormat='UTC {0}'}"/>
+                    </StackPanel>
+                </Grid>
+                <UniformGrid Columns="3" Rows="2">
+                    <Border Style="{StaticResource WidgetCard}" Margin="0,0,7,7" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="{StaticResource AccentCopper}" Text="&#xE787;"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" Margin="0,4,0,0" Text="{Binding Widgets.TodayTasksLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.NextTaskLabel}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource WidgetCard}" Margin="0,0,7,7" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="{StaticResource AccentGoldLight}" Text="&#xE823;"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" Margin="0,4,0,0" Text="{Binding Widgets.FocusLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.FocusDetail}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource WidgetCard}" Margin="0,0,0,7" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="{StaticResource AccentGold}" Text="&#xE7C2;"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" Margin="0,4,0,0" Text="{Binding Widgets.WaterLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.WaterDetail}"/>
+                            <ProgressBar Height="3" Minimum="0" Maximum="1" Value="{Binding Widgets.WaterProgress, Mode=OneWay}"
+                                         Background="#2EFFFFFF" Foreground="{StaticResource AccentGold}" BorderThickness="0" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource WidgetCard}" Margin="0,0,7,0" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="{StaticResource AccentGreen}" Text="&#xE709;"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" Margin="0,4,0,0" Text="{Binding Widgets.BatteryLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.BatteryDetail}"/>
+                            <ProgressBar Height="3" Minimum="0" Maximum="1" Value="{Binding Widgets.BatteryProgress, Mode=OneWay}"
+                                         Background="#2EFFFFFF" Foreground="{StaticResource AccentGreen}" BorderThickness="0" Margin="0,5,0,0"
+                                         Visibility="{Binding Widgets.BatteryProgress, Converter={StaticResource NullToCollapsed}}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource WidgetCard}" Margin="0,0,7,0" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="{StaticResource AccentPink}" Text="&#xE701;"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" Margin="0,4,0,0" Text="{Binding Widgets.NetworkLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.NetworkDetail}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource WidgetCard}" Margin="0" MinHeight="76">
+                        <StackPanel>
+                            <TextBlock FontSize="18" Foreground="{StaticResource AccentOrange}" Text="{Binding Widgets.MoonGlyph}"/>
+                            <TextBlock Style="{StaticResource WidgetValue}" FontSize="17" Margin="0,2,0,0" Text="{Binding Widgets.MoonLabel}"/>
+                            <TextBlock Style="{StaticResource WidgetLabel}" Margin="0,2,0,0" Text="{Binding Widgets.MoonDetail}"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+                <Border Background="#10FFFFFF" CornerRadius="13" Padding="8,5" Margin="0,8,0,0">
+                    <ItemsControl ItemsSource="{Binding Widgets.WeekDays}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" HorizontalAlignment="Center"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Width="48" Margin="3,0">
+                                    <TextBlock Style="{StaticResource WidgetLabel}" HorizontalAlignment="Center" Text="{Binding Label}"/>
+                                    <Border Width="30" Height="30" CornerRadius="15" Background="#26FFFFFF"
+                                            HorizontalAlignment="Center" Margin="0,2,0,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#26FFFFFF"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource AuroraBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Style="{StaticResource IslandFont}" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Text="{Binding DayNumber}"/>
+                                    </Border>
+                                    <TextBlock Style="{StaticResource WidgetLabel}" HorizontalAlignment="Center"
+                                               Text="{Binding TaskCount, StringFormat='{}{0} tasks'}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:BrightnessView}">
+            <StackPanel Margin="18,12,18,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TransportButton}" Width="26" Height="26" Margin="0,0,9,0"
+                            Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseUtilityCommand}"
+                            ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Text="&#xE72B;"/>
+                    </Button>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="Brightness"/>
+                        <TextBlock Style="{StaticResource PanelHint}" Text="{Binding Brightness.StatusLabel}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource TransportButton}" Width="30" Height="30"
+                            Command="{Binding Brightness.RefreshCommand}" ToolTip="Recheck laptop brightness support">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Text="&#xE72C;"/>
                     </Button>
                 </Grid>
-                <UniformGrid Columns="4">
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenPomodoroCommand}" ToolTip="Open focus timer">
+                <Slider x:Name="BrightnessSlider" Style="{StaticResource IslandSlider}" Margin="0,9,0,0"
+                        Minimum="0" Maximum="100" Value="{Binding Brightness.PreviewLevel, Mode=TwoWay}"
+                        IsEnabled="{Binding Brightness.IsAvailable}" AutomationProperties.Name="Laptop brightness"
+                        ToolTip="Drag to preview, release to apply"/>
+                <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" Padding="12,5" Margin="0,7,0,0"
+                        Command="{Binding Brightness.ApplyCommand}" IsEnabled="{Binding Brightness.IsAvailable}"
+                        ToolTip="Apply the selected brightness" Content="Apply"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type ui:QuickAccessView}">
+            <StackPanel Margin="18,14,18,14">
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <mascot:MiMiMascotControl Width="42" Height="24" Expression="Lively" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource PanelHeading}" Text="{Binding QuickAccess.Greeting}"/>
+                        <TextBlock Style="{StaticResource PanelHint}" Text="{Binding QuickAccess.DateLabel}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Style="{StaticResource IslandFont}" FontSize="23"
+                               FontWeight="SemiBold" Text="{Binding QuickAccess.ClockLabel}"
+                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button Grid.Column="3" Style="{StaticResource TransportButton}" Width="28" Height="28"
+                            Command="{Binding QuickAccess.OpenSettingsCommand}" ToolTip="Open MiMi settings">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Text="&#xE713;"/>
+                    </Button>
+                    <Button Grid.Column="4" x:Name="QuickAccessBack" Style="{StaticResource TransportButton}" Width="28" Height="28"
+                            Command="{Binding QuickAccess.BackCommand}" ToolTip="Back to island">
+                        <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11" Text="&#xE72B;"/>
+                    </Button>
+                </Grid>
+                <UniformGrid Columns="3">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FFC266" BorderBrush="#55FFC266"
+                            Command="{Binding QuickAccess.OpenPomodoroCommand}" Visibility="{Binding QuickAccess.ShowFocus, Converter={StaticResource BoolToVis}}" ToolTip="Open focus timer">
                         <StackPanel>
-                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE823;"
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Focus" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentAmber}" Text="&#xE823;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Focus"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10" Foreground="{StaticResource AccentAmber}" HorizontalAlignment="Center" Text="{Binding QuickAccess.TimerBadge}" Visibility="{Binding QuickAccess.TimerBadge, Converter={StaticResource StringToVis}}"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenWaterCommand}" ToolTip="Open water tracker">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#2869E3A6" BorderBrush="#5569E3A6"
+                            Command="{Binding QuickAccess.OpenWaterCommand}" Visibility="{Binding QuickAccess.ShowWater, Converter={StaticResource BoolToVis}}" ToolTip="Open water tracker">
                         <StackPanel>
-                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE7C2;"
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Water" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentGreen}" Text="&#xE7C2;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Water"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}" Margin="0,0,6,0"
-                            Command="{Binding QuickAccess.OpenTodoCommand}" ToolTip="Open to-do list">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FF9861" BorderBrush="#55FF9861"
+                            Command="{Binding QuickAccess.OpenTodoCommand}" Visibility="{Binding QuickAccess.ShowTodo, Converter={StaticResource BoolToVis}}" ToolTip="Open to-do list">
                         <StackPanel>
-                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE73A;"
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="To-do" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentCopper}" Text="&#xE73A;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="To-do"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource QuickAccessTile}"
-                            Command="{Binding QuickAccess.OpenShelfCommand}" ToolTip="Open file shelf">
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FFD08A" BorderBrush="#55FFD08A"
+                            Command="{Binding QuickAccess.OpenShelfCommand}" Visibility="{Binding QuickAccess.ShowShelf, Converter={StaticResource BoolToVis}}" ToolTip="Open file shelf">
                         <StackPanel>
-                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16"
-                                       Foreground="{StaticResource AccentAmber}" Text="&#xE8B7;"
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}"
-                                       Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"
-                                       Margin="0,2,0,0" Text="Shelf" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentGoldLight}" Text="&#xE8B7;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Shelf"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10" Foreground="{StaticResource AccentGoldLight}" HorizontalAlignment="Center" Text="{Binding QuickAccess.ShelfBadge}" Visibility="{Binding QuickAccess.ShelfBadge, Converter={StaticResource StringToVis}}"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FF8FC7" BorderBrush="#55FF8FC7"
+                            Command="{Binding QuickAccess.OpenVolumeCommand}" Visibility="{Binding QuickAccess.ShowVolume, Converter={StaticResource BoolToVis}}" ToolTip="Open volume controls">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentPink}" Text="&#xE767;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Volume"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#2869E3A6" BorderBrush="#5569E3A6"
+                            Command="{Binding QuickAccess.OpenClipboardCommand}" Visibility="{Binding QuickAccess.ShowClipboard, Converter={StaticResource BoolToVis}}" ToolTip="Open session-only clipboard history">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentGreen}" Text="&#xE77B;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Clipboard"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="10" Foreground="{StaticResource AccentGreen}" HorizontalAlignment="Center" Text="{Binding QuickAccess.ClipboardBadge}" Visibility="{Binding QuickAccess.ClipboardBadge, Converter={StaticResource StringToVis}}"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FFB45C" BorderBrush="#55FFB45C"
+                            Command="{Binding QuickAccess.OpenWidgetsCommand}" Visibility="{Binding QuickAccess.ShowWidgets, Converter={StaticResource BoolToVis}}" ToolTip="Open local widgets">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentOrange}" Text="&#xE787;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Widgets"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FFC266" BorderBrush="#55FFC266"
+                            Command="{Binding QuickAccess.OpenBrightnessCommand}" Visibility="{Binding QuickAccess.ShowBrightness, Converter={StaticResource BoolToVis}}" ToolTip="Open laptop brightness controls">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentAmber}" Text="&#xE706;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="Brightness"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource QuickAccessTile}" Margin="4" MinHeight="58" Background="#28FFE2AE" BorderBrush="#55FFE2AE"
+                            Command="{Binding QuickAccess.OpenAiCommand}" Visibility="{Binding QuickAccess.ShowAi, Converter={StaticResource BoolToVis}}" ToolTip="Choose an AI assistant">
+                        <StackPanel>
+                            <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Foreground="{StaticResource AccentGoldLight}" Text="&#xE7C4;" HorizontalAlignment="Center"/>
+                            <TextBlock Style="{StaticResource IslandFont}" FontSize="{DynamicResource FontMicro}" HorizontalAlignment="Center" Margin="0,2,0,0" Text="AI"/>
                         </StackPanel>
                     </Button>
                 </UniformGrid>
@@ -978,9 +1434,14 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <Button Style="{StaticResource ApproveButton}" Padding="12,6" Margin="0,0,8,0"
-                            Command="{Binding CompleteCommand}" Content="Mark done"/>
+                            Command="{Binding CompleteCommand}" Content="Mark done"
+                            ToolTip="Mark this task complete"/>
+                    <Button Style="{StaticResource GhostButton}" Padding="12,6" Margin="0,0,8,0"
+                            Command="{Binding OpenListCommand}" Content="Open list"
+                            ToolTip="Open the to-do list"/>
                     <Button Style="{StaticResource GhostButton}" Padding="12,6"
-                            Command="{Binding OpenListCommand}" Content="Open list"/>
+                            Command="{Binding SnoozeCommand}" Content="Snooze 10 min"
+                            ToolTip="Remind me again in ten minutes"/>
                 </StackPanel>
             </StackPanel>
         </DataTemplate>
@@ -994,19 +1455,14 @@
     <Grid>
         <Border x:Name="Pill" Width="150" Height="36" CornerRadius="18"
                 Background="{StaticResource Surface}"
-                BorderBrush="{StaticResource Stroke}" BorderThickness="0.5"
+                BorderBrush="{StaticResource AuroraBorderBrush}" BorderThickness="1"
                 Effect="{StaticResource PillShadow}"
                 HorizontalAlignment="Center" VerticalAlignment="Top"
                 Cursor="Arrow">
             <Grid>
                 <Grid x:Name="GlowRoot" IsHitTestVisible="False" Panel.ZIndex="0">
-                    <!-- Signature warmth per the approved reference: a shallow gold band
-                         hugging the INSIDE BOTTOM EDGE of the island — brightest at the
-                         lower center boundary, gone before it reaches the middle. The
-                         band height is a fixed DIP value set per state by the code-behind
-                         (GlowLayout.BandHeight) — never proportional to the panel — so
-                         expanded cards can never grow a giant center oval. Opacity is a
-                         separate, state-driven value. -->
+                    <!-- Warm gold aurora hugging the inside bottom edge. Height stays fixed
+                         in DIPs so expanded panels never grow an oversized center oval. -->
                     <Grid x:Name="GlowBand" Height="8" VerticalAlignment="Bottom" Margin="0,0,0,0">
                         <!-- Wide flat arc: strongest bottom-center, fading toward corners. -->
                         <Ellipse Stretch="Fill">
@@ -1014,8 +1470,8 @@
                                 <RadialGradientBrush Center="0.5,0.55" GradientOrigin="0.5,0.6"
                                                      RadiusX="0.5" RadiusY="0.55">
                                     <GradientStop Color="#73F5B84B" Offset="0"/>
-                                    <GradientStop Color="#2BEAA63A" Offset="0.55"/>
-                                    <GradientStop Color="#00D99B35" Offset="1"/>
+                                    <GradientStop Color="#2BEA963A" Offset="0.55"/>
+                                    <GradientStop Color="#00D98B35" Offset="1"/>
                                 </RadialGradientBrush>
                             </Ellipse.Fill>
                         </Ellipse>

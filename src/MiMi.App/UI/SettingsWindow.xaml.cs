@@ -1,11 +1,16 @@
 ﻿using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using MiMi.Agents;
+using MiMi.App.AI;
 using MiMi.App.Interop;
+using MiMi.App.UI.Mascot;
 using MiMi.Core;
 
 namespace MiMi.App.UI;
@@ -20,24 +25,39 @@ public partial class SettingsWindow : Window
     private bool _sliderPending;
     private bool _refreshingProviders;
     private bool _updatingAutoStart;
+    private bool _updatingAiPreset;
     private readonly DispatcherTimer _sliderSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
 
     private readonly Func<bool> _hotkeyStatus;
 
     private readonly StatusIndicatorViewModel? _impressiveBot;
+    private readonly Action? _restartRequested;
+    private readonly IslandPresenter? _presenter;
+    private readonly AiProviderService? _aiProviders;
 
     public SettingsWindow(ConfigStore config, Action<bool> autoStartChanged, Func<bool>? hotkeyStatus = null,
-        ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null)
+        ProviderIntegrationInspector? providerInspector = null, IslandPresenter? presenter = null,
+        Action? restartRequested = null, AiProviderService? aiProviders = null)
     {
         _config = config;
         _autoStartChanged = autoStartChanged;
         _hotkeyStatus = hotkeyStatus ?? (() => true);
         _providerInspector = providerInspector ?? new ProviderIntegrationInspector();
+        _presenter = presenter;
+        _restartRequested = restartRequested;
+        _aiProviders = aiProviders;
         InitializeComponent();
+        MiMiIcon.Apply(this);
+        SizeChanged += (_, _) => FitRootToClient();
+        SettingsCategories.SizeChanged += (_, _) => FitCategoryWidths();
+        RestartButton.IsEnabled = _restartRequested is not null;
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = version is null ? "MiMi" : $"MiMi {version.Major}.{version.Minor}.{version.Build}";
         _sliderSaveTimer.Tick += (_, _) => SavePendingSlider();
         Load();
         Loaded += (_, _) =>
         {
+            FitRootToClient();
             // Bound the entire window, including its non-client chrome, to the desktop work area.
             var workArea = SystemParameters.WorkArea;
             MinWidth = Math.Min(MinWidth, workArea.Width);
@@ -51,7 +71,11 @@ public partial class SettingsWindow : Window
             SettingsCategories.SelectedItem = SettingsCategories.Items[0];
             ((TabItem)SettingsCategories.Items[0]).Focus();
         };
-        Closing += (_, _) => SavePendingSlider();
+        Closing += (_, _) =>
+        {
+            SavePendingSlider();
+            SavePendingAiApiKey();
+        };
         Closed += (_, _) => _sliderSaveTimer.Stop();
 
         // Live ImpressiveBot tile: same source as the island, so the two always agree.
@@ -64,6 +88,29 @@ public partial class SettingsWindow : Window
         else
         {
             ImpressiveBotStatusPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void FitRootToClient()
+    {
+        if (PresentationSource.FromVisual(this) is not HwndSource source) return;
+        if (!Interop.NativeMethods.GetClientRect(source.Handle, out var rect)) return;
+        var size = source.CompositionTarget.TransformFromDevice.Transform(
+            new Point(rect.Right - rect.Left, rect.Bottom - rect.Top));
+        var headerHeight = Math.Max(SettingsHeader.ActualHeight, 90);
+        var footerHeight = Math.Max(SettingsFooter.ActualHeight, 60);
+        SettingsCategories.MaxHeight = Math.Max(120, size.Y - headerHeight - footerHeight - 14);
+        SettingsCategories.Height = SettingsCategories.MaxHeight;
+        FitCategoryWidths();
+    }
+
+    private void FitCategoryWidths()
+    {
+        if (SettingsCategories.ActualWidth <= 0) return;
+        foreach (TabItem tab in SettingsCategories.Items)
+        {
+            if (tab.Content is ScrollViewer scroll)
+                scroll.Width = Math.Max(320, SettingsCategories.ActualWidth - 48);
         }
     }
 
@@ -80,9 +127,45 @@ public partial class SettingsWindow : Window
         };
         SpeedSlider.Value = s.AnimationSpeed;
         DelaySlider.Value = s.CollapseDelayMs;
+        PanelIdleTimeoutSlider.Value = s.PanelIdleTimeoutSeconds;
+        var hiddenPages = s.QuickAccessHiddenPages.ToHashSet(StringComparer.Ordinal);
+        PageFocusToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Pomodoro);
+        PageWaterToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Water);
+        PageTodoToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Todo);
+        PageShelfToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Shelf);
+        PageVolumeToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Volume);
+        PageBrightnessToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Brightness);
+        PageClipboardToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Clipboard);
+        PageWidgetsToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Widgets);
+        PageAiToggle.IsChecked = !hiddenPages.Contains(UtilityPinState.Ai);
+        AiDefaultCombo.SelectedIndex = s.AiDefaultProvider switch
+        {
+            "claude" => 1,
+            "opencode" => 2,
+            "grok" => 3,
+            "custom" => 4,
+            _ => 0,
+        };
+        AiCustomNameInput.Text = s.AiCustomName;
+        AiCustomModeCombo.SelectedIndex = s.AiCustomMode == "api" ? 1 : 0;
+        AiCustomCommandInput.Text = s.AiCustomCommand;
+        AiCustomArgumentsInput.Text = s.AiCustomArguments;
+        AiApiPresetCombo.SelectedIndex = s.AiApiPreset switch
+        {
+            "openai" => 1,
+            "openrouter" => 2,
+            "custom" => 3,
+            _ => 0,
+        };
+        AiApiEndpointInput.Text = s.AiApiEndpoint;
+        AiApiModelInput.Text = s.AiApiModel;
+        AiApiSystemPromptInput.Text = s.AiApiSystemPrompt;
+        UpdateAiModePanels();
+        RefreshAiKeyStatus();
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         ExpandOnHoverToggle.IsChecked = s.ExpandOnHover;
         LyricsToggle.IsChecked = s.LyricsEnabled;
+        ClipboardHistoryToggle.IsChecked = s.ClipboardHistoryEnabled;
         LyricsOffsetSlider.Value = s.LyricsOffsetMs;
         AgentsToggle.IsChecked = s.AgentsModuleEnabled;
         MascotToggle.IsChecked = s.MascotEnabled;
@@ -113,6 +196,7 @@ public partial class SettingsWindow : Window
             : "Global toggle shortcut: Ctrl + Alt + M  (unavailable \u2014 another program owns it)";
         RefreshLabels();
         _loading = false;
+        RefreshAiAvailability();
         _ = RefreshProvidersAsync();
     }
 
@@ -121,6 +205,8 @@ public partial class SettingsWindow : Window
         ScaleLabel.Text = ScaleSlider.Value.ToString("0.00\u00D7");
         SpeedLabel.Text = SpeedSlider.Value.ToString("0.0\u00D7");
         DelayLabel.Text = $"{DelaySlider.Value:0} ms";
+        PanelIdleTimeoutLabel.Text = PanelIdleTimeoutSlider.Value <= 0
+            ? "Off" : $"{PanelIdleTimeoutSlider.Value:0} s";
         GlowLabel.Text = GlowSlider.Value.ToString("P0");
         LyricsOffsetLabel.Text = $"{LyricsOffsetSlider.Value:+0;-0;0} ms";
         FaceAnimLabel.Text = $"{FaceAnimSlider.Value:0.0\u00D7}";
@@ -146,9 +232,36 @@ public partial class SettingsWindow : Window
                 };
                 s.AnimationSpeed = SpeedSlider.Value;
                 s.CollapseDelayMs = (int)DelaySlider.Value;
+                s.PanelIdleTimeoutSeconds = (int)PanelIdleTimeoutSlider.Value;
+                s.QuickAccessHiddenPages = HiddenQuickAccessPages();
+                s.AiDefaultProvider = AiDefaultCombo.SelectedIndex switch
+                {
+                    1 => "claude",
+                    2 => "opencode",
+                    3 => "grok",
+                    4 => "custom",
+                    _ => "codex",
+                };
+                s.AiCustomName = AiCustomNameInput.Text;
+                s.AiCustomMode = AiCustomModeCombo.SelectedIndex == 1 ? "api" : "command";
+                s.AiCustomCommand = AiCustomCommandInput.Text;
+                s.AiCustomArguments = AiCustomArgumentsInput.Text;
+                s.AiApiPreset = AiApiPresetCombo.SelectedIndex switch
+                {
+                    1 => "openai",
+                    2 => "openrouter",
+                    3 => "custom",
+                    _ => "grok",
+                };
+                s.AiApiEndpoint = AiApiEndpointInput.Text;
+                s.AiApiModel = AiApiModelInput.Text;
+                s.AiApiSystemPrompt = AiApiSystemPromptInput.Text;
+                if (!string.IsNullOrEmpty(AiApiKeyInput.Password))
+                    s.AiApiKeyProtected = AiApiKeyProtector.Protect(AiApiKeyInput.Password);
                 s.MediaModuleEnabled = MediaToggle.IsChecked == true;
                 s.ExpandOnHover = ExpandOnHoverToggle.IsChecked == true;
                 s.LyricsEnabled = LyricsToggle.IsChecked == true;
+                s.ClipboardHistoryEnabled = ClipboardHistoryToggle.IsChecked == true;
                 s.LyricsOffsetMs = (int)LyricsOffsetSlider.Value;
                 s.AgentsModuleEnabled = AgentsToggle.IsChecked == true;
                 s.MascotEnabled = MascotToggle.IsChecked == true;
@@ -174,12 +287,33 @@ public partial class SettingsWindow : Window
                 s.CapsLockHudEnabled = CapsLockHudToggle.IsChecked == true;
                 s.HeadphoneHudEnabled = HeadphoneHudToggle.IsChecked == true;
             });
+            _aiProviders?.Update(_config.Current);
+            _updatingAiPreset = true;
+            AiApiKeyInput.Clear();
+            _updatingAiPreset = false;
+            RefreshAiKeyStatus();
+            RefreshAiAvailability();
             ShowSaved();
         }
         catch (Exception ex)
         {
             ShowSaveFailure(ex);
         }
+    }
+
+    private string[] HiddenQuickAccessPages()
+    {
+        var pages = new List<string>();
+        if (PageFocusToggle.IsChecked != true) pages.Add(UtilityPinState.Pomodoro);
+        if (PageWaterToggle.IsChecked != true) pages.Add(UtilityPinState.Water);
+        if (PageTodoToggle.IsChecked != true) pages.Add(UtilityPinState.Todo);
+        if (PageShelfToggle.IsChecked != true) pages.Add(UtilityPinState.Shelf);
+        if (PageVolumeToggle.IsChecked != true) pages.Add(UtilityPinState.Volume);
+        if (PageBrightnessToggle.IsChecked != true) pages.Add(UtilityPinState.Brightness);
+        if (PageClipboardToggle.IsChecked != true) pages.Add(UtilityPinState.Clipboard);
+        if (PageWidgetsToggle.IsChecked != true) pages.Add(UtilityPinState.Widgets);
+        if (PageAiToggle.IsChecked != true) pages.Add(UtilityPinState.Ai);
+        return pages.ToArray();
     }
 
     private void ShowSaved()
@@ -288,6 +422,135 @@ public partial class SettingsWindow : Window
     }
 
     private void TextSize_Changed(object sender, SelectionChangedEventArgs e) => CaptureToSettings();
+
+    private void AiSettings_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_loading && !_updatingAiPreset) CaptureToSettings();
+    }
+
+    private void AiApiKey_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading || string.IsNullOrEmpty(AiApiKeyInput.Password)) return;
+        AiApiKeyStatus.Text = "API key not saved yet. Leave this field or close Settings to encrypt and save it.";
+    }
+
+    private void AiApiKey_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => SavePendingAiApiKey();
+
+    private void SavePendingAiApiKey()
+    {
+        if (!_loading && !_updatingAiPreset && !string.IsNullOrEmpty(AiApiKeyInput.Password))
+            CaptureToSettings();
+    }
+
+    private void AiCustomMode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        UpdateAiModePanels();
+        CaptureToSettings();
+    }
+
+    private void UpdateAiModePanels()
+    {
+        var isApi = AiCustomModeCombo.SelectedIndex == 1;
+        AiCommandPanel.Visibility = isApi ? Visibility.Collapsed : Visibility.Visible;
+        AiApiPanel.Visibility = isApi ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AiApiPreset_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || _updatingAiPreset) return;
+        var preset = AiApiPreset.Find(AiApiPresetCombo.SelectedIndex switch
+        {
+            1 => "openai",
+            2 => "openrouter",
+            3 => "custom",
+            _ => "grok",
+        });
+        _updatingAiPreset = true;
+        if (preset != AiApiPreset.Custom)
+        {
+            AiApiEndpointInput.Text = preset.Endpoint;
+            AiApiModelInput.Text = preset.Model;
+        }
+        _updatingAiPreset = false;
+        CaptureToSettings();
+    }
+
+    private void RefreshAiKeyStatus()
+    {
+        var ciphertext = _config.Current.AiApiKeyProtected;
+        AiApiKeyStatus.Text = !string.IsNullOrWhiteSpace(ciphertext)
+            ? AiApiKeyProtector.Unprotect(ciphertext) is not null
+                ? "An API key is saved and encrypted for this Windows user."
+                : "The saved key cannot be read on this PC. Enter a new key or use MIMI_AI_API_KEY."
+            : !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MIMI_AI_API_KEY"))
+                ? "MIMI_AI_API_KEY is configured for this process."
+                : "No API key is saved.";
+        AiApiKeyStatus.ToolTip = "MiMi never displays a saved API key.";
+    }
+
+    private void ClearAiApiKey_Click(object sender, RoutedEventArgs e)
+    {
+        _updatingAiPreset = true;
+        AiApiKeyInput.Clear();
+        _updatingAiPreset = false;
+        try
+        {
+            _config.Update(s => s.AiApiKeyProtected = "");
+            _aiProviders?.Update(_config.Current);
+            RefreshAiKeyStatus();
+            RefreshAiAvailability();
+            ShowSaved();
+        }
+        catch (Exception ex)
+        {
+            ShowSaveFailure(ex);
+        }
+    }
+
+    private void BrowseAiCommand_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose an AI executable or command",
+            Filter = "Executables and scripts|*.exe;*.cmd;*.bat;*.com|All files|*.*",
+            CheckFileExists = true,
+        };
+        if (AiCustomCommandInput.Text.Length > 0)
+        {
+            try { dialog.FileName = AiCustomCommandInput.Text; } catch { }
+        }
+        if (dialog.ShowDialog(this) == true)
+            AiCustomCommandInput.Text = dialog.FileName;
+    }
+
+    private void RefreshAiAvailability_Click(object sender, RoutedEventArgs e) => RefreshAiAvailability();
+
+    private void RefreshAiAvailability()
+    {
+        var service = _aiProviders ?? new AiProviderService(_config.Current);
+        service.Update(_config.Current);
+        AiAvailabilityText.Text = string.Join("  ·  ", service.GetProviders().Select(option =>
+            $"{option.Provider.Name}: {(option.IsAvailable ? "Ready" : "Unavailable")}"));
+    }
+
+    private void PreviewExpression_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string name } && Enum.TryParse<MascotExpression>(name, out var expression))
+            MascotPreview.Expression = expression;
+    }
+
+    private void RunDemo_Click(object sender, RoutedEventArgs e)
+    {
+        _presenter?.SimulateAgentSequence();
+        Close();
+    }
+
+    private void Restart_Click(object sender, RoutedEventArgs e)
+    {
+        SavePendingSlider();
+        _restartRequested?.Invoke();
+    }
 
     private async void RefreshProviders_Click(object sender, RoutedEventArgs e) => await RefreshProvidersAsync();
 

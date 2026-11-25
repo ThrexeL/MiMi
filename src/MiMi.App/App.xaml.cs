@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using MiMi.Agents;
+using MiMi.App.AI;
 using MiMi.App.Interop;
 using MiMi.App.UI;
 using MiMi.App.UI.Mascot;
@@ -30,6 +31,11 @@ public partial class App : Application
     private SystemHudController _hudController = null!;
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
+    private TodoEntryWindow? _todoEntryWindow;
+    private CodexConversationWindow? _codexWindow;
+    private AiProviderWindow? _aiWindow;
+    private ApiConversationWindow? _apiWindow;
+    private AiProviderService _aiProviders = null!;
     private ProviderIntegrationInspector _providerInspector = null!;
     private bool _ownsMutex;
 
@@ -76,9 +82,14 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _config = new ConfigStore();
+        _aiProviders = new AiProviderService(_config.Current);
         _providerInspector = new ProviderIntegrationInspector();
         MascotOptions.Apply(_config.Current);
-        _config.Changed += settings => MascotOptions.Apply(settings);
+        _config.Changed += settings =>
+        {
+            MascotOptions.Apply(settings);
+            _aiProviders.Update(settings);
+        };
         _approvals = new ApprovalStore(TimeSpan.FromMinutes(_config.Current.ApprovalTtlMinutes));
         _bus = new AgentEventBus();
         _stateManager = new IslandStateManager();
@@ -95,6 +106,9 @@ public partial class App : Application
         var todos = new TodoStore();
         var shelf = new FileShelfStore();
         _presenter = new IslandPresenter(_config, _stateManager, _approvals, mediaVm, Dispatcher, water, todos, shelf);
+        _presenter.TaskEntryRequested += ShowTaskEntry;
+        _presenter.AiProviderRequested += ShowAiPicker;
+        _presenter.SettingsRequested += ShowSettings;
 
         _island = new IslandWindow(
             _config,
@@ -110,8 +124,14 @@ public partial class App : Application
             shelfOpen: () => _presenter.ShelfDragEnter(),
             shelfClose: () => _presenter.EndShelfDragPreview(),
             quickAccessOpen: () => _presenter.OpenQuickAccess(),
-            closeUtility: () => _presenter.CloseUtilityPanel());
+            closeUtility: () => _presenter.CloseUtilityPanel(),
+            addTask: () => _presenter.PromptAddTask(),
+            quickAccessContentProvider: () => _presenter.BuildQuickAccessView());
         _island.Show();
+        _island.ClipboardChanged += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_config.Current.ClipboardHistoryEnabled) _presenter.CaptureClipboardNow();
+        });
 
         _stateManager.EffectiveContentChanged += content =>
         {
@@ -209,6 +229,12 @@ public partial class App : Application
                 _presenter.UtilityPins.Contains("shelf"));
         });
         _hudController = new SystemHudController(_config, _presenter, Dispatcher);
+        _presenter.ConfigureVolume(_hudController.GetVolumeState,
+            _hudController.SetVolume, () => _hudController.ToggleMute());
+        _presenter.ConfigureBrightness(Interop.LaptopBrightnessControl.ReadAsync,
+            Interop.LaptopBrightnessControl.SetAsync);
+        _presenter.ConfigureWidgets(() => new WidgetSystemSnapshot(
+            Interop.PowerMonitor.Read(), _hudController.ReadNetworkState()));
         _tray.CommandSelected += OnTrayCommand;
         _island.KeyboardTick += () => _hudController.OnKeyboardTick();
         _island.PowerStatusChanged += () => _hudController.OnPowerStatusChanged();
@@ -238,6 +264,10 @@ public partial class App : Application
         _island.Closed += (_, _) => Shutdown();
 
         Logger.Info("MiMi started.");
+        if (e.Args.Contains("--codex", StringComparer.OrdinalIgnoreCase))
+            Dispatcher.BeginInvoke(ShowCodexConversation);
+        if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+            Dispatcher.BeginInvoke(ShowSettings);
     }
 
     private void QueueAgentEvent(AgentEvent ev)
@@ -340,6 +370,7 @@ public partial class App : Application
                     _presenter.ToggleUtility("shelf");
                     break;
                 case TrayMenuCommand.Settings: ShowSettings(); break;
+                case TrayMenuCommand.CodexConversation: ShowAiPicker(); break;
                 case TrayMenuCommand.Simulate: _presenter.SimulateAgentSequence(); break;
                 case TrayMenuCommand.ToggleAutoStart:
                     var enable = !AutoStart.IsEnabled();
@@ -358,35 +389,137 @@ public partial class App : Application
                     _tray.SetAutoStartIndicator(enable);
                     break;
                 case TrayMenuCommand.Restart:
-                    // Release the old hotkey before the replacement can reach RegisterHotKey.
-                    _island.ReleaseGlobalHotkey();
-                    // Release the single-instance mutex immediately so the new instance can acquire it successfully
-                    if (_ownsMutex)
-                    {
-                        try { _singleInstance?.ReleaseMutex(); } catch { }
-                        _ownsMutex = false;
-                    }
-                    try { _singleInstance?.Dispose(); } catch { }
-                    _singleInstance = null;
-
-                    System.Diagnostics.Process.Start(Environment.ProcessPath ?? "");
-                    Shutdown();
+                    RestartMiMi();
                     break;
                 case TrayMenuCommand.Exit: Shutdown(); break;
             }
         });
     }
 
+    private void RestartMiMi()
+    {
+        // Release the old hotkey before the replacement can reach RegisterHotKey.
+        _island.ReleaseGlobalHotkey();
+        if (_ownsMutex)
+        {
+            try { _singleInstance?.ReleaseMutex(); } catch { }
+            _ownsMutex = false;
+        }
+        try { _singleInstance?.Dispose(); } catch { }
+        _singleInstance = null;
+
+        System.Diagnostics.Process.Start(Environment.ProcessPath ?? "");
+        Shutdown();
+    }
+
+    private static void BringToFront(Window window)
+    {
+        if (!window.IsVisible) window.Show();
+        window.Topmost = true;
+        window.Activate();
+        window.Focus();
+        window.Topmost = false;
+    }
+
+    private void ShowAiPicker()
+    {
+        if (_aiWindow is { IsLoaded: true })
+        {
+            BringToFront(_aiWindow);
+            return;
+        }
+        _aiWindow = new AiProviderWindow(_aiProviders, LaunchAiProvider, ShowSettings);
+        _aiWindow.Closed += (_, _) => _aiWindow = null;
+        BringToFront(_aiWindow);
+    }
+
+    private AiLaunchResult LaunchAiProvider(AiProviderDefinition provider)
+    {
+        if (provider.Kind == AiProviderKind.EmbeddedCodex)
+        {
+            ShowCodexConversation();
+            return new AiLaunchResult(true, "Codex opened.");
+        }
+        if (provider.Kind == AiProviderKind.Api)
+        {
+            if (!_aiProviders.TryGetApiConfiguration(out var configuration, out var apiKey))
+            {
+                _apiWindow?.Close();
+                return new AiLaunchResult(false, "Configure a valid API endpoint and model in Settings → Integrations.");
+            }
+            if (apiKey is null && (!Uri.TryCreate(configuration.Endpoint, UriKind.Absolute, out var uri)
+                || !uri.IsLoopback))
+            {
+                // Never leave an already-open chat usable with a key the user just cleared.
+                _apiWindow?.Close();
+                return new AiLaunchResult(false, "Add an API key in Settings or set MIMI_AI_API_KEY.");
+            }
+            ShowApiConversation(provider, configuration, apiKey);
+            return new AiLaunchResult(true, $"{provider.Name} API chat opened.");
+        }
+        return _aiProviders.Launch(provider, ResolveCodexWorkspace());
+    }
+
+    private void ShowCodexConversation()
+    {
+        if (_codexWindow is { IsLoaded: true })
+        {
+            BringToFront(_codexWindow);
+            return;
+        }
+        _codexWindow = new CodexConversationWindow(_approvals, _bus, ResolveCodexWorkspace());
+        _codexWindow.Closed += (_, _) => _codexWindow = null;
+        BringToFront(_codexWindow);
+    }
+
+    private void ShowApiConversation(AiProviderDefinition provider, AiApiConfiguration configuration, string? apiKey)
+    {
+        if (_apiWindow is { IsLoaded: true })
+        {
+            _apiWindow.UpdateConfiguration(provider, configuration, apiKey);
+            BringToFront(_apiWindow);
+            return;
+        }
+        _apiWindow = new ApiConversationWindow(provider, configuration, apiKey, ShowSettings);
+        _apiWindow.Closed += (_, _) => _apiWindow = null;
+        BringToFront(_apiWindow);
+    }
+
+    private static string ResolveCodexWorkspace()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MiMi.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        return Environment.CurrentDirectory;
+    }
+
+    private void ShowTaskEntry()
+    {
+        if (_todoEntryWindow is { IsLoaded: true })
+        {
+            _todoEntryWindow.Activate();
+            return;
+        }
+        _todoEntryWindow = new TodoEntryWindow(_island) { Owner = _island };
+        if (_todoEntryWindow.ShowDialog() == true)
+            _presenter.AddTask(_todoEntryWindow.TaskTitle, _todoEntryWindow.TaskDue);
+        _todoEntryWindow = null;
+    }
+
     private void ShowSettings()
     {
         if (_settingsWindow is { IsLoaded: true })
         {
-            _settingsWindow.Activate();
+            BringToFront(_settingsWindow);
             return;
         }
         _settingsWindow = new SettingsWindow(_config, enable => _tray.SetAutoStartIndicator(enable),
-            () => _island.HotkeyRegistered, _providerInspector, _presenter);
-        _settingsWindow.Show();
+            () => _island.HotkeyRegistered, _providerInspector, _presenter, RestartMiMi, _aiProviders);
+        BringToFront(_settingsWindow);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -396,6 +529,8 @@ public partial class App : Application
         try { _fullscreen?.Dispose(); } catch { }
         try { _hudController?.Dispose(); } catch { }
         try { _stateManager?.Dispose(); } catch { }
+        try { _codexWindow?.EnsureDisposedAsync().Wait(3000); } catch { }
+        try { _aiWindow?.Close(); } catch { }
         try { _approvals?.Dispose(); } catch { }
         try { _bridge?.DisposeAsync().AsTask().Wait(2000); } catch { }
         try { _media?.DisposeAsync().AsTask().Wait(2000); } catch { }

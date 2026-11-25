@@ -284,6 +284,40 @@ public class TodoStoreTests : IDisposable
     }
 
     [Fact]
+    public void DueNow_SnoozeReArmsAndExpiresOnce()
+    {
+        var store = new TodoStore(_path);
+        var now = new DateTime(2026, 11, 25, 14, 0, 0);
+        var task = store.Add("take a break", due: now.AddMinutes(-5));
+        store.MarkReminded(task.Id);
+        Assert.Empty(store.DueNow(now));
+
+        Assert.True(store.Snooze(task.Id, TimeSpan.FromMinutes(10), now));
+        Assert.Empty(store.DueNow(now.AddMinutes(9)));
+        Assert.Single(store.DueNow(now.AddMinutes(10)));
+        store.MarkReminded(task.Id);
+        Assert.Empty(store.DueNow(now.AddMinutes(11)));
+
+        Assert.True(store.Complete(task.Id));
+        Assert.Empty(store.DueNow(now.AddHours(1)));
+    }
+
+    [Fact]
+    public void Persistence_RoundTripsSnoozeDeadline()
+    {
+        var store = new TodoStore(_path);
+        var now = new DateTime(2026, 11, 25, 14, 0, 0);
+        var task = store.Add("snoozed task", due: now.AddMinutes(-1));
+        store.Snooze(task.Id, TimeSpan.FromMinutes(10), now);
+        store.Save();
+
+        var loaded = new TodoStore(_path);
+        Assert.Equal(now.AddMinutes(10), loaded.Items[0].SnoozedUntil);
+        Assert.Empty(loaded.DueNow(now.AddMinutes(5)));
+        Assert.Single(loaded.DueNow(now.AddMinutes(10)));
+    }
+
+    [Fact]
     public void DueNow_RespectsReminderFired()
     {
         var store = new TodoStore(_path);

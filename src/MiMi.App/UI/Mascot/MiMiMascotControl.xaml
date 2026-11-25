@@ -6,20 +6,20 @@
              Focusable="False">
 
     <UserControl.Resources>
-        <!-- Bright white with the faintest warm edge, so the circles stay visually
-             white while antialiasing gently into the dark surface. -->
-        <RadialGradientBrush x:Key="MascotEyeBrush" Center="0.5,0.42"
-                             RadiusX="0.5" RadiusY="0.5">
+        <!-- Warm-white eyes with a soft gold bloom to match the island aurora. -->
+        <RadialGradientBrush x:Key="MascotEyeBrush" Center="0.5,0.38"
+                             RadiusX="0.5" RadiusY="0.6">
             <GradientStop Color="#FFFFFFFF" Offset="0"/>
-            <GradientStop Color="#FFFDF8EE" Offset="0.82"/>
-            <GradientStop Color="#F2F5EAD2" Offset="1"/>
+            <GradientStop Color="#FFFFFCF4" Offset="0.78"/>
+            <GradientStop Color="#FFFFE6B8" Offset="1"/>
         </RadialGradientBrush>
+        <DropShadowEffect x:Key="MascotEyeGlow" Color="#FFFFBE62" BlurRadius="5"
+                          ShadowDepth="0" Opacity="0.62"/>
     </UserControl.Resources>
 
     <!-- Design space is 48x30; a Viewbox keeps the face proportional at any usage size.
-         The face per the approved reference: two prominent bright-white ROUND eyes with
-         balanced spacing — nothing else. The warm-gold light is a separate island-level
-         aurora beneath the eyes (IslandWindow's GlowRoot), not part of this control. -->
+         Two tall, softly glowing white eyes with balanced spacing echo Nusa's living
+         notch. The wider gold aurora lives at island level. -->
     <!-- The dozing z's sit near the design box's top edge; the Viewbox keeps them
          inside it so the pill's rounded clip never cuts them off. -->
     <Viewbox Stretch="Uniform" ClipToBounds="False"
@@ -41,8 +41,8 @@
                             <ScaleTransform x:Name="EyeLBlink"/>
                         </TransformGroup>
                     </Grid.RenderTransform>
-                    <Ellipse x:Name="EyeL" Width="11" Height="11"
-                             Fill="{StaticResource MascotEyeBrush}"/>
+                    <Ellipse x:Name="EyeL" Width="10.5" Height="15.5"
+                             Fill="{StaticResource MascotEyeBrush}" Effect="{StaticResource MascotEyeGlow}"/>
                 </Grid>
                 <Grid x:Name="EyeRGroup" Canvas.Left="20" Canvas.Top="-2" Width="24" Height="26"
                       RenderTransformOrigin="0.5,0.5">
@@ -53,12 +53,22 @@
                             <ScaleTransform x:Name="EyeRBlink"/>
                         </TransformGroup>
                     </Grid.RenderTransform>
-                    <Ellipse x:Name="EyeR" Width="11" Height="11"
-                             Fill="{StaticResource MascotEyeBrush}"/>
+                    <Ellipse x:Name="EyeR" Width="10.5" Height="15.5"
+                             Fill="{StaticResource MascotEyeBrush}" Effect="{StaticResource MascotEyeGlow}"/>
                 </Grid>
 
             </Canvas>
 
+
+            <!-- Cute accents: warm cheeks for happy/lively/curious, one sparkle for a
+                 completed turn. They stay static unless motion is enabled. -->
+            <Ellipse x:Name="CheekL" Width="5.5" Height="2.7" Fill="#88FFD08A" Opacity="0"
+                     HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,4"/>
+            <Ellipse x:Name="CheekR" Width="5.5" Height="2.7" Fill="#88FFD08A" Opacity="0"
+                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,4,4"/>
+            <TextBlock x:Name="HappySparkle" Text="✦" FontFamily="Segoe UI Symbol" FontSize="9"
+                       FontWeight="Bold" Foreground="#FFFFD79A" Opacity="0"
+                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,5,0"/>
 
             <!-- Dozing: two small z's drift up beside the face. The clock is gone in this
                  state, so the quiet space becomes part of the expression. -->

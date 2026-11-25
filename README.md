@@ -10,6 +10,10 @@ implementation. The stack is C# / .NET 10 / WPF with CsWinRT Windows SDK project
 no Electron, no WebView, no third-party UI packages. Even the tray icon is a hand-rolled
 `Shell_NotifyIconW` P/Invoke.
 
+Maintainers should start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the current
+build, test, architecture, and repository-hygiene workflow. AI provider setup is also
+documented in [docs/ai-assistants.md](docs/ai-assistants.md).
+
 ## MiMi 4.0 — what's new
 
 - **Face-only idle.** The resting state is a slim pill with the mascot face only — the
@@ -38,14 +42,33 @@ no Electron, no WebView, no third-party UI packages. Even the tray icon is a han
   panel.
 - **Multi-agent tracking with multi-approval navigation**: per-session lifecycle states,
   a hover activity panel, and `‹ ›` navigation across pending approval cards.
+- **Refresh 2026-11-25:** Nusa-inspired gold aurora, taller glowing eyes with a
+  return wave, hover-open Quick Access, local Widgets, opt-in session-only clipboard
+  history, laptop brightness control, task due times with snooze, and click-to-seek lyrics.
+- **Portable AI assistants:** the Quick Access AI tile opens a picker with detected Codex,
+  Claude Code, OpenCode, Grok, and Custom AI. Custom AI supports local commands or text-only
+  OpenAI-compatible APIs (Grok, OpenAI, OpenRouter, or another compatible endpoint). API keys
+  are encrypted for the current Windows user; all configuration is per-user and portable.
+- **UI/UX refresh 2026-11-25:** pointer-aware hover dismissal with a configurable 30-second
+  inactivity cap, uniform Agent activity cards with safe session-copy actions, and a modern
+  card-based Settings window with Quick Access page controls, live mascot preview, activity
+  demo, and restart tools.
+- **Agent status card:** the whole compact pill is clickable, repeated clicks keep the activity
+  options open, long statuses expand and wrap instead of truncating, and tool-running agents use
+  a livelier eye expression.
+- **New controls:** interactive volume/mute and supported-laptop brightness panels plus an
+  experimental embedded Codex conversation window with read-only sandbox and one-shot
+  approvals. See `docs/ui-refresh-and-codex.md` and `docs/nusa-refresh.md`.
 
 ## UI and usability refresh
 
 - **Categorized settings:** General, Appearance, Notifications, Integrations, and System pages in a resizable window, with independently scrolling content and persistent save feedback. Changes save automatically; failures are displayed instead of reporting success. Escape closes settings, and keyboard focus is visible.
 - **Complete everyday controls:** hover expansion, lyrics and timing offset, all system HUD toggles, typography, mascot, glow, notifications, and provider status are available in settings. Keyboard and pointer slider changes persist without an Apply button.
-- **Island polish:** clearer section headings, higher-contrast secondary text and seek track, consistent action buttons, labeled Quick Access tiles, useful empty states, and descriptive icon tooltips/automation names. The idle face, non-activating overlay, and fixed gold glow geometry are unchanged.
+- **Island polish:** clearer section headings, higher-contrast secondary text and seek track, consistent action buttons, labeled Quick Access tiles, useful empty states, and descriptive icon tooltips/automation names. The idle face and non-activating overlay are preserved; the glow is now a warm gold aurora.
 - **Lyrics availability:** unavailable tracks show **No lyrics available**, instrumental tracks are labeled, and fetching shows **Loading lyrics...**. Switching tracks clears the previous lyrics.
-- **Laptop brightness HUD:** real WMI backlight-change events on supported laptops, with its own settings toggle. No external-monitor control, polling, or simulated readings.
+- **Laptop brightness:** real WMI backlight-change events and a real brightness slider on
+  supported active laptop backlights. Desktops and unsupported displays report that the
+  control is unavailable; there are no simulated readings or external-monitor claims.
 - **Regression coverage:** settings persistence and layout, island template layouts, Unicode text/icons, lyrics availability, and brightness policy are automated. Offscreen renders help review layouts; live hardware, DPI, and accessibility checks remain manual.
 
 ## Status
@@ -60,7 +83,7 @@ Development is phased. State as of the 4.0 release candidate:
 | 3.6 — activity & multi-agent UI | Lifecycle hooks, per-session tracking, multi-approval navigation | implemented |
 | 4 — extra modules | Lyrics, Pomodoro, hydration, to-do, file shelf | **implemented in 4.0** |
 | 6 — system HUDs | Volume, battery, network, audio devices, Caps Lock, input language, supported laptop brightness | implemented |
-| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; app-server embedding deferred | partial |
+| 5 — personal harness adapter; Codex app-server full embedding | Thursday activity and approval adapters implemented; experimental read-only Codex conversation client implemented | partial / experimental |
 | 7 — Windows notification listener | | **researched; intentionally unavailable in the portable build** |
 | 8 — mascot and UI polish | Expressions, categorized settings, island styling, offscreen template/layout review | implemented; interactive/DPI acceptance remains manual |
 | 9 — release prep | Portable build script, automated tests, selftest, documented acceptance checklist | implemented; release signing/distribution and manual acceptance remain maintainer tasks |
@@ -73,9 +96,9 @@ Notes on the intentionally-unsupported features:
   cannot access it. This is documented — including an honest disclosure in Settings —
   rather than simulated. A packaged companion app is the supported path if the feature is
   wanted later.
-- **External-monitor brightness control.** Not implemented. The brightness HUD observes
-  supported laptop backlights through WMI and `System.Management`; desktops without that
-  interface stay silent. MiMi does not change brightness or provide a fake slider.
+- **External-monitor brightness control.** Not implemented. The brightness HUD and slider
+  use the active WMI laptop backlight; desktops without that interface show an honest
+  unavailable state instead of a fake slider.
 
 ## Build and run
 
@@ -162,9 +185,10 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
   ever read.
 - **Brightness.** `WmiMonitorBrightnessEvent` on supported active laptop backlights,
   with a real percentage/progress HUD and no startup toast. Event setup/teardown runs off
-  the UI thread; duplicate values are suppressed and bursts are bounded. Unsupported or
-  denied WMI access stays silent. Toggle with `brightnessHudEnabled`; this does not
-  control brightness or monitor external displays.
+  the UI thread; duplicate values are suppressed and bursts are bounded. The Quick Access
+  brightness page uses `WmiMonitorBrightnessMethods.WmiSetBrightness`; unsupported or denied
+  WMI access reports unavailable. Toggle the HUD with `brightnessHudEnabled`. External
+  displays are not controlled.
 
 ## Synchronized lyrics
 
@@ -175,7 +199,8 @@ than a placeholder. Each HUD can be toggled in settings (`volumeHudEnabled`,
   `[offset:]` tag. Line lookup is stateless and seek-proof.
 - **Display:** the expanded media panel shows a 3-line window — previous line dim,
   current line gold, next line dim — replacing the title block when synced lyrics are
-  available. Instrumental gaps render as a gentle `♪` instead of an empty block.
+  available. Click the current timed line to seek to its timestamp (offset-aware).
+  Instrumental gaps render as a gentle `♪` instead of an empty block.
 - **Toggle:** a lyrics glyph on the expanded player turns lyrics on/off per session.
 - **Settings:** `lyricsEnabled` (default on) and `lyricsOffsetMs` (clamped
   -10000…10000) for fine sync adjustment.
@@ -420,9 +445,11 @@ hook timeout, makes the final call.
 
 ### What is NOT supported
 
-- **Codex app-server embedding.** MiMi does not drive the Codex session; hook decisions
-  only fire for approval prompts Codex itself would raise. Full embedding (MiMi as the
-  app-server client) remains future work — see `docs/codex-integrations.md`.
+- **Full Codex app-server embedding.** MiMi now includes an experimental, read-only
+  conversation client for `codex-cli 0.160.x`. It supports text turns, streamed items,
+  interruption, and one-shot command approvals. Thread resume/history, model pickers,
+  session-wide grants, MCP elicitation, and file-change approvals are not supported;
+  hooks remain the default integration.
 - **Claude Code `permission_suggestions` / `updatedInput`.** These stdin fields are
   ignored: MiMi always returns the original tool input unchanged. The emitted decision JSON
   contains only `behavior` (`allow`/`deny`) and `message` — never `updatedInput`,
@@ -621,6 +648,7 @@ defaults; values are clamped to the ranges below on every save.
 | `textSize` | string | `"default"` | Island typography: `"small"`, `"default"`, `"large"` |
 | `animationSpeed` | double | `1.0` | Animation speed multiplier (clamped 0.5…2.5) |
 | `collapseDelayMs` | int | `900` | Delay before auto-collapse after the pointer leaves (clamped 200…5000) |
+| `panelIdleTimeoutSeconds` | int | `30` | Maximum hover-panel lifetime without pointer movement; 0 disables the cap |
 | `expandOnHover` | bool | `true` | Expand the island when the pointer hovers over it |
 | `mediaModuleEnabled` | bool | `true` | GSMTC media pill and media panel |
 | `agentsModuleEnabled` | bool | `true` | Agent event cards and approvals |
@@ -628,11 +656,23 @@ defaults; values are clamped to the ranges below on every save.
 | `mascotAnimationsEnabled` | bool | `true` | Mascot idle animations (blinking, breathing) |
 | `mascotReactionsEnabled` | bool | `true` | Brief mascot reactions to agent events |
 | `mascotSleepyEnabled` | bool | `false` | Opt-in sleepy mode: doze after inactivity, wake on mouse proximity |
-| `glowEnabled` | bool | `true` | Gold bottom-edge glow band |
+| `glowEnabled` | bool | `true` | Warm gold bottom-edge aurora |
 | `glowIntensity` | double | `0.6` | Glow intensity (clamped 0…1) |
 | `animationIntensity` | double | `1.0` | Animation amplitude (clamped 0.5…2) |
 | `lyricsEnabled` | bool | `true` | Synchronized lyrics on the expanded media panel |
 | `lyricsOffsetMs` | int | `0` | Lyrics sync offset in ms (clamped -10000…10000) |
+| `clipboardHistoryEnabled` | bool | `false` | Opt-in, text-only, session-only clipboard history |
+| `quickAccessHiddenPages` | string[] | `[]` | Quick Access pages to hide; unknown entries are discarded |
+| `aiDefaultProvider` | string | `codex` | Default AI assistant: `codex`, `claude`, `opencode`, `grok`, or `custom` |
+| `aiCustomName` | string | `Custom AI` | Display name for the custom AI assistant |
+| `aiCustomMode` | string | `command` | Custom AI type: `command` or `api` |
+| `aiCustomCommand` | string | `""` | Custom AI executable, script, or PATH command |
+| `aiCustomArguments` | string | `""` | Arguments passed to the custom AI command |
+| `aiApiPreset` | string | `grok` | API preset: `grok`, `openai`, `openrouter`, or `custom` |
+| `aiApiEndpoint` | string | `https://api.x.ai/v1` | OpenAI-compatible API base URL or full chat-completions URL |
+| `aiApiModel` | string | `grok-4.7` | Model identifier supplied to the API |
+| `aiApiSystemPrompt` | string | See Settings | Text-only API system prompt; API chats have no local tools |
+| `aiApiKeyProtected` | string | `""` | DPAPI-encrypted API key for the current Windows user; never plaintext |
 | `volumeHudEnabled` | bool | `true` | Volume/mute HUD |
 | `batteryHudEnabled` | bool | `true` | Charging/low-battery HUD |
 | `brightnessHudEnabled` | bool | `true` | Brightness-change HUD on WMI-supported laptop backlights |

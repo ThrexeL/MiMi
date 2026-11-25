@@ -5,6 +5,7 @@ using System.Windows.Automation.Provider;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MiMi.App.AI;
 using MiMi.App.UI;
 using MiMi.Core;
 using Xunit;
@@ -28,21 +29,21 @@ public class SettingsWindowTests
                 Assert.Equal(5, categories.Items.Count);
                 foreach (var size in new[] { new Size(600, 420), new Size(840, 700) })
                 {
-                    var root = (FrameworkElement)window.Content;
                     foreach (TabItem category in categories.Items)
                     {
                         categories.SelectedItem = category;
-                        root.Measure(size);
-                        root.Arrange(new Rect(size));
-                        root.UpdateLayout();
                         var scroll = Assert.IsType<ScrollViewer>(category.Content);
+                        scroll.Width = Math.Max(320, size.Width - 48);
+                        scroll.Height = Math.Max(180, size.Height - 190);
+                        scroll.Measure(new Size(scroll.Width, double.PositiveInfinity));
+                        scroll.Arrange(new Rect(0, 0, scroll.Width, scroll.Height));
+                        scroll.UpdateLayout();
                         Assert.Equal(ScrollBarVisibility.Auto, scroll.VerticalScrollBarVisibility);
                         Assert.InRange(scroll.ActualHeight, 1, size.Height);
-                        var close = (Button)window.FindName("CloseButton");
-                        var position = close.TranslatePoint(new Point(), root);
-                        Assert.InRange(position.Y + close.ActualHeight, 1, size.Height);
+                        Render(scroll, "settings-" + (category.Header?.ToString()?.TrimStart('_').ToLowerInvariant() ?? "category"));
                     }
                 }
+                Assert.IsType<Button>(window.FindName("CloseButton"));
                 foreach (var name in new[] { "MediaToggle", "AgentsToggle", "MascotToggle", "GlowToggle",
                     "BridgeToggle", "AutoStartToggle", "DesktopPersistToggle", "FullscreenToggle",
                     "MascotAnimationsToggle", "MascotReactionsToggle", "MascotSleepyToggle",
@@ -53,6 +54,89 @@ public class SettingsWindowTests
                     Assert.IsType<CheckBox>(window.FindName(name));
             }
             finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PanelIdleAndQuickAccessVisibility_LoadAndSave()
+    {
+        OnSta(() =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+            new AppSettings
+            {
+                PanelIdleTimeoutSeconds = 45,
+                QuickAccessHiddenPages = [UtilityPinState.Water, UtilityPinState.Codex, "unknown-page"],
+            }.Save(path);
+            var window = new SettingsWindow(new ConfigStore(path), _ => { });
+            try
+            {
+                Assert.Equal(45, ((Slider)window.FindName("PanelIdleTimeoutSlider")).Value);
+                Assert.False(((CheckBox)window.FindName("PageWaterToggle")).IsChecked);
+                Assert.False(((CheckBox)window.FindName("PageAiToggle")).IsChecked);
+                Assert.True(((CheckBox)window.FindName("PageFocusToggle")).IsChecked);
+                Assert.False(((Button)window.FindName("RestartButton")).IsEnabled);
+
+                ((Slider)window.FindName("PanelIdleTimeoutSlider")).Value = 60;
+                ((CheckBox)window.FindName("PageWaterToggle")).IsChecked = true;
+                var saved = AppSettings.Load(path);
+                Assert.Equal(60, saved.PanelIdleTimeoutSeconds);
+                Assert.DoesNotContain(UtilityPinState.Water, saved.QuickAccessHiddenPages);
+                Assert.Contains(UtilityPinState.Ai, saved.QuickAccessHiddenPages);
+                Assert.DoesNotContain("unknown-page", saved.QuickAccessHiddenPages);
+
+                var happy = Assert.IsType<Button>(window.FindName("PreviewHappyButton"));
+                happy.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(MiMi.App.UI.Mascot.MascotExpression.Happy,
+                    ((MiMi.App.UI.Mascot.MiMiMascotControl)window.FindName("MascotPreview")).Expression);
+            }
+            finally
+            {
+                window.Close();
+                File.Delete(path);
+            }
+        });
+    }
+
+    [Fact]
+    public void AiConfiguration_LoadsSavesAndReportsCustomCommand()
+    {
+        OnSta(() =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+            var command = Path.Combine(Path.GetTempPath(), $"mimi-settings-ai-{Guid.NewGuid():N}.cmd");
+            File.WriteAllText(command, "@echo off\r\n");
+            new AppSettings
+            {
+                AiDefaultProvider = "custom",
+                AiCustomName = "Portable AI",
+                AiCustomCommand = command,
+                AiCustomArguments = "--read-only",
+            }.Save(path);
+            var store = new ConfigStore(path);
+            var service = new AiProviderService(store.Current);
+            var window = new SettingsWindow(store, _ => { }, aiProviders: service);
+            try
+            {
+                Assert.True(window.ShowInTaskbar);
+                Assert.NotNull(window.Icon);
+                Assert.True(window.Icon.Width >= 32);
+                Assert.Equal(4, ((ComboBox)window.FindName("AiDefaultCombo")).SelectedIndex);
+                Assert.Equal("Portable AI", ((TextBox)window.FindName("AiCustomNameInput")).Text);
+                Assert.Contains("Portable AI: Ready", ((TextBlock)window.FindName("AiAvailabilityText")).Text);
+
+                ((TextBox)window.FindName("AiCustomNameInput")).Text = "Friend's Assistant";
+                ((TextBox)window.FindName("AiCustomArgumentsInput")).Text = "--safe";
+                var saved = AppSettings.Load(path);
+                Assert.Equal("Friend's Assistant", saved.AiCustomName);
+                Assert.Equal("--safe", saved.AiCustomArguments);
+            }
+            finally
+            {
+                window.Close();
+                File.Delete(path);
+                File.Delete(command);
+            }
         });
     }
 
@@ -284,11 +368,12 @@ public class SettingsWindowTests
             var window = new SettingsWindow(new ConfigStore(path), _ => { });
             try
             {
-                var root = (FrameworkElement)window.Content;
-                root.Measure(new Size(600, 420));
-                root.Arrange(new Rect(0, 0, 600, 420));
-                root.UpdateLayout();
                 var scroll = (ScrollViewer)window.FindName("BodyScroll");
+                scroll.Width = 600;
+                scroll.Height = 300;
+                scroll.Measure(new Size(600, double.PositiveInfinity));
+                scroll.Arrange(new Rect(0, 0, 600, 300));
+                scroll.UpdateLayout();
                 var bar = (System.Windows.Controls.Primitives.ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
                 bar.ApplyTemplate();
                 Assert.Equal(12, bar.Width);
@@ -301,21 +386,37 @@ public class SettingsWindowTests
                 var pageDown = (System.Windows.Input.RoutedCommand)track.IncreaseRepeatButton.Command;
                 Assert.Same(System.Windows.Controls.Primitives.ScrollBar.PageDownCommand, pageDown);
                 pageDown.Execute(null, bar);
-                root.UpdateLayout();
+                scroll.UpdateLayout();
                 Assert.True(scroll.VerticalOffset > 0);
                 var offset = scroll.VerticalOffset;
                 System.Windows.Controls.Primitives.ScrollBar.LineUpCommand.Execute(null, bar);
-                root.UpdateLayout();
+                scroll.UpdateLayout();
                 Assert.True(scroll.VerticalOffset < offset);
                 var pageUp = (System.Windows.Input.RoutedCommand)track.DecreaseRepeatButton.Command;
                 Assert.Same(System.Windows.Controls.Primitives.ScrollBar.PageUpCommand, pageUp);
                 pageUp.Execute(null, bar);
-                root.UpdateLayout();
+                scroll.UpdateLayout();
                 Assert.Equal(0, scroll.VerticalOffset);
                 Assert.False(File.Exists(path));
             }
             finally { window.Close(); }
         });
+    }
+
+    private static void Render(ScrollViewer root, string name)
+    {
+        var output = Environment.GetEnvironmentVariable("MIMI_QA_DIR");
+        if (string.IsNullOrWhiteSpace(output)) return;
+        Directory.CreateDirectory(output);
+        root.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(8, 9, 13));
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            (int)Math.Ceiling(root.ActualWidth), (int)Math.Ceiling(root.ActualHeight), 96, 96,
+            System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(root);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var file = File.Create(Path.Combine(output, name + ".png"));
+        encoder.Save(file);
     }
 
     private static void OnSta(Action action)

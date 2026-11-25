@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -10,6 +11,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MiMi.App.Interop;
 using MiMi.App.UI;
 using MiMi.App.UI.Mascot;
 using MiMi.Core;
@@ -86,20 +88,131 @@ public class IslandVisualLayoutTests
     }
 
     [Fact]
-    public void QuickAccess_RetainsFiveCommandsAndAccessibleTiles()
+    public void AgentCompact_WholePillClickableAndStatusIsNotTrimmed()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var indicator = new AgentIndicatorViewModel();
+            indicator.Update("ImpressiveBot · Executing a detailed workspace inspection", MascotExpression.Lively, 0);
+            var view = new AgentCompactView(indicator);
+            var (root, presenter, template) = Layout(window, view, 60);
+            var host = Assert.IsType<Grid>(template.FindName("AgentCompactHost", presenter));
+            Assert.NotNull(host.Background);
+            Assert.Equal("Open agent activity and options", host.ToolTip);
+            var line = Assert.Single(Descendants<TextBlock>(root),
+                t => BindingPath(t, TextBlock.TextProperty) == "Indicator.Line");
+            Assert.Equal(TextTrimming.None, line.TextTrimming);
+            Assert.Equal(TextWrapping.Wrap, line.TextWrapping);
+            Assert.True(view.TargetWidth > 420);
+            AssertActionsAccessible(root);
+            Render(root, "island-agent-compact-gold");
+        }));
+    }
+
+    [Fact]
+    public void AgentOptions_RepeatedClickKeepsActivityPanelOpen()
+    {
+        OnSta(() =>
+        {
+            var path = TemporaryConfigPath();
+            var panel = new AgentActivityPanelView(Array.Empty<AgentSessionRow>());
+            var window = new IslandWindow(new ConfigStore(path), () => null, _ => null,
+                new MediaViewModel(), agentPanelProvider: () => panel);
+            try
+            {
+                var indicator = new AgentIndicatorViewModel();
+                indicator.Update("Codex · Executing tool", MascotExpression.Lively, 0);
+                window.ShowPinned(new AgentCompactView(indicator));
+                window.OpenAgentOptions();
+                window.OpenAgentOptions(); // simulates click after hover expansion
+                var rendered = typeof(IslandWindow).GetField("_renderedContent",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(rendered);
+                Assert.Same(panel, rendered!.GetValue(window));
+                var hover = typeof(IslandWindow).GetField("_hoverExpanded",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(hover);
+                Assert.Equal(true, hover!.GetValue(window));
+            }
+            finally
+            {
+                window.Close();
+                Assert.False(File.Exists(path));
+            }
+        });
+    }
+
+    [Fact]
+    public void HoverPanel_IdleTimerUsesConfiguredTimeoutAndStopsOnCollapse()
+    {
+        OnSta(() =>
+        {
+            var path = TemporaryConfigPath();
+            var store = new ConfigStore(path);
+            store.Update(s => s.PanelIdleTimeoutSeconds = 30);
+            var window = new IslandWindow(store, () => null, _ => null, new MediaViewModel(),
+                agentPanelProvider: () => new AgentActivityPanelView(Array.Empty<AgentSessionRow>()));
+            try
+            {
+                var indicator = new AgentIndicatorViewModel();
+                indicator.Update("Codex · Working", MascotExpression.Focused, 0);
+                window.ShowPinned(new AgentCompactView(indicator));
+                window.OpenAgentOptions();
+                var field = typeof(IslandWindow).GetField("_hoverIdleTimer",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(field);
+                var timer = Assert.IsType<DispatcherTimer>(field!.GetValue(window));
+                Assert.True(timer.IsEnabled);
+                Assert.Equal(TimeSpan.FromSeconds(30), timer.Interval);
+                window.CollapseHover();
+                Assert.False(timer.IsEnabled);
+
+                store.Update(s => s.PanelIdleTimeoutSeconds = 0);
+                window.OpenAgentOptions();
+                Assert.False(timer.IsEnabled);
+            }
+            finally
+            {
+                window.Close();
+                File.Delete(path);
+            }
+        });
+    }
+
+    [Fact]
+    public void QuickAccess_RetainsAllCommandsAndAccessibleTiles()
     {
         OnSta(() => WithIsland(window =>
         {
             var vm = new QuickAccessViewModel(_ => UnexpectedCommand(), UnexpectedCommand);
-            var (root, _, _) = Layout(window, new QuickAccessView(vm), 140);
+            var (root, _, _) = Layout(window, new QuickAccessView(vm), 320);
             var buttons = Descendants<Button>(root).ToList();
-            Assert.Equal(5, buttons.Count);
+            Assert.Equal(11, buttons.Count);
+            var tilePaths = new[]
+            {
+                "QuickAccess.OpenPomodoroCommand", "QuickAccess.OpenWaterCommand", "QuickAccess.OpenTodoCommand",
+                "QuickAccess.OpenShelfCommand", "QuickAccess.OpenVolumeCommand", "QuickAccess.OpenClipboardCommand",
+                "QuickAccess.OpenWidgetsCommand", "QuickAccess.OpenBrightnessCommand", "QuickAccess.OpenAiCommand",
+            };
+            foreach (var path in tilePaths)
+            {
+                var tile = Assert.Single(buttons, b => BindingPath(b, Button.CommandProperty) == path);
+                Assert.Equal(new Thickness(4), tile.Margin);
+                Assert.NotNull(tile.Background);
+                Assert.NotNull(tile.BorderBrush);
+            }
             foreach (var (path, command) in new[]
             {
                 ("QuickAccess.OpenPomodoroCommand", vm.OpenPomodoroCommand),
                 ("QuickAccess.OpenWaterCommand", vm.OpenWaterCommand),
                 ("QuickAccess.OpenTodoCommand", vm.OpenTodoCommand),
                 ("QuickAccess.OpenShelfCommand", vm.OpenShelfCommand),
+                ("QuickAccess.OpenVolumeCommand", vm.OpenVolumeCommand),
+                ("QuickAccess.OpenBrightnessCommand", vm.OpenBrightnessCommand),
+                ("QuickAccess.OpenClipboardCommand", vm.OpenClipboardCommand),
+                ("QuickAccess.OpenWidgetsCommand", vm.OpenWidgetsCommand),
+                ("QuickAccess.OpenAiCommand", vm.OpenAiCommand),
+                ("QuickAccess.OpenSettingsCommand", vm.OpenSettingsCommand),
                 ("QuickAccess.BackCommand", vm.BackCommand)
             })
             {
@@ -110,6 +223,21 @@ public class IslandVisualLayoutTests
             foreach (var button in buttons)
                 AssertInside(root, button);
             Render(root, "island-quick-access");
+        }));
+    }
+
+    [Fact]
+    public void QuickAccess_HiddenPagesAreRemovedFromLayout()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var vm = new QuickAccessViewModel(_ => UnexpectedCommand(), UnexpectedCommand);
+            vm.ApplyHiddenPages([UtilityPinState.Water, UtilityPinState.Ai]);
+            var (root, _, _) = Layout(window, new QuickAccessView(vm), 320);
+            var buttons = Descendants<Button>(root).ToList();
+            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Open water tracker" && b.Visibility == Visibility.Visible);
+            Assert.DoesNotContain(buttons, b => b.ToolTip as string == "Choose an AI assistant" && b.Visibility == Visibility.Visible);
+            Assert.Equal(9, buttons.Count(b => b.Visibility == Visibility.Visible));
         }));
     }
 
@@ -133,13 +261,10 @@ public class IslandVisualLayoutTests
             var emptyHint = Assert.Single(Descendants<TextBlock>(todoRoot),
                 t => BindingPath(t, UIElement.VisibilityProperty) == "Todo.HasNoRows");
             Assert.Equal(rowCount == 0 ? Visibility.Visible : Visibility.Collapsed, emptyHint.Visibility);
-            Assert.Contains("first task above", emptyHint.Text);
-            var input = Assert.Single(Descendants<TextBox>(todoRoot),
-                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
-            Assert.Equal("New task title", AutomationProperties.GetName(input));
+            Assert.Contains("Add a task", emptyHint.Text);
             var add = Assert.Single(Descendants<Button>(todoRoot),
-                b => BindingPath(b, Button.CommandProperty) == "Todo.AddCommand");
-            Assert.Same(todo.AddCommand, add.Command);
+                b => BindingPath(b, Button.CommandProperty) == "AddTaskCommand");
+            Assert.Same(window.AddTaskCommand, add.Command);
             Assert.Equal(rowCount, Descendants<Button>(todoRoot)
                 .Count(b => BindingPath(b, Button.CommandProperty) == "CompleteCommand"));
             AssertBackCommand(window, todoRoot);
@@ -163,29 +288,24 @@ public class IslandVisualLayoutTests
             Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text.Contains(
                 rowCount == 0 ? "Your shelf is empty" : "Originals stay untouched"));
             if (rowCount > 0)
-                Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text == " (missing)");
+                Assert.Contains(Descendants<TextBlock>(shelfRoot), t => t.Text == "Missing");
             AssertBackCommand(window, shelfRoot);
             Render(shelfRoot, $"island-shelf-{rowCount}");
         }));
     }
 
     [Fact]
-    public void TodoInput_EnterAddsTaskThroughTheBoundCommand()
+    public void TodoPanel_ExposesExplicitEditorCommandWithoutActivatingIsland()
     {
         OnSta(() => WithIsland(window =>
         {
             var todo = new TodoViewModel(_ => true, () => { });
             var (root, _, _) = Layout(window, new TodoView(todo), 240);
-            var input = Assert.Single(Descendants<TextBox>(root),
-                t => BindingPath(t, TextBox.TextProperty) == "Todo.NewTaskTitle");
-            input.Text = "Verify MiMi";
-            var enter = Assert.Single(input.InputBindings.OfType<KeyBinding>(),
-                binding => binding.Key == Key.Enter);
-            Assert.Same(todo.AddCommand, enter.Command);
-            Assert.Equal("Verify MiMi", input.Text);
-            Assert.Equal("Verify MiMi", todo.NewTaskTitle);
-            enter.Command.Execute(null);
-            Assert.Equal("", todo.NewTaskTitle);
+            var add = Assert.Single(Descendants<Button>(root),
+                b => BindingPath(b, Button.CommandProperty) == "AddTaskCommand");
+            Assert.Same(window.AddTaskCommand, add.Command);
+            Assert.False(window.ShowActivated);
+            Assert.False(window.Focusable);
         }));
     }
 
@@ -198,10 +318,20 @@ public class IslandVisualLayoutTests
             Assert.False(window.Focusable);
             foreach (var name in new[] { "Pill", "GlowRoot", "GlowBand", "Host" })
                 Assert.NotNull(window.FindName(name));
+            var pill = Assert.IsType<Border>(window.FindName("Pill"));
+            Assert.Equal(new Thickness(1), pill.BorderThickness);
+            var host = Assert.IsType<ContentControl>(window.FindName("Host"));
+            Assert.Equal(HorizontalAlignment.Stretch, host.HorizontalAlignment);
+            Assert.Equal(VerticalAlignment.Stretch, host.VerticalAlignment);
+            var aurora = Assert.IsType<LinearGradientBrush>(window.Resources["AuroraBrush"]);
+            Assert.Equal("#FFFFE6B0", aurora.GradientStops[0].Color.ToString());
+            Assert.Equal("#FFFF9257", aurora.GradientStops[aurora.GradientStops.Count - 1].Color.ToString());
             Assert.Equal(8, ((FrameworkElement)window.FindName("GlowBand")).Height);
-            var (idle, presenter, template) = Layout(window, new RestingView(), 38);
+            var resting = new RestingView();
+            Assert.True(resting.Expandable);
+            var (idle, presenter, template) = Layout(window, resting, 42);
             var idleHost = Assert.IsType<Grid>(template.FindName("IdleFaceHost", presenter));
-            Assert.Single(idleHost.Children.Cast<UIElement>());
+            Assert.Single(idleHost.Children.OfType<MiMiMascotControl>());
             Assert.IsType<MiMiMascotControl>(idleHost.Children[0]);
             Assert.Single(Descendants<MiMiMascotControl>(idle));
             var (compact, compactPresenter, compactTemplate) = Layout(window,
@@ -214,13 +344,128 @@ public class IslandVisualLayoutTests
                 new WaterView(new WaterViewModel(UnexpectedCommand))
             })
             {
-                var (root, _, _) = Layout(window, content, 74);
+                var (root, _, _) = Layout(window, content, 92);
                 Assert.Equal(content.TargetHeight, root.ActualHeight);
                 Assert.Single(Descendants<ProgressBar>(root));
                 AssertBackCommand(window, root);
                 AssertActionsAccessible(root);
             }
         }));
+    }
+
+    [Fact]
+    public void AgentActivity_UsesUniformCardsAndSafeRowActions()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var rows = new[]
+            {
+                new AgentSessionRow
+                {
+                    Section = "ACTIVE", Provider = "ImpressiveBot · Forge", SessionId = "session-forge",
+                    Project = "MiMi", StatusLabel = "Executing tool", LastAction = "Reading workspace files",
+                    AgeLabel = "8s ago", PendingApprovals = 0, StateBrush = Brushes.Gold,
+                    Timeline = new[] { new AgentTimelineItem { TimeLabel = "15:30", Text = "Running tool", Kind = "tool" } },
+                },
+                new AgentSessionRow
+                {
+                    Provider = "ImpressiveBot · Cove", SessionId = "session-cove",
+                    Project = "Research", StatusLabel = "Waiting for input", LastAction = "Which option?",
+                    AgeLabel = "12s ago", PendingApprovals = 1, StateBrush = Brushes.Orange,
+                    Timeline = Array.Empty<AgentTimelineItem>(),
+                },
+            };
+            var panel = new AgentActivityPanelView(rows);
+            var (root, _, _) = Layout(window, panel, 380);
+            Assert.Equal(2, Descendants<Border>(root).Count(b =>
+                b.Style == window.Resources["WidgetCard"] as Style && b.Visibility == Visibility.Visible));
+            Assert.Equal(2, Descendants<Button>(root).Count(b => b.ToolTip as string == "Copy a safe session reference"));
+            Assert.Single(Descendants<Button>(root), b => b.ToolTip as string == "Close agent activity");
+            AssertActionsAccessible(root);
+            foreach (var button in Descendants<Button>(root)) AssertInside(root, button);
+            Render(root, "island-agent-activity-cards");
+        }));
+    }
+
+    [Fact]
+    public void NusaUtilityPanels_LoadBindingsAndStayInsideThePill()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var clipboard = new ClipboardViewModel(_ => { }, () => { }, _ => { });
+            clipboard.Add("A useful copied snippet");
+            clipboard.Add("A useful copied snippet"); // deduplication must not duplicate the row
+            var (clipboardRoot, _, _) = Layout(window, new ClipboardView(clipboard), 340);
+            Assert.Single(Descendants<Border>(clipboardRoot), b => b.Name == "ClipboardRow");
+            AssertActionsAccessible(clipboardRoot);
+            foreach (var button in Descendants<Button>(clipboardRoot)) AssertInside(clipboardRoot, button);
+            Render(clipboardRoot, "island-clipboard");
+
+            var widgets = new WidgetsViewModel();
+            widgets.Update(new DateTime(2026, 11, 25, 14, 30, 0), Array.Empty<TodoStore.TodoItem>(),
+                3, false, 1250, 1800,
+                new WidgetSystemSnapshot(new PowerMonitor.BatterySnapshot(true, false, 82, false),
+                    new NetworkMonitor.NetworkState(true, "Wi-Fi")));
+            var (widgetsRoot, _, _) = Layout(window, new WidgetsView(widgets), 400);
+            Assert.Equal(6, Descendants<Border>(widgetsRoot).Count(b => b.Style == window.Resources["WidgetCard"] as Style));
+            AssertActionsAccessible(widgetsRoot);
+            Render(widgetsRoot, "island-widgets");
+
+            var brightness = new BrightnessViewModel(
+                () => Task.FromResult(new LaptopBrightnessControl.Snapshot(true, 72, "DISPLAY")),
+                (_, _) => Task.FromResult(true));
+            brightness.RefreshAsync().GetAwaiter().GetResult();
+            brightness.PreviewLevel = 64;
+            var (brightnessRoot, _, _) = Layout(window, new BrightnessView(brightness), 150);
+            var slider = Assert.Single(Descendants<Slider>(brightnessRoot));
+            Assert.Equal("Laptop brightness", AutomationProperties.GetName(slider));
+            Assert.Equal(64, slider.Value);
+            AssertActionsAccessible(brightnessRoot);
+            Render(brightnessRoot, "island-brightness");
+        }));
+    }
+
+    [Fact]
+    public void PillAurora_RendersIdleHubAndWidgetsAsOneSurface()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            RenderPill(window, new RestingView { Expression = MascotExpression.Lively }, "island-pill-idle");
+
+            var quick = new QuickAccessViewModel(_ => { }, () => { });
+            RenderPill(window, new QuickAccessView(quick), "island-pill-quick-access");
+
+            var widgets = new WidgetsViewModel();
+            widgets.Update(DateTime.Now, Array.Empty<TodoStore.TodoItem>(), 2, false, 900, 1800,
+                new WidgetSystemSnapshot(new PowerMonitor.BatterySnapshot(true, false, 76, false),
+                    new NetworkMonitor.NetworkState(true, "Wi-Fi")));
+            RenderPill(window, new WidgetsView(widgets), "island-pill-widgets");
+        }));
+    }
+
+    private static void RenderPill(IslandWindow window, IslandContent content, string name)
+    {
+        var pill = Assert.IsType<Border>(window.FindName("Pill"));
+        var host = Assert.IsType<ContentControl>(window.FindName("Host"));
+        pill.BeginAnimation(FrameworkElement.WidthProperty, null);
+        pill.BeginAnimation(FrameworkElement.HeightProperty, null);
+        pill.BeginAnimation(Border.CornerRadiusProperty, null);
+        pill.Clip = null;
+        pill.Width = content.TargetWidth;
+        host.Content = content;
+        host.ApplyTemplate();
+        host.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
+        var height = content.AutoHeight
+            ? Math.Max(content.TargetHeight, Math.Ceiling(host.DesiredSize.Height) + 2)
+            : content.TargetHeight;
+        pill.Height = height;
+        pill.CornerRadius = new CornerRadius(Math.Min(content.TargetCornerRadius, height / 2));
+        pill.Measure(new Size(pill.Width, pill.Height));
+        pill.Arrange(new Rect(0, 0, pill.Width, pill.Height));
+        pill.UpdateLayout();
+        var radius = Math.Min(pill.CornerRadius.TopLeft, Math.Min(pill.Width, pill.Height) / 2);
+        pill.Clip = new RectangleGeometry(new Rect(0, 0, pill.Width, pill.Height), radius, radius);
+        Render(pill, name);
     }
 
     [Fact]
@@ -234,14 +479,16 @@ public class IslandVisualLayoutTests
             {
                 Assert.False(window.IsVisible);
                 Assert.False(window.IsLoaded);
-                var root = Assert.IsAssignableFrom<FrameworkElement>(window.Content);
+                var root = Assert.IsType<ScrollViewer>(window.FindName("BodyScroll"));
+                root.Width = 840;
+                root.Height = 700;
                 root.Measure(new Size(840, 700));
                 root.Arrange(new Rect(0, 0, 840, 700));
                 root.UpdateLayout();
                 Assert.Equal(840, root.ActualWidth);
                 Assert.Equal(700, root.ActualHeight);
-                AssertInside(root, Assert.IsType<Button>(window.FindName("CloseButton")));
                 Assert.IsType<CheckBox>(window.FindName("MediaToggle"));
+                Assert.IsType<CheckBox>(window.FindName("ClipboardHistoryToggle"));
                 Assert.False(File.Exists(path));
                 Render(root, "settings-offscreen");
             }
@@ -251,6 +498,57 @@ public class IslandVisualLayoutTests
                 Assert.False(File.Exists(path), "Offscreen settings layout must not save configuration");
             }
         });
+    }
+
+    [Fact]
+    public void TodoEditor_OptionalDueTimeValidatesWithoutActivatingIsland()
+    {
+        OnSta(() =>
+        {
+            var window = new TodoEntryWindow();
+            try
+            {
+                Assert.False(window.IsVisible);
+                var content = Assert.IsType<StackPanel>(window.Content);
+                var textboxes = LogicalDescendants<TextBox>(content).ToList();
+                Assert.Equal(2, textboxes.Count);
+                var date = Assert.Single(LogicalDescendants<DatePicker>(content));
+                textboxes[0].Text = "Ship the refresh";
+                date.SelectedDate = new DateTime(2026, 11, 25);
+                textboxes[1].Text = "15:30";
+                Assert.True(window.TryValidateDue(out _));
+                Assert.Equal(new DateTime(2026, 11, 25, 15, 30, 0), window.TaskDue);
+
+                textboxes[1].Text = "later";
+                Assert.False(window.TryValidateDue(out var error));
+                Assert.Contains("HH:mm", error);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void TodoDueCard_ExposesSnoozeAlongsideCompleteAndOpen()
+    {
+        OnSta(() => WithIsland(window =>
+        {
+            var view = new TodoDueView("Review the UI", () => { }, () => { }, () => { });
+            var (root, _, _) = Layout(window, view, 110);
+            var snooze = Assert.Single(Descendants<Button>(root),
+                b => BindingPath(b, Button.CommandProperty) == "SnoozeCommand");
+            Assert.Same(view.SnoozeCommand, snooze.Command);
+            AssertActionsAccessible(root);
+        }));
+    }
+
+    private static IEnumerable<T> LogicalDescendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        var children = LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>();
+        foreach (var child in children)
+        {
+            if (child is T match) yield return match;
+            foreach (var descendant in LogicalDescendants<T>(child)) yield return descendant;
+        }
     }
 
     private static (Border Root, ContentPresenter Presenter, DataTemplate Template) Layout(
