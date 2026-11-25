@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
     private bool _sliderPending;
     private bool _refreshingProviders;
     private bool _updatingAutoStart;
+    private bool _updatingAiPreset;
     private readonly DispatcherTimer _sliderSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
 
     private readonly Func<bool> _hotkeyStatus;
@@ -46,6 +47,7 @@ public partial class SettingsWindow : Window
         _restartRequested = restartRequested;
         _aiProviders = aiProviders;
         InitializeComponent();
+        MiMiIcon.Apply(this);
         SizeChanged += (_, _) => FitRootToClient();
         SettingsCategories.SizeChanged += (_, _) => FitCategoryWidths();
         RestartButton.IsEnabled = _restartRequested is not null;
@@ -69,7 +71,11 @@ public partial class SettingsWindow : Window
             SettingsCategories.SelectedItem = SettingsCategories.Items[0];
             ((TabItem)SettingsCategories.Items[0]).Focus();
         };
-        Closing += (_, _) => SavePendingSlider();
+        Closing += (_, _) =>
+        {
+            SavePendingSlider();
+            SavePendingAiApiKey();
+        };
         Closed += (_, _) => _sliderSaveTimer.Stop();
 
         // Live ImpressiveBot tile: same source as the island, so the two always agree.
@@ -135,12 +141,27 @@ public partial class SettingsWindow : Window
         AiDefaultCombo.SelectedIndex = s.AiDefaultProvider switch
         {
             "claude" => 1,
-            "custom" => 2,
+            "opencode" => 2,
+            "grok" => 3,
+            "custom" => 4,
             _ => 0,
         };
         AiCustomNameInput.Text = s.AiCustomName;
+        AiCustomModeCombo.SelectedIndex = s.AiCustomMode == "api" ? 1 : 0;
         AiCustomCommandInput.Text = s.AiCustomCommand;
         AiCustomArgumentsInput.Text = s.AiCustomArguments;
+        AiApiPresetCombo.SelectedIndex = s.AiApiPreset switch
+        {
+            "openai" => 1,
+            "openrouter" => 2,
+            "custom" => 3,
+            _ => 0,
+        };
+        AiApiEndpointInput.Text = s.AiApiEndpoint;
+        AiApiModelInput.Text = s.AiApiModel;
+        AiApiSystemPromptInput.Text = s.AiApiSystemPrompt;
+        UpdateAiModePanels();
+        RefreshAiKeyStatus();
         MediaToggle.IsChecked = s.MediaModuleEnabled;
         ExpandOnHoverToggle.IsChecked = s.ExpandOnHover;
         LyricsToggle.IsChecked = s.LyricsEnabled;
@@ -216,12 +237,27 @@ public partial class SettingsWindow : Window
                 s.AiDefaultProvider = AiDefaultCombo.SelectedIndex switch
                 {
                     1 => "claude",
-                    2 => "custom",
+                    2 => "opencode",
+                    3 => "grok",
+                    4 => "custom",
                     _ => "codex",
                 };
                 s.AiCustomName = AiCustomNameInput.Text;
+                s.AiCustomMode = AiCustomModeCombo.SelectedIndex == 1 ? "api" : "command";
                 s.AiCustomCommand = AiCustomCommandInput.Text;
                 s.AiCustomArguments = AiCustomArgumentsInput.Text;
+                s.AiApiPreset = AiApiPresetCombo.SelectedIndex switch
+                {
+                    1 => "openai",
+                    2 => "openrouter",
+                    3 => "custom",
+                    _ => "grok",
+                };
+                s.AiApiEndpoint = AiApiEndpointInput.Text;
+                s.AiApiModel = AiApiModelInput.Text;
+                s.AiApiSystemPrompt = AiApiSystemPromptInput.Text;
+                if (!string.IsNullOrEmpty(AiApiKeyInput.Password))
+                    s.AiApiKeyProtected = AiApiKeyProtector.Protect(AiApiKeyInput.Password);
                 s.MediaModuleEnabled = MediaToggle.IsChecked == true;
                 s.ExpandOnHover = ExpandOnHoverToggle.IsChecked == true;
                 s.LyricsEnabled = LyricsToggle.IsChecked == true;
@@ -252,6 +288,10 @@ public partial class SettingsWindow : Window
                 s.HeadphoneHudEnabled = HeadphoneHudToggle.IsChecked == true;
             });
             _aiProviders?.Update(_config.Current);
+            _updatingAiPreset = true;
+            AiApiKeyInput.Clear();
+            _updatingAiPreset = false;
+            RefreshAiKeyStatus();
             RefreshAiAvailability();
             ShowSaved();
         }
@@ -385,7 +425,87 @@ public partial class SettingsWindow : Window
 
     private void AiSettings_Changed(object sender, RoutedEventArgs e)
     {
-        if (!_loading) CaptureToSettings();
+        if (!_loading && !_updatingAiPreset) CaptureToSettings();
+    }
+
+    private void AiApiKey_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading || string.IsNullOrEmpty(AiApiKeyInput.Password)) return;
+        AiApiKeyStatus.Text = "API key not saved yet. Leave this field or close Settings to encrypt and save it.";
+    }
+
+    private void AiApiKey_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => SavePendingAiApiKey();
+
+    private void SavePendingAiApiKey()
+    {
+        if (!_loading && !_updatingAiPreset && !string.IsNullOrEmpty(AiApiKeyInput.Password))
+            CaptureToSettings();
+    }
+
+    private void AiCustomMode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        UpdateAiModePanels();
+        CaptureToSettings();
+    }
+
+    private void UpdateAiModePanels()
+    {
+        var isApi = AiCustomModeCombo.SelectedIndex == 1;
+        AiCommandPanel.Visibility = isApi ? Visibility.Collapsed : Visibility.Visible;
+        AiApiPanel.Visibility = isApi ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AiApiPreset_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || _updatingAiPreset) return;
+        var preset = AiApiPreset.Find(AiApiPresetCombo.SelectedIndex switch
+        {
+            1 => "openai",
+            2 => "openrouter",
+            3 => "custom",
+            _ => "grok",
+        });
+        _updatingAiPreset = true;
+        if (preset != AiApiPreset.Custom)
+        {
+            AiApiEndpointInput.Text = preset.Endpoint;
+            AiApiModelInput.Text = preset.Model;
+        }
+        _updatingAiPreset = false;
+        CaptureToSettings();
+    }
+
+    private void RefreshAiKeyStatus()
+    {
+        var ciphertext = _config.Current.AiApiKeyProtected;
+        AiApiKeyStatus.Text = !string.IsNullOrWhiteSpace(ciphertext)
+            ? AiApiKeyProtector.Unprotect(ciphertext) is not null
+                ? "An API key is saved and encrypted for this Windows user."
+                : "The saved key cannot be read on this PC. Enter a new key or use MIMI_AI_API_KEY."
+            : !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MIMI_AI_API_KEY"))
+                ? "MIMI_AI_API_KEY is configured for this process."
+                : "No API key is saved.";
+        AiApiKeyStatus.ToolTip = "MiMi never displays a saved API key.";
+    }
+
+    private void ClearAiApiKey_Click(object sender, RoutedEventArgs e)
+    {
+        _updatingAiPreset = true;
+        AiApiKeyInput.Clear();
+        _updatingAiPreset = false;
+        try
+        {
+            _config.Update(s => s.AiApiKeyProtected = "");
+            _aiProviders?.Update(_config.Current);
+            RefreshAiKeyStatus();
+            RefreshAiAvailability();
+            ShowSaved();
+        }
+        catch (Exception ex)
+        {
+            ShowSaveFailure(ex);
+        }
     }
 
     private void BrowseAiCommand_Click(object sender, RoutedEventArgs e)

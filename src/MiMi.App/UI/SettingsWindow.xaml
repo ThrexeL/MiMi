@@ -149,6 +149,15 @@
             <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
             <Setter Property="FontSize" Value="13"/>
         </Style>
+        <Style x:Key="SecretInput" TargetType="PasswordBox">
+            <Setter Property="Background" Value="#FF17181E"/>
+            <Setter Property="Foreground" Value="#FFF3F3F5"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
         <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource Btn}">
             <Setter Property="Background" Value="{StaticResource GoldGradient}"/>
             <Setter Property="Foreground" Value="#FF08090D"/>
@@ -520,12 +529,12 @@
 
                         <Border Style="{StaticResource Card}"><StackPanel>
                             <TextBlock Style="{StaticResource CardTitle}" Text="AI assistants"/>
-                            <TextBlock Style="{StaticResource CardSub}" Text="Codex and Claude are detected on PATH. Add any other AI CLI or app for this PC; nothing is hard-coded to one user."/>
+                            <TextBlock Style="{StaticResource CardSub}" Text="Codex, Claude, OpenCode, and Grok are detected on PATH. Custom AI supports either a local command or a text-only OpenAI-compatible API."/>
                             <Grid Margin="0,2,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource Label}" Text="Default assistant"/>
                                 <ComboBox x:Name="AiDefaultCombo" Grid.Column="1" SelectionChanged="AiSettings_Changed">
-                                    <ComboBoxItem Content="Codex"/><ComboBoxItem Content="Claude"/><ComboBoxItem Content="Custom"/>
+                                    <ComboBoxItem Content="Codex"/><ComboBoxItem Content="Claude"/><ComboBoxItem Content="OpenCode"/><ComboBoxItem Content="Grok"/><ComboBoxItem Content="Custom"/>
                                 </ComboBox>
                             </Grid>
                             <Grid Margin="0,8,0,0">
@@ -534,16 +543,60 @@
                                 <TextBox x:Name="AiCustomNameInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
                             </Grid>
                             <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource Label}" Text="Command or path"/>
-                                <TextBox x:Name="AiCustomCommandInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
-                                <Button x:Name="BrowseAiCommandButton" Grid.Column="2" Style="{StaticResource Btn}" Content="Browse…" Margin="8,0,0,0" Click="BrowseAiCommand_Click"/>
-                            </Grid>
-                            <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource Label}" Text="Arguments"/>
-                                <TextBox x:Name="AiCustomArgumentsInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                <TextBlock Style="{StaticResource Label}" Text="Custom AI type"/>
+                                <ComboBox x:Name="AiCustomModeCombo" Grid.Column="1" SelectionChanged="AiCustomMode_Changed">
+                                    <ComboBoxItem Content="External command or app"/><ComboBoxItem Content="API (OpenAI-compatible)"/>
+                                </ComboBox>
                             </Grid>
+
+                            <StackPanel x:Name="AiCommandPanel" Margin="0,8,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="Command or path"/>
+                                    <TextBox x:Name="AiCustomCommandInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                    <Button x:Name="BrowseAiCommandButton" Grid.Column="2" Style="{StaticResource Btn}" Content="Browse…" Margin="8,0,0,0" Click="BrowseAiCommand_Click"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="Arguments"/>
+                                    <TextBox x:Name="AiCustomArgumentsInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel x:Name="AiApiPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="API preset"/>
+                                    <ComboBox x:Name="AiApiPresetCombo" Grid.Column="1" SelectionChanged="AiApiPreset_Changed">
+                                        <ComboBoxItem Content="Grok API"/><ComboBoxItem Content="OpenAI API"/><ComboBoxItem Content="OpenRouter"/><ComboBoxItem Content="Custom compatible API"/>
+                                    </ComboBox>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="API base URL"/>
+                                    <TextBox x:Name="AiApiEndpointInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="Model"/>
+                                    <TextBox x:Name="AiApiModelInput" Grid.Column="1" Style="{StaticResource Input}" TextChanged="AiSettings_Changed"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="API key"/>
+                                    <PasswordBox x:Name="AiApiKeyInput" Grid.Column="1" Style="{StaticResource SecretInput}" PasswordChanged="AiApiKey_PasswordChanged" LostKeyboardFocus="AiApiKey_LostKeyboardFocus"/>
+                                    <Button x:Name="ClearAiApiKeyButton" Grid.Column="2" Style="{StaticResource Btn}" Content="Clear key" Margin="8,0,0,0" Click="ClearAiApiKey_Click"/>
+                                </Grid>
+                                <TextBlock x:Name="AiApiKeyStatus" Style="{StaticResource Sub}" Margin="0,5,0,0"/>
+                                <TextBlock Style="{StaticResource CardSub}" Margin="0,5,0,8" Text="Keys are encrypted with Windows DPAPI for this user and are never logged. Leave blank to keep the saved key, or set MIMI_AI_API_KEY instead. API chats cannot read files or run commands."/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Label}" Text="System prompt" VerticalAlignment="Top"/>
+                                    <TextBox x:Name="AiApiSystemPromptInput" Grid.Column="1" Style="{StaticResource Input}" TextWrapping="Wrap" MinHeight="70" AcceptsReturn="True" TextChanged="AiSettings_Changed"/>
+                                </Grid>
+                            </StackPanel>
+
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock x:Name="AiAvailabilityText" Style="{StaticResource Sub}" Text="Checking installed assistants…" VerticalAlignment="Center"/>

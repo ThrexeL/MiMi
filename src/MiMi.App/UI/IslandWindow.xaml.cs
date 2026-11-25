@@ -634,37 +634,54 @@ public partial class IslandWindow : Window
             // Measure AFTER the new content is in place (measuring earlier sees the old
             // content and clips cards). Auto-height cards hug their measured content;
             // compact/resting states keep their designed sizes.
-            var targetHeight = content.TargetHeight;
-            if (content.AutoHeight)
-            {
-                Host.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
-                targetHeight = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
-                Logger.Info($"Island: '{content.GetType().Name}' measured {Host.DesiredSize.Height:0.#} → height {targetHeight:0.#}");
-            }
+            var targetHeight = content.AutoHeight
+                ? MeasureContentHeight(content)
+                : content.TargetHeight;
             AnimatePillSize(content.TargetWidth, targetHeight, duration - swapAt, content.TargetCornerRadius);
 
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => HookTemplate(content));
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                HookTemplate(content);
+                // Re-measure only AFTER this card's template and bindings load. Scheduling
+                // before the content swap measures the old card and silently skips clipping fixes.
+                if (!content.AutoHeight) return;
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    if (!ReferenceEquals(Host.Content, content)) return;
+                    var corrected = MeasureContentHeight(content);
+                    if (Math.Abs(corrected - Pill.ActualHeight) > 2)
+                    {
+                        Logger.Info($"Island: correcting '{content.GetType().Name}' height {Pill.ActualHeight:0.#} → {corrected:0.#}");
+                        AnimatePillSize(content.TargetWidth, corrected, TimeSpan.FromMilliseconds(140), content.TargetCornerRadius);
+                    }
+                });
+            });
             var fadeIn = new DoubleAnimation(0, 1, duration - swapAt);
             Host.BeginAnimation(OpacityProperty, fadeIn);
         };
         Host.BeginAnimation(OpacityProperty, fadeOut);
+    }
 
-        // Self-heal: after a full layout+render pass, re-measure and correct the pill
-        // height if it drifted (e.g. late binding changed a row's visibility).
-        if (content.AutoHeight)
-        {
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
-            {
-                if (!ReferenceEquals(Host.Content, content)) return;
-                Host.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
-                var corrected = Math.Max(80, Math.Ceiling(Host.DesiredSize.Height) + 2);
-                if (Math.Abs(corrected - Pill.ActualHeight) > 2)
-                {
-                    Logger.Info($"Island: correcting '{content.GetType().Name}' height {Pill.ActualHeight:0.#} → {corrected:0.#}");
-                    AnimatePillSize(content.TargetWidth, corrected, TimeSpan.FromMilliseconds(140), content.TargetCornerRadius);
-                }
-            });
-        }
+    /// <summary>Measure auto-height content without the previous pill dimensions constraining it.
+    /// A fixed parent height otherwise clips approval buttons before the growth animation starts.</summary>
+    internal double MeasureContentHeight(IslandContent content)
+    {
+        var previousWidth = Pill.ActualWidth;
+        var previousHeight = Pill.ActualHeight;
+        _sizeStoryboard?.Remove(Pill);
+        _sizeStoryboard = null;
+        ++_geometryGeneration;
+        Pill.BeginAnimation(WidthProperty, null);
+        Pill.BeginAnimation(HeightProperty, null);
+        Pill.Width = content.TargetWidth;
+        Pill.Height = double.NaN;
+        Host.Measure(new Size(content.TargetWidth, double.PositiveInfinity));
+        var desiredHeight = Host.DesiredSize.Height;
+        Pill.Width = previousWidth;
+        Pill.Height = previousHeight;
+        var targetHeight = Math.Max(80, Math.Ceiling(desiredHeight) + 2);
+        Logger.Info($"Island: '{content.GetType().Name}' measured {desiredHeight:0.#} → height {targetHeight:0.#}");
+        return targetHeight;
     }
 
     private void AnimatePillSize(double width, double height, TimeSpan duration, double radius)

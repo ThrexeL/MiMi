@@ -40,9 +40,11 @@ public class AiProviderTests
                 AiCustomArguments = "--read-only",
             });
             var providers = service.GetProviders();
-            Assert.Equal(3, providers.Count);
+            Assert.Equal(5, providers.Count);
             Assert.Contains(providers, p => p.Provider.Id == "codex");
             Assert.Contains(providers, p => p.Provider.Id == "claude");
+            Assert.Contains(providers, p => p.Provider.Id == "opencode");
+            Assert.Contains(providers, p => p.Provider.Id == "grok");
             var custom = Assert.Single(providers, p => p.Provider.Id == "custom");
             Assert.Equal("Friend's AI", custom.Provider.Name);
             Assert.True(custom.IsAvailable);
@@ -88,6 +90,8 @@ public class AiProviderTests
                 var bus = new AgentEventBus();
                 var window = new CodexConversationWindow(approvals, bus, Path.GetTempPath());
                 Assert.True(window.ShowInTaskbar);
+                Assert.NotNull(window.Icon);
+                Assert.Equal(64, window.Icon.Width);
                 Assert.False(window.IsVisible);
                 window.Close();
                 window.EnsureDisposedAsync().GetAwaiter().GetResult();
@@ -112,8 +116,10 @@ public class AiProviderTests
                 var window = new AiProviderWindow(service,
                     _ => new AiLaunchResult(false, "test"), () => { });
                 Assert.True(window.ShowInTaskbar);
+                Assert.NotNull(window.Icon);
+                Assert.Equal(64, window.Icon.Width);
                 Assert.False(window.IsVisible);
-                Assert.Equal(3, window.Providers.Count);
+                Assert.Equal(5, window.Providers.Count);
                 var items = (ItemsControl)window.FindName("ProviderItems");
                 Assert.Same(window.Providers, items.ItemsSource);
                 window.Close();

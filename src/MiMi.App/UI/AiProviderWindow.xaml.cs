@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
 using MiMi.App.AI;
+using MiMi.App.Interop;
 
 namespace MiMi.App.UI;
 
@@ -31,6 +32,7 @@ public partial class AiProviderWindow : Window
         _launch = launch;
         _openSettings = openSettings;
         InitializeComponent();
+        MiMiIcon.Apply(this);
         DataContext = this;
         ProviderItems.ItemsSource = Providers;
         RefreshProviders();

@@ -119,7 +119,9 @@ public class SettingsWindowTests
             try
             {
                 Assert.True(window.ShowInTaskbar);
-                Assert.Equal(2, ((ComboBox)window.FindName("AiDefaultCombo")).SelectedIndex);
+                Assert.NotNull(window.Icon);
+                Assert.True(window.Icon.Width >= 32);
+                Assert.Equal(4, ((ComboBox)window.FindName("AiDefaultCombo")).SelectedIndex);
                 Assert.Equal("Portable AI", ((TextBox)window.FindName("AiCustomNameInput")).Text);
                 Assert.Contains("Portable AI: Ready", ((TextBlock)window.FindName("AiAvailabilityText")).Text);
 

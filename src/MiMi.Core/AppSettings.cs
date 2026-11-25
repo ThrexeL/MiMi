@@ -60,11 +60,19 @@ public sealed class AppSettings
     [JsonPropertyName("clipboardHistoryEnabled")] public bool ClipboardHistoryEnabled { get; set; } = false;
     [JsonPropertyName("quickAccessHiddenPages")] public string[] QuickAccessHiddenPages { get; set; } = [];
 
-    // AI assistants. Built-ins are detected on PATH; custom commands are per-user.
+    // AI assistants. Built-ins are detected on PATH; custom commands and API profiles are per-user.
     [JsonPropertyName("aiDefaultProvider")] public string AiDefaultProvider { get; set; } = "codex";
     [JsonPropertyName("aiCustomName")] public string AiCustomName { get; set; } = "Custom AI";
+    [JsonPropertyName("aiCustomMode")] public string AiCustomMode { get; set; } = "command";
     [JsonPropertyName("aiCustomCommand")] public string AiCustomCommand { get; set; } = "";
     [JsonPropertyName("aiCustomArguments")] public string AiCustomArguments { get; set; } = "";
+    [JsonPropertyName("aiApiPreset")] public string AiApiPreset { get; set; } = "grok";
+    [JsonPropertyName("aiApiEndpoint")] public string AiApiEndpoint { get; set; } = "https://api.x.ai/v1";
+    [JsonPropertyName("aiApiModel")] public string AiApiModel { get; set; } = "grok-4.7";
+    [JsonPropertyName("aiApiSystemPrompt")] public string AiApiSystemPrompt { get; set; } =
+        "You are a helpful assistant in MiMi. Answer clearly. You have no access to local files, commands, or tools in this API chat.";
+    /// <summary>DPAPI-protected, current-user-only ciphertext. Plaintext API keys are never persisted.</summary>
+    [JsonPropertyName("aiApiKeyProtected")] public string AiApiKeyProtected { get; set; } = "";
 
     // System HUDs (Milestone 6)
     [JsonPropertyName("volumeHudEnabled")] public bool VolumeHudEnabled { get; set; } = true;
@@ -128,15 +136,35 @@ public sealed class AppSettings
         AiDefaultProvider = AiDefaultProvider?.Trim().ToLowerInvariant() switch
         {
             "claude" => "claude",
+            "opencode" => "opencode",
+            "grok" => "grok",
             "custom" => "custom",
             _ => "codex",
         };
         AiCustomName = string.IsNullOrWhiteSpace(AiCustomName) ? "Custom AI" : AiCustomName.Trim();
         if (AiCustomName.Length > 40) AiCustomName = AiCustomName[..40];
+        AiCustomMode = AiCustomMode?.Trim().ToLowerInvariant() == "api" ? "api" : "command";
         AiCustomCommand = (AiCustomCommand ?? "").Trim();
         if (AiCustomCommand.Length > 1000) AiCustomCommand = AiCustomCommand[..1000];
         AiCustomArguments = (AiCustomArguments ?? "").Trim();
         if (AiCustomArguments.Length > 2000) AiCustomArguments = AiCustomArguments[..2000];
+        AiApiPreset = AiApiPreset?.Trim().ToLowerInvariant() switch
+        {
+            "openai" => "openai",
+            "openrouter" => "openrouter",
+            "custom" => "custom",
+            _ => "grok",
+        };
+        AiApiEndpoint = (AiApiEndpoint ?? "").Trim();
+        if (AiApiEndpoint.Length > 2000) AiApiEndpoint = AiApiEndpoint[..2000];
+        AiApiModel = (AiApiModel ?? "").Trim();
+        if (AiApiModel.Length > 200) AiApiModel = AiApiModel[..200];
+        AiApiSystemPrompt = string.IsNullOrWhiteSpace(AiApiSystemPrompt)
+            ? "You are a helpful assistant in MiMi. You have no access to local files, commands, or tools."
+            : AiApiSystemPrompt.Trim();
+        if (AiApiSystemPrompt.Length > 4000) AiApiSystemPrompt = AiApiSystemPrompt[..4000];
+        AiApiKeyProtected = (AiApiKeyProtected ?? "").Trim();
+        if (AiApiKeyProtected.Length > 32768) AiApiKeyProtected = "";
         ApprovalTtlMinutes = Math.Clamp(ApprovalTtlMinutes, 1, 60);
         NotificationDurationMs = Math.Clamp(NotificationDurationMs, 1500, 10000);
         if (double.IsNaN(Scale) || double.IsInfinity(Scale)) Scale = 1.0;

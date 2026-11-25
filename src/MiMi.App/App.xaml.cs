@@ -34,6 +34,7 @@ public partial class App : Application
     private TodoEntryWindow? _todoEntryWindow;
     private CodexConversationWindow? _codexWindow;
     private AiProviderWindow? _aiWindow;
+    private ApiConversationWindow? _apiWindow;
     private AiProviderService _aiProviders = null!;
     private ProviderIntegrationInspector _providerInspector = null!;
     private bool _ownsMutex;
@@ -439,6 +440,23 @@ public partial class App : Application
             ShowCodexConversation();
             return new AiLaunchResult(true, "Codex opened.");
         }
+        if (provider.Kind == AiProviderKind.Api)
+        {
+            if (!_aiProviders.TryGetApiConfiguration(out var configuration, out var apiKey))
+            {
+                _apiWindow?.Close();
+                return new AiLaunchResult(false, "Configure a valid API endpoint and model in Settings → Integrations.");
+            }
+            if (apiKey is null && (!Uri.TryCreate(configuration.Endpoint, UriKind.Absolute, out var uri)
+                || !uri.IsLoopback))
+            {
+                // Never leave an already-open chat usable with a key the user just cleared.
+                _apiWindow?.Close();
+                return new AiLaunchResult(false, "Add an API key in Settings or set MIMI_AI_API_KEY.");
+            }
+            ShowApiConversation(provider, configuration, apiKey);
+            return new AiLaunchResult(true, $"{provider.Name} API chat opened.");
+        }
         return _aiProviders.Launch(provider, ResolveCodexWorkspace());
     }
 
@@ -452,6 +470,19 @@ public partial class App : Application
         _codexWindow = new CodexConversationWindow(_approvals, _bus, ResolveCodexWorkspace());
         _codexWindow.Closed += (_, _) => _codexWindow = null;
         BringToFront(_codexWindow);
+    }
+
+    private void ShowApiConversation(AiProviderDefinition provider, AiApiConfiguration configuration, string? apiKey)
+    {
+        if (_apiWindow is { IsLoaded: true })
+        {
+            _apiWindow.UpdateConfiguration(provider, configuration, apiKey);
+            BringToFront(_apiWindow);
+            return;
+        }
+        _apiWindow = new ApiConversationWindow(provider, configuration, apiKey, ShowSettings);
+        _apiWindow.Closed += (_, _) => _apiWindow = null;
+        BringToFront(_apiWindow);
     }
 
     private static string ResolveCodexWorkspace()

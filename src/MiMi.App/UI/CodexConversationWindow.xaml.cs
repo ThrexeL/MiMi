@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using MiMi.Agents;
 using MiMi.Codex;
+using MiMi.App.Interop;
 using MiMi.Core;
 
 namespace MiMi.App.UI;
@@ -34,6 +35,7 @@ public partial class CodexConversationWindow : Window
         _bus = bus;
         _workspace = workspace;
         InitializeComponent();
+        MiMiIcon.Apply(this);
         TranscriptItems.ItemsSource = _rows;
         WorkspaceText.Text = workspace;
         WorkspaceText.ToolTip = workspace;

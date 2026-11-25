@@ -320,6 +320,9 @@ public class IslandVisualLayoutTests
                 Assert.NotNull(window.FindName(name));
             var pill = Assert.IsType<Border>(window.FindName("Pill"));
             Assert.Equal(new Thickness(1), pill.BorderThickness);
+            var host = Assert.IsType<ContentControl>(window.FindName("Host"));
+            Assert.Equal(HorizontalAlignment.Stretch, host.HorizontalAlignment);
+            Assert.Equal(VerticalAlignment.Stretch, host.VerticalAlignment);
             var aurora = Assert.IsType<LinearGradientBrush>(window.Resources["AuroraBrush"]);
             Assert.Equal("#FFFFE6B0", aurora.GradientStops[0].Color.ToString());
             Assert.Equal("#FFFF9257", aurora.GradientStops[aurora.GradientStops.Count - 1].Color.ToString());
